@@ -16,11 +16,11 @@ struct GrupoSpotify: View {
                 if !spotify.temChaveEmbutida {
                     linhaDaChave
                 }
-                LinhaDeAjuste(titulo: "Login no Spotify", apoio: SpotifyLogica.apoioDoLogin(situacao, erro: spotify.erro), divisoria: !spotify.temChaveEmbutida) {
+                LinhaDeAjuste(titulo: "Login no Spotify", apoio: SpotifyLogica.apoioDoLogin(situacao, erro: spotify.erro, confirmando: spotify.confirmando), divisoria: !spotify.temChaveEmbutida) {
                     HStack(spacing: Tema.Espaco.item) {
                         switch situacao {
                         case .conectado:
-                            ValorDeAjuste("Conectado")
+                            ValorDeAjuste(spotify.nome.map { "Conectado como \($0)" } ?? "Conectado")
                             BotaoDeAjuste(texto: "Desconectar", estilo: .perigo) { spotify.desconectar() }
                         case .conectando:
                             BotaoDeAjuste(texto: "Cancelar", estilo: .secundario) { spotify.cancelar() }

@@ -1,6 +1,13 @@
 import XCTest
 @testable import Deck
 
+private final class LinhasDeLog: @unchecked Sendable {
+    private let trava = NSLock()
+    private var _todas: [String] = []
+    func guardar(_ l: String) { trava.lock(); _todas.append(l); trava.unlock() }
+    var todas: [String] { trava.lock(); defer { trava.unlock() }; return _todas }
+}
+
 /// A API do Spotify de mentira (o núcleo compila dentro do app, então os falsos do pacote não chegam aqui).
 private final class TransporteDeMentira: TransporteWeb, @unchecked Sendable {
     private let trava = NSLock()
@@ -90,7 +97,7 @@ final class SpotifyLoginTestes: XCTestCase {
         XCTAssertEqual(a.ler().renovacao, "RENOVA")
         XCTAssertEqual(a.ler().clientId, Self.chave)
         XCTAssertEqual(avisos, ["Spotify conectado"])
-        XCTAssertEqual(t.pedidos.count, 1)
+        XCTAssertEqual(t.pedidos.filter { $0.url.hasSuffix("/api/token") }.count, 1)
         XCTAssertTrue(String(decoding: t.pedidos[0].corpo ?? Data(), as: UTF8.self).contains("code=CODIGO"))
     }
 
@@ -181,7 +188,7 @@ final class SpotifyLoginTestes: XCTestCase {
         await m.conectar()
         XCTAssertTrue(m.conectado)
         XCTAssertNil(m.erro)
-        XCTAssertEqual(t.pedidos.count, 1)
+        XCTAssertEqual(t.pedidos.filter { $0.url.hasSuffix("/api/token") }.count, 1)
     }
 
     func testPessoaNegandoNoSpotifyNaoConecta() async {
@@ -230,6 +237,95 @@ final class SpotifyLoginTestes: XCTestCase {
         XCTAssertNil(a.ler().clientId)
         m.chave = "  \(Self.chave)  "; m.guardarChave()
         XCTAssertEqual(a.ler().clientId, Self.chave)
+    }
+
+    /// A chave do Deck que ficou guardada no Chaveiro (colada em versão antiga) não pode aparecer no campo como se fosse colada.
+    func testChaveDoDeckGuardadaNoChaveiroNaoApareceNoCampo() {
+        let a = ArmazemSpotifyMemoria(DadosSpotify(clientId: Self.chaveDoDeck))
+        let m = ModeloSpotify(conta: ContaSpotify(armazem: a, transporte: TransporteDeMentira { _ in nil }, embutida: Self.chaveDoDeck))
+        XCTAssertEqual(m.chave, "")
+        XCTAssertFalse(m.usaChavePropria)
+        XCTAssertFalse(m.avancadoAberto)
+        XCTAssertEqual(m.situacao, .pronto)
+    }
+
+    func testColarAChaveDoDeckNaoViraChavePropria() {
+        let (m, _, a) = montar(embutida: Self.chaveDoDeck) { _ in nil }
+        m.chave = Self.chaveDoDeck; m.guardarChave()
+        XCTAssertNil(a.ler().clientId)
+        XCTAssertFalse(m.usaChavePropria)
+        XCTAssertNil(m.conta.definirClientId(Self.chaveDoDeck))
+        XCTAssertNil(a.ler().clientId)
+        XCTAssertNil(a.ler().clientId)
+        // chave de outra pessoa continua valendo como própria
+        XCTAssertNil(m.conta.definirClientId(Self.chave))
+        XCTAssertEqual(m.conta.chavePropria, Self.chave)
+    }
+
+    /// Conectou: a tela mostra de quem é a conta, e Desconectar esquece o nome.
+    func testConectadoMostraOQuemEntrou() async {
+        let (m, _, a) = montar { r in
+            r.url.hasSuffix("/me") ? respostaDeMentira(200, "{\"display_name\":\"Fulana\",\"id\":\"fulana123\"}") : tokenDeMentira()
+        }
+        m.abrirNavegador = navegador()
+        m.chave = Self.chave
+        await m.conectar()
+        XCTAssertTrue(m.conectado)
+        XCTAssertEqual(m.nome, "Fulana")
+        XCTAssertEqual(a.ler().nome, "Fulana")
+        m.desconectar()
+        XCTAssertNil(m.nome)
+        XCTAssertNil(a.ler().nome)
+    }
+
+    func testSemNomeNoSpotifyUsaOIdEConectadoSegueValendo() async {
+        let (m, _, _) = montar { r in r.url.hasSuffix("/me") ? respostaDeMentira(200, "{\"id\":\"fulana123\"}") : tokenDeMentira() }
+        m.abrirNavegador = navegador()
+        m.chave = Self.chave
+        await m.conectar()
+        XCTAssertEqual(m.nome, "fulana123")
+        let (m2, _, _) = montar { r in r.url.hasSuffix("/me") ? respostaDeMentira(500, "") : tokenDeMentira() }
+        m2.abrirNavegador = navegador()
+        m2.chave = Self.chave
+        await m2.conectar()
+        XCTAssertTrue(m2.conectado)
+        XCTAssertNil(m2.nome)
+    }
+
+    /// A tela sempre sai do "Esperando": aqui o navegador nunca volta, e o log conta o que houve.
+    func testTempoEsgotadoSaiDoEsperandoEDiscaNoLog() async {
+        let (m, _, _) = montar { _ in tokenDeMentira() }
+        let linhas = LinhasDeLog()
+        m.registrar = { linhas.guardar($0) }
+        m.esperaMaxima = 0.3
+        m.abrirNavegador = { _ in }
+        m.chave = Self.chave
+        await m.conectar()
+        XCTAssertFalse(m.conectando)
+        XCTAssertEqual(m.situacao, .pronto)
+        XCTAssertEqual(m.erro, ModeloSpotify.textoDeTempoEsgotado)
+        let log = linhas.todas
+        XCTAssertTrue(log.contains { $0.contains("navegador aberto") })
+        XCTAssertTrue(log.contains { $0.contains("tempo esgotado") })
+        XCTAssertFalse(log.contains { $0.contains("CODIGO") || $0.contains(Self.chave) })
+    }
+
+    func testLoginCompletoRegistraOsPassosSemSegredo() async {
+        let (m, _, _) = montar { _ in tokenDeMentira() }
+        let linhas = LinhasDeLog()
+        m.registrar = { linhas.guardar($0) }
+        m.abrirNavegador = navegador()
+        m.chave = Self.chave
+        await m.conectar()
+        let log = linhas.todas.joined(separator: "\n")
+        XCTAssertTrue(log.contains("retorno recebido"))
+        XCTAssertTrue(log.contains("spotify: conectado"))
+        XCTAssertFalse(log.contains("CODIGO") || log.contains("RENOVA") || log.contains("ACESSO"))
+    }
+
+    func testEnquantoConfirmaATelaDiz() {
+        XCTAssertEqual(SpotifyLogica.apoioDoLogin(.conectando, erro: nil, confirmando: true), "O navegador voltou. Confirmando com o Spotify...")
+        XCTAssertEqual(SpotifyLogica.apoioDoLogin(.conectando, erro: nil), "Esperando você permitir no navegador...")
     }
 
     func testPortaOcupadaAvisaOQueFazer() async throws {

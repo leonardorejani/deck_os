@@ -57,6 +57,8 @@ confere "app inexistente falha com código 1" '[ $? -eq 1 ]'
 # 4. build.sh --abrir, numa cópia (não mexe no dist nem na config do dono), com o Xcode e o hdiutil de mentira
 mkdir -p "$tmp/repo/scripts" "$tmp/repo/mac/App" "$tmp/home"
 cp "$raiz/build.sh" "$tmp/repo/build.sh"; cp "$raiz/scripts/abrir-deck.sh" "$tmp/repo/scripts/"
+# a assinatura tem teste próprio (assinatura.test.sh): aqui o app de mentira não tem o que assinar
+printf '#!/usr/bin/env bash\nexit 0\n' > "$tmp/repo/scripts/assinar-deck.sh"
 for f in xcodegen hdiutil defaults; do printf '#!/usr/bin/env bash\nexit 0\n' > "$fakes/$f"; done
 printf '#!/usr/bin/env bash\ncp -R "$1" "$2"\n' > "$fakes/ditto"
 cat > "$fakes/xcodebuild" <<'F'

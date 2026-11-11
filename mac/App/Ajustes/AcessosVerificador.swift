@@ -45,8 +45,8 @@ struct VerificadorVivo: VerificadorDeAcessos {
         switch acesso {
         case .calendarios: return AcessoLido(acesso: acesso, situacao: detectores.calendario())
         case .bluetooth: return AcessoLido(acesso: acesso, situacao: detectores.bluetooth())
-        case .acessibilidade: return AcessoLido(acesso: acesso, situacao: porPedido(acesso, liberado: detectores.acessibilidade()))
-        case .discoTotal: return AcessoLido(acesso: acesso, situacao: porPedido(acesso, liberado: detectores.discoTotal()))
+        case .acessibilidade: return daLista(acesso, liberado: detectores.acessibilidade())
+        case .discoTotal: return daLista(acesso, liberado: detectores.discoTotal())
         case .automacao:
             guard detectores.instalado(bundle: Self.spotify) else { return nil }
             let (situacao, detalhe) = automacao(bundle: Self.spotify, app: "o Spotify")
@@ -54,6 +54,15 @@ struct VerificadorVivo: VerificadorDeAcessos {
         case .navegadores: return navegadores()
         case .redeLocal: return AcessoLido(acesso: acesso, situacao: redeLocal())
         }
+    }
+
+    /// O macOS guarda a permissão amarrada à versão do app. Recusado aqui, com o Deck ligado na lista dos Ajustes do Sistema,
+    /// é a lista com a versão velha: o conserto é tirar o Deck com o botão menos e pôr de novo.
+    static let textoDaListaVelha = "Se o Deck já aparece ligado nos Ajustes do Sistema, o macOS guardou a versão antiga dele. Tire o Deck da lista com o botão menos (-) e adicione de novo com o botão mais (+)."
+
+    private func daLista(_ acesso: AcessoMac, liberado: Bool) -> AcessoLido {
+        let situacao = porPedido(acesso, liberado: liberado)
+        return AcessoLido(acesso: acesso, situacao: situacao, detalhe: situacao == .recusado ? Self.textoDaListaVelha : nil)
     }
 
     private func porPedido(_ acesso: AcessoMac, liberado: Bool) -> SituacaoDoAcesso {

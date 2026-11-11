@@ -159,6 +159,24 @@ final class AcessosTestes: XCTestCase {
         XCTAssertEqual(situacoes(ligado)[.discoTotal], .liberado)
     }
 
+    /// Recusado com o interruptor ligado nos Ajustes do Sistema = lista com a versão velha do app: a linha ensina a tirar e pôr de novo.
+    func testRecusadoDeAcessibilidadeEDiscoExplicaOBotaoMenos() {
+        let defaults = defaultsNovos()
+        let v = VerificadorVivo(defaults: defaults, detectores: DetectoresFalsos())
+        XCTAssertNil(v.ler(.acessibilidade)?.detalhe, "não perguntado ainda não precisa do aviso")
+        defaults.set(true, forKey: VerificadorVivo.chavePedido(.acessibilidade))
+        defaults.set(true, forKey: VerificadorVivo.chavePedido(.discoTotal))
+        for acesso in [AcessoMac.acessibilidade, .discoTotal] {
+            let lido = v.ler(acesso)
+            XCTAssertEqual(lido?.situacao, .recusado)
+            XCTAssertTrue(lido?.detalhe?.contains("botão menos") ?? false)
+            XCTAssertTrue(lido?.detalhe?.contains("adicione de novo") ?? false)
+        }
+        let ligado = VerificadorVivo(defaults: defaults, detectores: DetectoresFalsos(acess: true, disco: true))
+        XCTAssertNil(ligado.ler(.acessibilidade)?.detalhe)
+        XCTAssertFalse(VerificadorVivo.textoDaListaVelha.contains("—") || VerificadorVivo.textoDaListaVelha.contains(";"))
+    }
+
     func testAutomacaoComOAppFechadoUsaAUltimaLeituraOuAvisa() {
         let defaults = defaultsNovos()
         let aberto = VerificadorVivo(defaults: defaults, detectores: DetectoresFalsos(apps: [VerificadorVivo.spotify: .recusado]))

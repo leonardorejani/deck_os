@@ -8,6 +8,8 @@ for f in painel/*.js painel/teste/*.mjs; do node --check "$f"; done
 for v in scripts/validators/*.ts; do bun run "$v" >/dev/null; done
 # nenhum script abre o Deck por "open" (o ícone da barra de menus prende ao terminal)
 bash scripts/teste/abrir-deck.test.sh | tail -1
+# o requisito de assinatura do Deck é o mesmo em builds diferentes (as permissões do macOS sobrevivem a um build novo)
+bash scripts/teste/assinatura.test.sh | tail -1
 # auditores da tatile (design system do autor): só rodam onde a skill está instalada
 if [ -d ~/.claude/skills/tatile ]; then
   node ~/.claude/skills/tatile/auditor/auditar.mjs prototipo | tail -1

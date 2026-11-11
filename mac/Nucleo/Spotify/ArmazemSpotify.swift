@@ -11,6 +11,8 @@ struct DadosSpotify: Codable, Equatable, Sendable {
     var renovacao: String?
     /// Quando o token de acesso vence (segundos desde 1970).
     var expiraEm: Double?
+    /// O nome da conta conectada (só para a tela mostrar quem entrou).
+    var nome: String?
 
     var logado: Bool { !(renovacao ?? "").isEmpty }
 }
