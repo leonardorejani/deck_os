@@ -86,7 +86,7 @@ final class ModeloApp: ObservableObject {
     init(config: Config, iphone: IphonePareado? = nil, acessosRecusados: [AcessoMac] = [],
          configuracaoInicialFeita: Bool = true, abrirComMac: AbrirComMac? = nil, servidor: EstadoServidor = .parado,
          nativo: AppNativo? = nil, pedidoBluetooth: PedidoDePareamento? = nil, renovacao: RenovacaoDoApp = RenovacaoDoApp(),
-         defaults: UserDefaults = .standard) {
+         defaults: UserDefaults = AmbienteDeTeste.defaultsPadrao()) {
         self.nativo = nativo
         self.pedidoBluetooth = pedidoBluetooth
         self.renovacao = renovacao
@@ -107,7 +107,7 @@ final class ModeloApp: ObservableObject {
     }
 
     /// O app de verdade: a config em ~/Library/Application Support/Deck/config.json.
-    init(arquivo: URL = ArmazemConfig.urlPadrao, defaults: UserDefaults = .standard, abrirComMac: AbrirComMac? = nil,
+    init(arquivo: URL = ArmazemConfig.urlPadrao, defaults: UserDefaults = AmbienteDeTeste.defaultsPadrao(), abrirComMac: AbrirComMac? = nil,
          nomeDoMac: String = Ligacao.nomeDoMac()) {
         let existia = FileManager.default.fileExists(atPath: arquivo.path)
         let base = ArmazemConfig(url: arquivo, nomeMac: nomeDoMac)
@@ -122,9 +122,12 @@ final class ModeloApp: ObservableObject {
         let guardado = defaults.object(forKey: Self.chaveInicial) as? Bool
         self.configuracaoInicialFeita = EstadoInicial.jaFeita(guardado: guardado, configExistia: existia)
         self.defaults = defaults
-        self.spotify = ModeloSpotify(conta: ContaSpotify(armazem: ArmazemSpotifyChaveiro(), transporte: TransporteUrlSession()))
+        // Hospedeiro de teste: login do Spotify na memória, nunca o Chaveiro do dono. Log só no app de verdade.
+        let testando = AmbienteDeTeste.ativo
+        let armazemSpotify: ArmazemSpotify = testando ? ArmazemSpotifyMemoria() : ArmazemSpotifyChaveiro()
+        self.spotify = ModeloSpotify(conta: ContaSpotify(armazem: armazemSpotify, transporte: TransporteUrlSession()))
         self.renovacao = RenovacaoDoApp.ler(defaults)
-        self.registrar = { LogDoDeck.padrao.escrever($0) }
+        if !testando { self.registrar = { LogDoDeck.padrao.escrever($0) } }
         self.spotify.avisar = { [weak self] texto, falha in self?.avisar(texto, falha: falha) }
         ligarDecisao()
         // O núcleo só entrega o código: quem o recebeu é lembrado aqui, e vale enquanto o código for o mesmo.
