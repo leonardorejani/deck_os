@@ -70,6 +70,7 @@ enum TokenClaude {
 
     static let recusado = "O Claude recusou esse token. Gere outro com claude setup-token."
     static let semRede = "Não consegui falar com o Claude agora. Confira a internet e tente de novo."
+    static let inesperado = "O Claude respondeu de um jeito que o Deck não entendeu. Tente de novo em instantes."
     static let semGuardar = "Não consegui guardar o token no Chaveiro deste Mac."
 }
 
