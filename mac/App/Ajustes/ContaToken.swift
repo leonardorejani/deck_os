@@ -54,15 +54,15 @@ struct ClaudeUsoPorToken: LeitorDeUsoPorToken {
     }
 
     /// Com o cabeçalho do uso, vale qualquer status (até o 429 de quem estourou o limite traz o uso).
-    /// Sem ele: 401 e 403 são token recusado, 5xx e 429 sem cabeçalho são o Claude fora do ar
-    /// (tenta depois) e o resto é resposta que o Deck não entende.
+    /// Sem ele: 401 e 403 são token recusado e o resto (429 e 5xx incluídos) é resposta que o Deck
+    /// não entende. "Sem rede" só vale quando o pedido nem chegou ao Claude, senão a tela mandaria
+    /// conferir a internet de quem está com internet boa.
     static func interpretar(status: Int, cabecalhos: [String: String]) -> ResultadoDoToken {
         if let bruto = cabecalhos["anthropic-ratelimit-unified-7d-utilization"], let fracao = Double(bruto) {
             let reset = cabecalhos["anthropic-ratelimit-unified-7d-reset"].flatMap(Double.init).flatMap(Numero.epoch)
             return .ok(UsoDoToken(semana: Numero.percentual(fracao * 100), renova: reset))
         }
         if status == 401 || status == 403 { return .recusado }
-        if status == 429 || status >= 500 { return .semRede }
         return .inesperado
     }
 }
@@ -97,16 +97,29 @@ final class LeitorComCache: LeitorDeUsoPorToken, @unchecked Sendable {
 }
 
 /// O token de uma conta da troca de contas (`~/.config/claude-account/profiles/<perfil>.json`), quando
-/// ela foi criada com "claude setup-token" (type oauth_token). O token mora no Chaveiro, num item
-/// que o próprio arquivo aponta. Quem lê é o /usr/bin/security, que o item já aceita sem pedir senha.
+/// ela foi criada com "claude setup-token" (type oauth_token) ou tem um token só de medição
+/// (native_archive com measureKeychainService, de "claude-account add-oauth --measure-for"). O token
+/// mora no Chaveiro, num item que o próprio arquivo aponta. Quem lê é o /usr/bin/security, que o item
+/// já aceita sem pedir senha.
 enum TokenDoPerfil {
+    /// Qual item do Chaveiro guarda o token que mede o perfil, como o claude-account decide.
+    static func servico(perfil obj: [String: Any]) -> String? {
+        let campo: String
+        switch obj["type"] as? String {
+        case "oauth_token": campo = "keychainService"
+        case "native_archive": campo = "measureKeychainService"
+        default: return nil
+        }
+        guard let s = obj[campo] as? String, !s.isEmpty else { return nil }
+        return s
+    }
+
     static func ler(perfil: String, casa: URL) -> String? {
         guard ContasAchadas.perfilValido(perfil) else { return nil }
         let arquivo = casa.appendingPathComponent(".config/claude-account/profiles/\(perfil).json")
         guard let dados = try? Data(contentsOf: arquivo),
               let obj = (try? JSONSerialization.jsonObject(with: dados)) as? [String: Any],
-              obj["type"] as? String == "oauth_token",
-              let servico = obj["keychainService"] as? String, !servico.isEmpty else { return nil }
+              let servico = servico(perfil: obj) else { return nil }
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/security")
         p.arguments = ["find-generic-password", "-s", servico, "-w"]

@@ -113,8 +113,8 @@ final class TokenClaudeTestes: XCTestCase {
     func testSemCabecalhoDecideOErroPeloStatus() {
         XCTAssertEqual(ClaudeUsoPorToken.interpretar(status: 401, cabecalhos: [:]), .recusado)
         XCTAssertEqual(ClaudeUsoPorToken.interpretar(status: 403, cabecalhos: [:]), .recusado)
-        XCTAssertEqual(ClaudeUsoPorToken.interpretar(status: 429, cabecalhos: [:]), .semRede)
-        XCTAssertEqual(ClaudeUsoPorToken.interpretar(status: 503, cabecalhos: [:]), .semRede)
+        XCTAssertEqual(ClaudeUsoPorToken.interpretar(status: 429, cabecalhos: [:]), .inesperado)
+        XCTAssertEqual(ClaudeUsoPorToken.interpretar(status: 503, cabecalhos: [:]), .inesperado)
         XCTAssertEqual(ClaudeUsoPorToken.interpretar(status: 200, cabecalhos: [:]), .inesperado)
         XCTAssertEqual(ClaudeUsoPorToken.interpretar(status: 400, cabecalhos: [:]), .inesperado)
     }
@@ -143,6 +143,14 @@ final class TokenClaudeTestes: XCTestCase {
                                          leitor: LeitorFalso(resultado: .ok(UsoDoToken(semana: 61, renova: nil))), agora: Date(),
                                          tokenDoPerfil: { _, _ in nil })
         XCTAssertNil(sem["claude-leo"]?.semana)
+    }
+
+    func testServicoDoTokenSegueOTipoDoPerfil() {
+        XCTAssertEqual(TokenDoPerfil.servico(perfil: ["type": "oauth_token", "keychainService": "A"]), "A")
+        XCTAssertEqual(TokenDoPerfil.servico(perfil: ["type": "native_archive", "keychainService": "X-archive", "measureKeychainService": "M"]), "M")
+        XCTAssertNil(TokenDoPerfil.servico(perfil: ["type": "native_archive", "keychainService": "X-archive"]))
+        XCTAssertNil(TokenDoPerfil.servico(perfil: ["type": "native_archive", "measureKeychainService": ""]))
+        XCTAssertNil(TokenDoPerfil.servico(perfil: ["type": "outro", "keychainService": "A"]))
     }
 
     func testTokenDoPerfilSoLeOAuthTokenEPerfilValido() throws {
