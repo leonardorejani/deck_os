@@ -59,7 +59,11 @@ public final class Casca {
         }
         // O Mac desconectou este iPhone (mudou o código de acesso): esquece o pareamento e volta à tela de parear,
         // o mesmo que a página faz num 401. Sem isto, nenhum canal conecta e a tela fica em "Mac desconectado".
+        // Vale para os dois canais: com o Bluetooth desligado, o cabo sozinho tem que bastar.
         bluetooth?.aoNaoReconhecido { [weak self] in
+            Task { @MainActor in await self?.esquecerPareamento() }
+        }
+        cabo?.aoNaoReconhecido { [weak self] in
             Task { @MainActor in await self?.esquecerPareamento() }
         }
         cabo?.iniciar()

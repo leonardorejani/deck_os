@@ -379,6 +379,21 @@ final class BluetoothTestes: XCTestCase {
         XCTAssertEqual(c.fluxo.estado, EstadoPareamento())
     }
 
+    /// Mesmo defeito, iPhone pareado só pelo cabo (sem o id do Bluetooth ainda): o ramo "tenta o próximo Mac" nunca
+    /// contava recusa, então a tela ficava presa.
+    func testPareadoSoPeloCaboQueOMacRecusaEsqueceOPareamento() async throws {
+        let mac = MacDeTeste(codigoAcesso: "OUTROCODIGOOUTROCODI")
+        let cofre = CofreEmMemoria(pareado(nil, codigo: "CODIGOVELHOCODIGOVEL"))
+        let (g, _) = gerente(RadioFalso(mac), cofre: cofre)
+        let (c, _) = casca(g, cofre: cofre)
+        var recarregou = false
+        c.recarregarPagina = { recarregou = true }
+        c.iniciar()
+        await esperar({ cofre.ler() == nil }, segundos: 5)
+        XCTAssertNil(cofre.ler(), "o pareamento acabou")
+        XCTAssertTrue(recarregou, "a página volta à tela de parear")
+    }
+
     func testPareadoPeloCaboAchaOMacPeloRadioEGuardaOIdentificador() async throws {
         let mac = MacDeTeste()
         let cofre = CofreEmMemoria(pareado(nil))

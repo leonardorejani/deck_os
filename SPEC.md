@@ -854,6 +854,11 @@ Ajustes de UX (11/11/2026, teste do Leonardo no iPhone):
     - O Bluetooth do Mac passou a aceitar também o código anterior na folga de 10 min do rodízio (o cabo e o HTTPS já
       aceitavam), senão um iPhone que ainda não recebeu o código novo seria esquecido por engano.
     - Precisa atualizar o app do iPhone: a parte de esquecer o pareamento mora nele.
+    - Correções da verificação (11/11/2026): o cabo sozinho também esquece. Se o Mac que conecta pelo cabo não prova o
+      código 2 vezes seguidas, o app esquece o pareamento, mesmo com o Bluetooth desligado ou sem permissão (o pedido dele
+      dizia "Bluetooth ou cabo"). E o iPhone pareado só pelo cabo, que ainda não guardou o id do Bluetooth, conta uma
+      rodada em que todos os Macs por perto recusam: 2 rodadas seguidas e esquece. Quem conecta pelo cabo com prova
+      certa zera a contagem.
 
 Nada em aberto que trave a fase 1. Falta só confirmar, na construção, o link que abre uma sessão
 específica no app do Claude do iPhone (se não existir, cai no "mostra a pergunta").

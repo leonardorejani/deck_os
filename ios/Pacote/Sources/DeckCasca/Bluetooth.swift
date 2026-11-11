@@ -154,6 +154,15 @@ public final class GerenteBluetooth: @unchecked Sendable {
                     espera = Self.esperaMinima
                 }
             } catch ErroSemCandidato.todosRecusaram {
+                // Pareado só pelo cabo (id do Bluetooth ainda desconhecido): cada Mac por perto já recusou este iPhone nesta
+                // rodada. Duas rodadas seguidas assim e o pareamento acabou, senão a tela fica presa em "Mac desconectado".
+                recusasSeguidas += 1
+                if recusasSeguidas >= Self.recusasParaEsquecer {
+                    log("bluetooth: todos os Macs por perto recusaram este iPhone \(recusasSeguidas) vezes, o pareamento acabou")
+                    let aviso = trava.withLock { aoNaoReconhecidoBt }
+                    aviso?()
+                    return
+                }
                 recusados = []
                 espera = Self.esperaSeNaoPareado
             } catch {
