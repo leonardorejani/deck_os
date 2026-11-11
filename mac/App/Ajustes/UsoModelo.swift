@@ -76,7 +76,7 @@ final class PainelUso: ObservableObject {
     private var tarefaLogin: Task<Void, Never>?
 
     init(agora: @escaping () -> Date = Date.init, casa: URL = FileManager.default.homeDirectoryForCurrentUser,
-         cofre: CofreDeToken = AmbienteDeTeste.ativo ? CofreEmMemoria() : Chaveiro(), leitorToken: LeitorDeUsoPorToken = ClaudeUsoPorToken()) {
+         cofre: CofreDeToken = AmbienteDeTeste.ativo ? CofreEmMemoria() : Chaveiro(), leitorToken: LeitorDeUsoPorToken = LeitorComCache()) {
         self.agora = agora
         self.casa = casa
         self.cofre = cofre
@@ -92,7 +92,8 @@ final class PainelUso: ObservableObject {
         if lido != usos { usos = lido }
     }
 
-    nonisolated static func lerUso(contas: [ContaIA], casa: URL, cofre: CofreDeToken, leitor: LeitorDeUsoPorToken, agora: Date) async -> [String: UsoConta] {
+    nonisolated static func lerUso(contas: [ContaIA], casa: URL, cofre: CofreDeToken, leitor: LeitorDeUsoPorToken, agora: Date,
+                                 tokenDoPerfil: @Sendable (String, URL) -> String? = TokenDoPerfil.ler) async -> [String: UsoConta] {
         var saida: [String: UsoConta] = [:]
         var comuns: [ContaIA] = []
         for c in contas {
@@ -112,6 +113,13 @@ final class PainelUso: ObservableObject {
         let l = FonteUso.ler(contas: comuns, claude: casa.appendingPathComponent(".config/claude-account/measure.json"),
                              codex: casa.appendingPathComponent(".codex/sessions"), agora: agora)
         for u in l.valor { saida[u.id] = u }
+        // Conta da troca de contas sem medição do autoswitch (ou velha): se ela tem token de setup-token, o Deck mede sozinho.
+        for c in comuns where c.nome == "Claude" && saida[c.id]?.semana == nil {
+            guard let perfil = c.perfil, let token = tokenDoPerfil(perfil, casa),
+                  case .ok(let uso) = await leitor.ler(token: token) else { continue }
+            saida[c.id] = UsoConta(id: c.id, nome: c.nome, conta: c.conta, semana: uso.semana,
+                                   renova: uso.renova.flatMap { $0 > agora ? Datas.iso($0, fuso: TimeZone(identifier: "UTC")!) : nil })
+        }
         return saida
     }
 
@@ -182,6 +190,7 @@ final class PainelUso: ObservableObject {
         switch r {
         case .recusado: conta?.erro = TokenClaude.recusado
         case .semRede: conta?.erro = TokenClaude.semRede
+        case .inesperado: conta?.erro = TokenClaude.inesperado
         case .ok(let uso):
             let id = "claude-token-" + UUID().uuidString.prefix(8).lowercased()
             do { try cofre.guardar(token, conta: id) } catch { conta?.erro = TokenClaude.semGuardar; return }
