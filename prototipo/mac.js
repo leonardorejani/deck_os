@@ -166,7 +166,7 @@ const TELAS = {
       ${linha('Abrir junto com o Mac', 'O Deck fica na barra de menus, sem ícone no Dock', chave('login', M.login, 'Abrir junto com o Mac'))}
       ${linha('Procurar atualizações', 'Uma vez por dia', chave('atualizar', M.atualizar, 'Procurar atualizações'))}
       ${linha('Configuração inicial', 'Refaz os passos da primeira vez, sem apagar suas teclas', '<button class="btn secundario" data-ini>Refazer</button>')}
-    </div>`) + grupo('Avançado', `<div class="linhas">${linha('Configuração', '~/Library/Application Support/Deck/config.json', '<button class="btn secundario" data-acao="finder">Mostrar no Finder</button>')}</div>`),
+    </div>`),
   teclas: () => {
     const pp = porPaginaMac(), pags = [];
     for (let i = 0; i < teclas.length; i += pp) pags.push(teclas.slice(i, i + pp));
@@ -199,7 +199,7 @@ const TELAS = {
     const ap = [];
     if (M.iphone === 'on') ap.push(linha(nomeIphone(), 'Safari, pelo Wi-Fi desde 09:12', '<button class="btn secundario" data-acao="desparear">Desconectar</button>'));
     if (natPareado()) ap.push(linha(nomeIphone(), `App nativo, ${canalTxt()} desde 09:12`, '<button class="btn secundario" data-nat="desparear-nativo">Desconectar</button>'));
-    return (ap.length ? grupo('Aparelhos', `<div class="linhas">${ap.join('')}</div>`) : '') + grupo('App no iPhone, por cabo e Bluetooth', natSecao()) + grupo(M.iphone === 'on' ? 'Parear outro iPhone pelo Wi-Fi' : 'Parear um iPhone pelo Wi-Fi', `${parearHTML()}`, 'O iPhone e o Mac precisam estar no mesmo Wi-Fi. Nada sai da sua rede.');
+    return (ap.length ? grupo('Aparelhos', `<div class="linhas">${ap.join('')}</div>`) : '') + grupo('App no iPhone, por cabo e Bluetooth', natSecao()) + grupo(M.iphone === 'on' ? 'Parear outro iPhone pelo Wi-Fi' : 'Parear um iPhone pelo Wi-Fi', `${parearHTML()}`, 'Pelo Wi-Fi o iPhone usa o Deck como app da Tela de Início (PWA), que é limitado. Só funciona com o iPhone na mesma rede do Mac, não conecta por cabo nem por Bluetooth, deixa de atualizar quando o iPhone sai do Wi-Fi e a tela pode apagar sozinha. Para ter tudo isso, use o app no iPhone, acima. Nada sai da sua rede.');
   },
   permissoes: () => grupo('O que o Deck usa neste Mac', `<div class="linhas">${ORDEM_PAINEL.map(id => { const p = PERMS.find(x => x.id === id), v = M.perms[id];
     const estado = v ? `<span class="liberado">${IC.ok}Liberado</span>` : v === false ? '<span class="valor recusado">Recusado</span>' : '<span class="valor">Não perguntado</span>';
@@ -214,9 +214,8 @@ const TELAS = {
         ${linha('iPhone', 'Precisa do iOS 16.4 ou mais novo', `<span class="valor">${M.iphone === 'on' ? 'iOS 26' : 'nenhum pareado'}</span>`)}
       </div>
       ${grupo('Projeto aberto', `<div class="linhas">
-        ${linha('Repositório', 'github.com/leonardorejani/deck_os', '<a class="btn secundario" href="https://github.com/leonardorejani/deck_os" target="_blank" rel="noopener">Abrir</a>')}
+        ${linha('Gostou do Deck?', 'Abre a página do projeto no GitHub', '<a class="btn estrela" href="https://github.com/leonardorejani/deck_os" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.2 6.1 20.6l1.3-6.6L2.5 9.4l6.6-.8z"/></svg>Dar uma estrela no GitHub</a>')}
         ${linha('Licença', 'Uso livre, com o aviso de direitos mantido', '<a class="btn link" href="https://github.com/leonardorejani/deck_os/blob/main/LICENSE" target="_blank" rel="noopener">MIT</a>')}
-        ${linha('Gostou do Deck?', 'Abre a página do projeto no GitHub', '<a class="btn primario" href="https://github.com/leonardorejani/deck_os" target="_blank" rel="noopener">Dar uma estrela no GitHub</a>')}
         ${linha('Achou um erro?', 'Abre o formulário de problema no GitHub', '<a class="btn secundario" href="https://github.com/leonardorejani/deck_os/issues/new" target="_blank" rel="noopener">Relatar um problema</a>')}
       </div>`, 'O Deck é código aberto, com licença MIT. Uma estrela ajuda outras pessoas a achar o projeto.')}</div>`,
 
@@ -483,7 +482,6 @@ corpo.addEventListener('click', e => {
   if (ac === 'testar') { const s = $('#saida'); s.textContent = 'rodando...'; setTimeout(() => s.textContent = 'saiu com 0 em 38 ms', 500) }
   if (ac === 'copiar') avisar('Endereço copiado');
   if (ac === 'desparear') { M.iphone = 'off'; pintar(); marcarControles(); avisar('iPhone desconectado. Ele volta a pedir pareamento') }
-  if (ac === 'finder') avisar('No app de verdade: abre a pasta no Finder');
 });
 addEventListener('keydown', e => {
   if (M.ouvindo) {

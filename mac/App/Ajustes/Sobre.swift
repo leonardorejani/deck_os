@@ -37,13 +37,11 @@ struct InformacoesDoApp: Equatable {
 
 /// Os endereços do projeto aberto no GitHub. Abrem no navegador padrão (NSWorkspace).
 enum LinksDoProjeto {
-    static let repositorio = URL(string: "https://github.com/leonardorejani/deck_os")!
+    private static let repositorio = URL(string: "https://github.com/leonardorejani/deck_os")!
     /// A página do repositório é o lugar da estrela: o botão "Star" fica no topo dela.
     static let estrela = repositorio
     static let problema = URL(string: "https://github.com/leonardorejani/deck_os/issues/new")!
     static let licenca = URL(string: "https://github.com/leonardorejani/deck_os/blob/main/LICENSE")!
-    /// O texto curto do endereço, sem o https.
-    static let enderecoCurto = "github.com/leonardorejani/deck_os"
 }
 
 private struct ChaveInformacoes: EnvironmentKey { static let defaultValue: InformacoesDoApp? = nil }
@@ -57,7 +55,7 @@ extension EnvironmentValues {
 }
 
 /// Seção "Sobre o Deck" dos Ajustes, igual ao protótipo (prototipo/mac.js, TELAS.sobre): informação do app
-/// com o projeto aberto no GitHub (repositório, estrela, problema e licença). A assinatura fica no rodapé da barra lateral.
+/// com o projeto aberto no GitHub (estrela, problema e licença). A assinatura fica no rodapé da barra lateral.
 struct Sobre: View {
     @ObservedObject var modelo: ModeloApp
     /// Abre o endereço no navegador padrão. Os testes trocam por um que só anota.
@@ -90,14 +88,11 @@ struct Sobre: View {
             }
             GrupoDeAjuste(titulo: "Projeto aberto", nota: "O Deck é código aberto, com licença MIT. Uma estrela ajuda outras pessoas a achar o projeto.") {
                 LinhasDeAjuste {
-                    LinhaDeAjuste(titulo: "Repositório", apoio: LinksDoProjeto.enderecoCurto) {
-                        BotaoDeAjuste(texto: "Abrir", estilo: .secundario) { abrir(LinksDoProjeto.repositorio) }
+                    LinhaDeAjuste(titulo: "Gostou do Deck?", apoio: "Abre a página do projeto no GitHub") {
+                        BotaoDeAjuste(texto: "Dar uma estrela no GitHub", estilo: .estrela, icone: "star.fill") { abrir(LinksDoProjeto.estrela) }
                     }
                     LinhaDeAjuste(titulo: "Licença", apoio: "Uso livre, com o aviso de direitos mantido", divisoria: true) {
                         BotaoDeAjuste(texto: "MIT", estilo: .link) { abrir(LinksDoProjeto.licenca) }
-                    }
-                    LinhaDeAjuste(titulo: "Gostou do Deck?", apoio: "Abre a página do projeto no GitHub", divisoria: true) {
-                        BotaoDeAjuste(texto: "Dar uma estrela no GitHub", estilo: .primario) { abrir(LinksDoProjeto.estrela) }
                     }
                     LinhaDeAjuste(titulo: "Achou um erro?", apoio: "Abre o formulário de problema no GitHub", divisoria: true) {
                         BotaoDeAjuste(texto: "Relatar um problema", estilo: .secundario) { abrir(LinksDoProjeto.problema) }
