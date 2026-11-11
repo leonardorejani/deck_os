@@ -314,6 +314,19 @@ final class EnlaceSeguroTestes: XCTestCase {
         XCTAssertEqual(entrada.nomeMac, "Mac do Leo")
     }
 
+    /// Defeito: o Bluetooth só aceitava o código atual, então iPhone com o anterior na folga era tratado como desconhecido.
+    func testPortaDoBluetoothAceitaOCodigoAnteriorSoNaFolga() {
+        let agora = Date(timeIntervalSince1970: 1_800_000_000)
+        var c = Config.padrao(nomeMac: "M")
+        c.codigoAcesso = "codigonovocodigonovo"
+        XCTAssertEqual(PortaDoBluetooth.chavesVigentes(c, agora: agora), ["codigonovocodigonovo"])
+        c.codigoAnterior = "codigovelhocodigovelh"
+        c.anteriorValeAte = 1_800_000_000 + 300
+        XCTAssertEqual(PortaDoBluetooth.chavesVigentes(c, agora: agora), ["codigonovocodigonovo", "codigovelhocodigovelh"])
+        c.anteriorValeAte = 1_800_000_000 - 1
+        XCTAssertEqual(PortaDoBluetooth.chavesVigentes(c, agora: agora), ["codigonovocodigonovo"], "folga vencida: o anterior não vale")
+    }
+
     func testMacFalsoQueNaoSabeOCodigoNaoEngana() throws {
         let (mac, iphone) = FluxoEnlace.par()
         Thread {

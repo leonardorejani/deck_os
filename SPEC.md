@@ -843,6 +843,17 @@ Ajustes de UX (11/11/2026, teste do Leonardo no iPhone):
       recusa já no login (o retorno traz um erro que não é o de Cancelar, e a troca do código pode trazer a mesma mensagem).
       Com chave própria o erro segue como antes. Tocar, pausar, pular, volume e capa seguem sem login.
     - O README explica como um fork configura a própria chave.
+30. iPhone desconectado pelo Mac volta a pedir pareamento (11/11/2026). Palavras dele: "Desconectei o iPhone e tá
+    demorando muito pra conectar pelo Bluetooth ou cabo. Não tá conectando na real."
+    - Causa: "Desconectar iPhone" no Mac muda o código de acesso. O app do iPhone só esquecia o Mac ao receber um 401 numa
+      resposta, mas com o código velho nenhum canal conecta (o cabo derruba o Mac sem prova e o Bluetooth recusa), então
+      nenhum pedido ia e nenhum 401 voltava. A tela ficava em "Mac desconectado" para sempre, e o aviso do Mac
+      ("Ele volta a pedir pareamento") não acontecia.
+    - Agora: se o Mac já conhecido pelo Bluetooth recusa o iPhone 2 vezes seguidas, o app esquece o pareamento e volta à tela
+      de parear, igual ao 401. Duas vezes porque uma só poderia ser um instante da troca de código.
+    - O Bluetooth do Mac passou a aceitar também o código anterior na folga de 10 min do rodízio (o cabo e o HTTPS já
+      aceitavam), senão um iPhone que ainda não recebeu o código novo seria esquecido por engano.
+    - Precisa atualizar o app do iPhone: a parte de esquecer o pareamento mora nele.
 
 Nada em aberto que trave a fase 1. Falta só confirmar, na construção, o link que abre uma sessão
 específica no app do Claude do iPhone (se não existir, cai no "mostra a pergunta").

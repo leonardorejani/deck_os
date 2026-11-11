@@ -101,4 +101,6 @@ public protocol ConexaoBluetooth: AnyObject, Sendable {
     func retomar()
     /// Pareou ou esqueceu: liga ou desliga a reconexão conforme o cofre.
     func reavaliar()
+    /// O Mac conhecido recusou este iPhone mais de uma vez seguida: o pareamento acabou (o Mac desconectou o aparelho).
+    func aoNaoReconhecido(_ f: @escaping @Sendable () -> Void)
 }

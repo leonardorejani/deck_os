@@ -16,6 +16,9 @@ public final class GerenteBluetooth: @unchecked Sendable {
     static let esperaMaxima: TimeInterval = 15
     /// Rejeitado pelo Mac (código de acesso que ele não reconhece): não adianta insistir a cada segundo.
     static let esperaSeNaoPareado: TimeInterval = 30
+    /// Quantas vezes seguidas o Mac já conhecido pode recusar este iPhone antes de o pareamento valer como acabado.
+    /// Uma só poderia ser um instante da troca do código de acesso: a segunda, logo em seguida, confirma.
+    static let recusasParaEsquecer = 2
 
     private struct Pendente {
         var pareando: EnlaceSeguro.Pareando
@@ -33,6 +36,7 @@ public final class GerenteBluetooth: @unchecked Sendable {
     private var laco: Task<Void, Never>?
     private var pendente: Pendente?
     private var aoMudarBt: (@Sendable (MacEncontrado?) -> Void)?
+    private var aoNaoReconhecidoBt: (@Sendable () -> Void)?
     /// Sobe a cada parar(): um laço antigo que ainda está terminando não mexe no novo.
     private var geracao = 0
 
@@ -54,6 +58,10 @@ public final class GerenteBluetooth: @unchecked Sendable {
     /// Chamado quando o Mac se apresenta pelo Bluetooth (com ele) e quando o fio cai (com nil).
     public func aoMudar(_ f: @escaping @Sendable (MacEncontrado?) -> Void) {
         trava.withLock { aoMudarBt = f }
+    }
+
+    public func aoNaoReconhecido(_ f: @escaping @Sendable () -> Void) {
+        trava.withLock { aoNaoReconhecidoBt = f }
     }
 
     public var mac: MacEncontrado? { trava.withLock { macAtual } }
@@ -101,6 +109,7 @@ public final class GerenteBluetooth: @unchecked Sendable {
         var espera = Self.esperaMinima
         /// Macs que já disseram não conhecer este iPhone nesta rodada de procura (quando o id ainda não foi guardado).
         var recusados = Set<String>()
+        var recusasSeguidas = 0
         defer { trava.withLock { if geracao == g { laco = nil } } }
         while !Task.isCancelled, trava.withLock({ geracao == g }) {
             guard let pareado = cofre.ler() else { break }
@@ -120,6 +129,7 @@ public final class GerenteBluetooth: @unchecked Sendable {
                     throw error
                 }
                 recusados = []
+                recusasSeguidas = 0
                 cofre.guardarBluetooth(id)
                 log("bluetooth: Mac \"\(entrada.nomeMac)\" conectado (cifrado)")
                 ativar(ConexaoCabo(fluxo: entrada.fluxo, segredo: { nil }, confiavel: true, nomeDoCanal: "O Bluetooth"), id: id, nome: entrada.nomeMac)
@@ -132,7 +142,16 @@ public final class GerenteBluetooth: @unchecked Sendable {
                     recusados.insert(id)
                     espera = Self.esperaMinima
                 } else {
-                    espera = Self.esperaSeNaoPareado
+                    // Mac já conhecido que não reconhece o código: o Mac desconectou este iPhone. Sem canal nenhum, a
+                    // página nunca leva um 401 e ficaria em "Mac desconectado" para sempre. Confirma uma vez e avisa.
+                    recusasSeguidas += 1
+                    if recusasSeguidas >= Self.recusasParaEsquecer {
+                        log("bluetooth: o Mac recusou este iPhone \(recusasSeguidas) vezes, o pareamento acabou")
+                        let aviso = trava.withLock { aoNaoReconhecidoBt }
+                        aviso?()
+                        return
+                    }
+                    espera = Self.esperaMinima
                 }
             } catch ErroSemCandidato.todosRecusaram {
                 recusados = []

@@ -57,8 +57,21 @@ public final class Casca {
             case .bluetooth: return cabo.flatMap { $0.mac != nil ? CanalCabo($0) : nil }
             }
         }
+        // O Mac desconectou este iPhone (mudou o código de acesso): esquece o pareamento e volta à tela de parear,
+        // o mesmo que a página faz num 401. Sem isto, nenhum canal conecta e a tela fica em "Mac desconectado".
+        bluetooth?.aoNaoReconhecido { [weak self] in
+            Task { @MainActor in await self?.esquecerPareamento() }
+        }
         cabo?.iniciar()
         bluetooth?.iniciar()
+    }
+
+    private func esquecerPareamento() async {
+        guard cofre.ler() != nil else { return }
+        _ = await fluxo.tratar(.esquecer)
+        bluetooth?.reavaliar()
+        usar(canal: nil)
+        recarregarPagina()
     }
 
     /// O app voltou ao primeiro plano: o iOS pode ter fechado a porta do cabo e derrubado o Bluetooth em segundo plano.
