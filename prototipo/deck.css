@@ -1,0 +1,493 @@
+/*
+ * Deck, protótipo. Regras da tatile: espaço, cor, raio, tipo e movimento só por token.
+ * O que é próprio do Deck mora neste bloco, num lugar só.
+ */
+:root {
+  --tela-fundo: #0E0E0E;
+  --placa-cima: #1F1F1F;
+  --placa-baixo: #1B1B1B;
+  --placa-ponto: #5A5A5A;
+  --veu-offline: rgb(10 10 10 / .97);
+  --sombra-kbd: inset 0 -2px 0 rgb(0 0 0 / .4);
+  --moldura: #050505;
+  --ilha: #000;
+  --cal-fundo: #000;
+  --cal-vermelho: #EB5545; /* vermelho do calendário do StandBy */
+  --dia-cal: 44px;
+  --folga-ponto: 3px;
+  --moldura-borda: #2A2A2A;
+  --home: rgb(255 255 255 / .35);
+  --raio-icone: 10px;       /* forma do ícone de app (22% de 44) */
+  --raio-tela: 55px;        /* canto da tela do 15 Pro Max */
+  --raio-moldura: 62px;
+  --tecla-icone: 44px;
+  --avatar: 44px;
+  --alvo: 44px;             /* área de toque mínima (tatile, forma 5) */
+  --alvo-sm: 36px;
+  --selo: 22px;
+  --ic-mini: 16px;
+  --raio-mini: 4px;
+  --ic-vazio: 48px;
+  --texto-campo: 16px;
+  --micro-gap: 2px;         /* entre itens de lista colada */      /* campo com 16 não dá zoom no iPhone */
+}
+
+/* ---------- Página do protótipo (fora do iPhone) ---------- */
+* { box-sizing: border-box }
+[hidden] { display: none !important }
+html, body { margin: 0 }
+body { min-height: 100dvh; display: grid; justify-items: center; align-content: start; padding: var(--secao) var(--margem); gap: var(--pad) }
+.cabeca { max-width: 1000px; width: 100% }
+.cabeca h1 { font-size: var(--texto-xl); margin: 0 0 var(--item) }
+.cabeca p { color: var(--texto-2); margin: 0; max-width: 80ch }
+.cabeca a { color: var(--destaque) }
+.palco { width: 100%; max-width: 1000px; display: grid; justify-items: center }
+.moldura {
+  --escala: 1; --borda-moldura: 14px;
+  width: calc(var(--larg) + 2 * var(--borda-moldura)); height: calc(var(--alt) + 2 * var(--borda-moldura));
+  padding: var(--borda-moldura); border-radius: var(--raio-moldura); background: var(--moldura);
+  box-shadow: 0 0 0 2px var(--moldura-borda), var(--sombra-3);
+  transform: scale(var(--escala)); transform-origin: top center; position: relative;
+}
+.moldura.horizontal { --larg: 932px; --alt: 430px }
+.moldura.vertical { --larg: 430px; --alt: 932px }
+.moldura::before { content: ""; position: absolute; border-radius: var(--raio-card); background: var(--ilha); z-index: 30 }
+.moldura.horizontal::before { left: calc(var(--borda-moldura) + var(--icone)); top: 50%; width: 37px; height: 126px; translate: 0 -50% }
+.moldura.vertical::before { top: calc(var(--borda-moldura) + var(--icone)); left: 50%; width: 126px; height: 37px; translate: -50% 0 }
+.controles { max-width: 1000px; width: 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--grade) }
+.controle { background: var(--superficie); box-shadow: var(--sombra-1); border-radius: var(--raio-card); padding: var(--pad) }
+.controle h2 { font-size: var(--texto-sm); color: var(--texto-2); margin: 0 0 var(--item); font-weight: 600; letter-spacing: 0 }
+.opcoes { display: flex; flex-wrap: wrap; gap: var(--item) }
+.opcoes button { font: inherit; font-size: var(--texto-sm); min-height: var(--alvo-sm); padding: 0 var(--icone); border-radius: var(--raio-pilula); border: 0; background: var(--superficie-2); color: var(--texto); cursor: pointer }
+.opcoes button[aria-pressed="true"] { background: var(--destaque); color: var(--destaque-texto) }
+
+/* ---------- A tela ---------- */
+.tela {
+  /* Painel deitado tem altura de celular: coluna "Celular" da tatile (espacamento/README) */
+  --margem: 20px; --pad: 16px; --secao: 32px; --linha: 60px; --icone: 12px; --grade: 12px; --item: 8px;
+  --seguro-esq: 59px; --seguro-dir: 59px; --seguro-cima: 0px; --seguro-baixo: 21px;
+  --led: var(--sucesso);
+  width: var(--larg); height: var(--alt); border-radius: var(--raio-tela); overflow: hidden;
+  background: var(--tela-fundo); color: var(--texto); position: relative;
+  padding: var(--pad) var(--seguro-dir) var(--seguro-baixo) var(--seguro-esq);
+  user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: manipulation;
+}
+.vertical .tela { --seguro-esq: var(--margem); --seguro-dir: var(--margem); --seguro-cima: 59px; --seguro-baixo: 34px; padding: var(--seguro-cima) var(--margem) var(--seguro-baixo) }
+#conteudo { height: 100% }
+.indicador-home { position: absolute; bottom: var(--item); left: 50%; translate: -50% 0; width: 140px; height: 5px; border-radius: var(--raio-pilula); background: var(--home); z-index: 40 }
+
+.cartao { background: var(--superficie); box-shadow: var(--sombra-1); border-radius: var(--raio-card); padding: var(--pad); min-width: 0; min-height: 0; overflow: hidden }
+button.cartao { font: inherit; color: inherit; text-align: left; border: 0; cursor: pointer; display: flex; flex-direction: column; justify-content: flex-start; width: 100% }
+.cartao-titulo { display: flex; align-items: center; justify-content: space-between; gap: var(--item); font-size: var(--texto-sm); color: var(--texto-2); font-weight: 600; margin-bottom: var(--item); line-height: 1.2 }
+.cartao-titulo .conta { font-variant-numeric: tabular-nums; color: var(--aviso) }
+
+/* ---------- Relógio ---------- */
+.relogio { display: flex; align-items: center; gap: var(--item) }
+.placa { --h: 112px; --w: 78px; position: relative; width: var(--w); height: var(--h); perspective: 400px; font-size: calc(var(--h) * .78); font-weight: 600; font-variant-numeric: tabular-nums; line-height: var(--h); text-align: center; color: var(--texto) }
+.placa .metade { position: absolute; left: 0; right: 0; height: 50%; overflow: hidden; background: var(--placa-cima) }
+.placa .cima { top: 0; border-radius: var(--raio) var(--raio) 0 0; transform-origin: bottom }
+.placa .baixo { bottom: 0; border-radius: 0 0 var(--raio) var(--raio); transform-origin: top; background: var(--placa-baixo) }
+.placa .baixo span { translate: 0 -50% }
+.placa span { display: block; height: var(--h) }
+.placa::after { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 2px; translate: 0 -50%; background: var(--tela-fundo); z-index: 4 }
+.placa .aba-cima { z-index: 2; backface-visibility: hidden }
+.placa .aba-baixo { z-index: 2; transform: rotateX(90deg); backface-visibility: hidden }
+.placa.virando .aba-cima { transition: transform var(--mov-padrao) var(--curva-sai); transform: rotateX(-90deg) }
+.placa.virando .aba-baixo { transition: transform var(--mov-padrao) var(--curva-entra) var(--mov-padrao); transform: rotateX(0) }
+.dois-pontos { display: grid; gap: var(--pad) }
+.dois-pontos i { width: 10px; height: 10px; border-radius: 50%; background: var(--placa-ponto) }
+/* data: ícone-texto < respiro < entre blocos (tatile). 12 do relógio, 16 até o cartão */
+.data-linha { display: flex; align-items: center; gap: var(--item); margin-top: var(--icone); min-width: 0 }
+.data-linha .data { white-space: nowrap; flex: none }
+.vertical .data-linha { justify-content: center }
+.data { font-size: var(--texto-md); color: var(--texto-2); line-height: var(--altura-titulo) }
+.data b { color: var(--texto); font-weight: 600 }
+
+/* ---------- Uso de IA ---------- */
+.cartao.uso { display: grid; align-content: start }
+.uso-linha { display: grid; grid-template-columns: 116px minmax(0, 1fr); gap: var(--icone); align-items: center; line-height: 1.5 }
+.uso-linha + .uso-linha { border-top: 1px solid var(--borda) }
+.uso-nome { font-size: var(--texto-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center }
+.uso-nome > span { overflow: hidden; text-overflow: ellipsis }
+.uso-nome small { color: var(--texto-2); font-size: var(--texto-xs) }
+.medidor { display: grid; grid-template-columns: 1fr 36px; gap: var(--item); align-items: center; font-size: var(--texto-xs); color: var(--texto-2); font-variant-numeric: tabular-nums }
+.medidor .trilho, .uso-tira .mini, .progresso .trilho { height: 6px; border-radius: var(--raio-pilula); background: var(--superficie-2); overflow: hidden; display: block }
+.medidor .trilho i, .uso-tira .mini i, .progresso .trilho i { display: block; height: 100%; border-radius: var(--raio-pilula); background: var(--texto-2) }
+.medidor b { font-weight: 600; color: var(--texto); text-align: right }
+.medidor.alto .trilho i, .uso-tira .alto .mini i { background: var(--aviso) }
+.medidor.alto b, .uso-tira .alto, .uso-tira .alto b { color: var(--aviso) }
+.medidor.cheio .trilho i { background: var(--perigo) }
+.medidor.cheio b { color: var(--perigo) }
+.uso-tira { display: flex; gap: var(--icone); flex-wrap: nowrap; overflow: hidden; font-size: var(--texto-xs); color: var(--texto-2); font-variant-numeric: tabular-nums; margin-top: var(--icone) }
+.uso-tira > span:not(.esconder-bloco) { display: inline-flex; align-items: center; gap: var(--item); white-space: nowrap }
+.uso-tira .mini { width: 28px }
+.uso-tira b { color: var(--texto); font-weight: 600 }
+
+/* ---------- Player: capa | título e botões / barra de tempo na largura toda ---------- */
+.player { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--icone); align-items: center }
+.capa { --lado: 92px; width: var(--lado); height: var(--lado); border-radius: var(--raio-sm); object-fit: cover; background: var(--superficie-2); display: block; cursor: pointer }
+.pausado .capa { opacity: .5 }
+.player .info { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--icone); row-gap: var(--item); align-items: center }
+.player .titulos { min-width: 0; cursor: pointer }
+.faixa { font-weight: 600; font-size: var(--texto-md); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: var(--altura-titulo) }
+.artista { color: var(--texto-2); font-size: var(--texto-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.progresso { grid-column: 1 / -1; display: grid; grid-template-columns: auto 1fr auto; gap: var(--item); align-items: center; font-size: var(--texto-xs); color: var(--texto-2); font-variant-numeric: tabular-nums }
+.progresso .trilho { height: 4px }
+.progresso .trilho i { background: var(--texto) }
+.midia { display: flex; gap: var(--item); align-items: center }
+.midia button { width: var(--alvo); height: var(--alvo); display: grid; place-items: center; border: 0; background: none; color: var(--texto); border-radius: 50%; cursor: pointer; transition: transform var(--mov-rapido) var(--curva-move) }
+.midia button:active { transform: scale(.94); background: var(--superficie-2) }
+.midia svg { width: 22px; height: 22px }
+.midia .tocar { background: var(--texto); color: var(--fundo) }
+.midia .tocar svg { width: 20px; height: 20px }
+.midia .tocar.play svg { translate: 2px 0 } /* play óptico: 2px pra direita (tatile, forma 4) */
+.vazio-bloco { color: var(--texto-2); font-size: var(--texto-sm); display: grid; gap: var(--item); align-content: center; height: 100% }
+.vazio-bloco strong { color: var(--texto); font-size: var(--texto-base); font-weight: 600 }
+
+/* ---------- Sessões esperando ---------- */
+.sessao { display: grid; grid-template-columns: minmax(0, 176px) minmax(0, 1fr); gap: var(--icone); align-items: baseline; line-height: 1.5 }
+.sessao + .sessao { border-top: 1px solid var(--borda) }
+.sessao b { font-size: var(--texto-sm); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.sessao span { font-size: var(--texto-sm); color: var(--texto-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.sessoes .sessao:nth-of-type(n+5) { display: none } /* o 1o div é o título: mostra 3 */
+
+/* ---------- Teclas ---------- */
+.tecla {
+  position: relative; display: grid; place-items: center; align-content: center; gap: var(--item);
+  background: var(--superficie); box-shadow: var(--sombra-1); border-radius: var(--raio-card);
+  border: 0; color: var(--texto); font: inherit; cursor: pointer; padding: calc(var(--selo) + var(--item)) var(--item) var(--pad); min-height: 0;
+  transition: transform var(--mov-rapido) var(--curva-move), background var(--mov-rapido) var(--curva-move), box-shadow var(--mov-rapido) var(--curva-move);
+}
+.tecla:active, .tecla.apertada { transform: scale(.97) }
+/* segurando: afunda devagar até abrir o modo organizar, sem contorno */
+.tecla.segurando { transform: scale(.94); transition: transform 500ms var(--curva-move) }
+.tecla, .lista-apps, .icones { --contorno-imagem: transparent } /* ícone de app já tem a forma dele */
+.tecla img, .tecla .svg { width: var(--tecla-icone); height: var(--tecla-icone); border-radius: var(--raio-icone) }
+.tecla .svg { display: grid; place-items: center; background: var(--superficie-2); color: var(--texto) }
+.tecla .svg svg { width: 24px; height: 24px }
+.tecla .nome { font-size: var(--texto-xs); color: var(--texto-2); line-height: 1.2; max-width: 100%; text-align: center; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-wrap: balance }
+.tecla .led { position: absolute; bottom: var(--item); left: 50%; translate: -50% 0; width: 18px; height: 3px; border-radius: var(--raio-pilula); background: var(--borda); transition: background-color var(--mov-rapido) var(--curva-move), box-shadow var(--mov-rapido) var(--curva-move) }
+.tecla.piscando .led { background: var(--led); box-shadow: 0 0 8px var(--led) }
+/* ligada: dá pra ver do outro lado da mesa (fundo, anel, LED largo e a palavra) */
+.tecla.acesa { background: var(--sucesso-suave); box-shadow: inset 0 0 0 2px var(--led), 0 0 10px -2px var(--led) } /* brilho cabe na folga do carrossel */
+.tecla.acesa .led { width: 40px; height: 5px; background: var(--led); box-shadow: 0 0 10px 1px var(--led) }
+.tecla.acesa .nome { color: var(--texto) }
+.tecla .selo { position: absolute; top: var(--item); right: var(--item); min-width: var(--selo); height: var(--selo); padding: 0 var(--item); border-radius: var(--raio-pilula); background: var(--perigo); color: var(--fundo); font-size: var(--texto-xs); font-weight: 700; display: grid; place-items: center; font-variant-numeric: tabular-nums }
+.tecla .hora-tecla { position: absolute; top: var(--item); left: 0; right: 0; text-align: center; font-size: var(--texto-sm); font-weight: 700; color: var(--texto); font-variant-numeric: tabular-nums; line-height: var(--selo) }
+/* topo de toda tecla reserva a altura do selo: ícone fica no mesmo lugar com ou sem selo */
+.tecla.menu { background: transparent; box-shadow: inset 0 0 0 1.5px var(--borda) }
+.tecla.menu .svg { background: none; color: var(--texto-2) }
+
+/* ---------- Modo organizar ---------- */
+.barra-organizar { position: absolute; left: 50%; top: var(--item); translate: -50% calc(-1 * var(--icone)); opacity: 0; z-index: 12; display: flex; align-items: center; gap: var(--icone); background: var(--superficie-2); box-shadow: var(--sombra-3); border-radius: var(--raio-pilula); padding: var(--item) var(--item) var(--item) var(--pad); font-size: var(--texto-sm); pointer-events: none; transition: opacity var(--mov-sai-padrao) var(--curva-sai), translate var(--mov-sai-padrao) var(--curva-sai); white-space: nowrap }
+.organizando .barra-organizar { opacity: 1; translate: -50% 0; pointer-events: auto; transition: opacity var(--mov-padrao) var(--curva-entra), translate var(--mov-padrao) var(--curva-entra) }
+.organizando .tecla:not(.menu) { animation: tremer 260ms ease-in-out infinite alternate }
+.organizando .tecla:nth-child(2n):not(.menu) { animation-delay: -130ms }
+.tecla .editar { display: none; position: absolute; top: var(--item); left: var(--item); width: 24px; height: 24px; border-radius: 50%; background: var(--texto-2); color: var(--fundo); place-items: center; z-index: 2 }
+.organizando .tecla .editar { display: grid }
+.tecla .editar svg { width: 13px; height: 13px }
+@keyframes tremer { from { rotate: -1.2deg } to { rotate: 1.2deg } }
+@media (prefers-reduced-motion: reduce) { .organizando .tecla:not(.menu) { animation: none; outline: 1.5px dashed var(--texto-3); outline-offset: 3px } }
+.tecla.arrastando { opacity: .25 }
+/* sem isso o navegador arrasta a imagem do ícone (mouse) ou rola a tela (toque) e cancela o gesto */
+.tecla img { -webkit-user-drag: none; pointer-events: none }
+.organizando .tecla, .tecla.segurando { touch-action: none }
+.fantasma { position: absolute; z-index: 15; pointer-events: none; scale: 1.08; box-shadow: var(--sombra-3); animation: none !important; rotate: 0deg }
+
+/* ---------- Sem Mac: tela fechada, o aparelho procurado em destaque, uma linha de orientação ---------- */
+.tela-offline { position: absolute; inset: 0; z-index: 24; display: grid; place-items: center; text-align: center; padding: var(--secao) var(--seguro-dir) var(--secao) var(--seguro-esq); background: var(--veu-offline); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); opacity: 0; pointer-events: none; transition: opacity var(--mov-lento) var(--curva-move) }
+.offline .tela-offline { opacity: 1; pointer-events: auto }
+.tela-offline > div { display: grid; justify-items: center; gap: var(--pad); max-width: 440px }
+.tela-offline strong { font-size: var(--texto-xl); letter-spacing: var(--tracking-titulo); line-height: var(--altura-titulo) }
+.tela-offline .disp { display: inline-flex; align-items: center; gap: var(--item); min-height: var(--alvo); padding: 0 var(--pad) 0 var(--icone); border-radius: var(--raio-pilula); background: var(--superficie-2); box-shadow: var(--sombra-1); color: var(--texto); font-size: var(--texto-base); font-weight: 600 }
+.tela-offline .disp svg { width: 20px; height: 20px; color: var(--texto-2) }
+.tela-offline .dica-off { color: var(--texto-2); font-size: var(--texto-sm) }
+.girando { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--borda); border-top-color: var(--texto); animation: girar 900ms linear infinite; flex: none }
+@keyframes girar { to { rotate: 360deg } }
+@media (prefers-reduced-motion: reduce) { .girando { animation: none; opacity: .5 } }
+
+/* ---------- Composição A ---------- */
+.comp-a { display: grid; grid-template-rows: minmax(0, 1fr) 112px; gap: var(--grade); height: 100% }
+/* duas linhas que cruzam as colunas: relógio e player em cima, uso e sessões embaixo, mesma altura */
+.comp-a .topo { display: grid; grid-template-columns: 336px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); gap: var(--pad); min-height: 0 }
+.comp-a .esquerda, .comp-a .direita { display: contents }
+.comp-a .relogio-linha { grid-area: 1 / 1 }
+.comp-a .player { grid-area: 1 / 2 }
+.comp-a .cartao.uso { grid-area: 2 / 1 }
+.comp-a .sessoes { grid-area: 2 / 2 }
+.comp-a .placa { --h: 104px; --w: 72px }
+
+/* ---------- Composição B ---------- */
+.comp-b { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: var(--pad); height: 100% }
+.comp-b .esquerda { display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: var(--grade); min-width: 0; min-height: 0 }
+.comp-b .placa { --h: 96px; --w: 66px }
+.comp-b .esquerda > * { min-width: 0 } /* a faixa de uso não pode alargar a coluna */
+.comp-b .data { font-size: var(--texto-base) }
+.comp-b .capa { --lado: 80px }
+.comp-b .faixa { font-size: var(--texto-base) }
+.comp-b .sessoes .sessao:nth-of-type(n+4) { display: none }
+
+/* ---------- Em pé ---------- */
+.vertical .comp-a, .vertical .comp-b { display: flex; flex-direction: column; gap: var(--grade); padding-top: var(--item) }
+.vertical .topo, .vertical .esquerda, .vertical .direita { display: flex !important; flex-direction: column; gap: var(--grade) }
+.vertical .relogio-linha { display: flex; flex-direction: column; align-items: center; text-align: center }
+.vertical .relogio { justify-content: center }
+.vertical .placa { --h: 112px; --w: 78px }
+.vertical .sessao { grid-template-columns: 1fr; gap: 0 }
+.vertical .comp-a > *, .vertical .comp-b > *, .vertical .topo > *, .vertical .esquerda > *, .vertical .direita > * { flex-shrink: 0 } /* em pé cada bloco fica com a altura dele */
+.vertical .sessoes .sessao:nth-of-type(n+4) { display: none }
+.vertical .uso-tira { flex-wrap: wrap; justify-content: center; row-gap: var(--item) }
+
+/* ---------- Aviso ---------- */
+.aviso { position: absolute; left: 50%; top: var(--icone); translate: -50% calc(-1 * var(--item)); opacity: 0; z-index: 25; background: var(--superficie-2); box-shadow: var(--sombra-3); border-radius: var(--raio); padding: var(--icone) var(--pad); font-size: var(--texto-sm); max-width: 70%; transition: opacity var(--mov-sai-padrao) var(--curva-sai), translate var(--mov-sai-padrao) var(--curva-sai); pointer-events: none; display: flex; gap: var(--icone); align-items: center }
+.aviso.visivel { opacity: 1; translate: -50% 0; transition: opacity var(--mov-padrao) var(--curva-entra), translate var(--mov-padrao) var(--curva-entra); pointer-events: auto }
+.aviso.erro { color: var(--perigo) }
+.aviso button { font: inherit; font-weight: 600; color: var(--destaque); background: none; border: 0; padding: 0; min-height: var(--alvo-sm); cursor: pointer }
+
+/* ---------- Folhas (editor, WhatsApp, sessões, agenda) ---------- */
+.veu { position: absolute; inset: 0; background: var(--veu-modal); opacity: 0; pointer-events: none; transition: opacity var(--mov-sai-lento) var(--curva-sai); z-index: 16 }
+.com-folha .veu { opacity: 1; pointer-events: auto; transition: opacity var(--mov-lento) var(--curva-entra) }
+.folha { position: absolute; left: var(--seguro-esq); right: var(--seguro-dir); bottom: 0; height: calc(100% - var(--icone)); background: var(--superficie); border-radius: var(--raio-card) var(--raio-card) 0 0; box-shadow: var(--sombra-3); z-index: 17; translate: 0 105%; transition: translate var(--mov-sai-lento) var(--curva-sai); display: grid; grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden; overscroll-behavior: contain }
+.vertical .folha { left: 0; right: 0; height: 86% }
+.folha.aberta { translate: 0 0; transition: translate var(--mov-lento) var(--curva-entra) }
+.folha > header { display: flex; align-items: center; gap: var(--icone); padding: var(--icone) var(--pad) var(--item) var(--margem); min-height: var(--linha) }
+.folha > header h2 { margin: 0; font-size: var(--texto-md); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.folha > header h2 small { font-size: var(--texto-sm); color: var(--texto-2); font-weight: 400; letter-spacing: 0; margin-left: var(--item) }
+.folha .corpo { overflow: auto; overscroll-behavior: contain; padding: 0 var(--margem) var(--pad); min-height: 0 }
+.folha > footer { display: flex; gap: var(--item); padding: var(--icone) var(--margem) calc(var(--icone) + var(--seguro-baixo)); border-top: 1px solid var(--borda) }
+.folha > footer .espaco { flex: 1 }
+.fechar { width: var(--alvo-sm); height: var(--alvo-sm); border-radius: 50%; border: 0; background: var(--superficie-2); color: var(--texto); display: grid; place-items: center; cursor: pointer; flex: none }
+.fechar svg { width: 16px; height: 16px }
+
+.btn { font: inherit; font-size: var(--texto-base); font-weight: 600; min-height: var(--alvo); padding: 0 var(--pad); border-radius: var(--raio); border: 0; cursor: pointer; transition: transform var(--mov-rapido) var(--curva-move) }
+.btn:active { transform: scale(.97) }
+.btn.primario { background: var(--destaque); color: var(--destaque-texto) }
+.btn.secundario { background: var(--superficie-2); color: var(--texto) }
+.btn.perigo { background: none; color: var(--perigo); padding: 0 var(--item) }
+.btn.pequeno { min-height: var(--alvo-sm); padding: 0 var(--icone); font-size: var(--texto-sm) }
+
+/* editor */
+.editor .corpo { display: grid; grid-template-columns: 1fr 1fr; gap: var(--pad) var(--secao) }
+.vertical .editor .corpo { grid-template-columns: 1fr }
+.coluna { display: grid; gap: var(--pad); align-content: start }
+.campo { display: grid; gap: var(--item); align-content: start }
+.campo label, .campo .rotulo { font-size: var(--texto-xs); color: var(--texto-2); font-weight: 600 }
+.campo input { font: inherit; font-size: var(--texto-campo); min-height: var(--alvo); border-radius: var(--raio-sm); border: 1px solid var(--borda); background: var(--fundo); color: var(--texto); padding: 0 var(--icone) }
+.campo .ajuda { font-size: var(--texto-xs); color: var(--texto-2) }
+.segmentos { --folga: 3px; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; background: var(--fundo); border-radius: var(--raio-sm); padding: var(--folga); gap: var(--folga) }
+.segmentos button { font: inherit; font-size: var(--texto-sm); min-height: var(--alvo-sm); border: 0; border-radius: calc(var(--raio-sm) - var(--folga)); background: none; color: var(--texto-2); cursor: pointer; padding: 0 var(--icone); white-space: nowrap }
+.segmentos button[aria-pressed="true"] { background: var(--superficie-2); color: var(--texto); box-shadow: var(--sombra-1) }
+.lista-apps { display: grid; grid-template-columns: repeat(auto-fill, minmax(68px, 1fr)); gap: var(--item) }
+.lista-apps button { display: grid; justify-items: center; gap: var(--item); padding: var(--item) 0; border: 0; border-radius: var(--raio); background: none; color: var(--texto-2); font: inherit; font-size: var(--texto-xs); cursor: pointer }
+.lista-apps button img { width: 40px; height: 40px; border-radius: var(--raio-icone) }
+.lista-apps button[aria-pressed="true"] { background: var(--destaque-suave); color: var(--texto) }
+.icones { display: grid; grid-template-columns: repeat(auto-fill, var(--alvo)); gap: var(--item) }
+.icones button { width: var(--alvo); height: var(--alvo); border-radius: var(--raio-icone); border: 0; padding: 0; background: var(--superficie-2); display: grid; place-items: center; color: var(--texto); cursor: pointer }
+.icones button img { width: var(--alvo); height: var(--alvo); border-radius: var(--raio-icone) }
+.icones button[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--destaque) }
+.icones svg { width: 22px; height: 22px }
+.tecla-gravada { display: flex; gap: var(--item); flex-wrap: wrap }
+.tecla-gravada kbd { font: inherit; font-size: var(--texto-sm); min-width: var(--alvo-sm); height: var(--alvo-sm); padding: 0 var(--icone); display: grid; place-items: center; border-radius: var(--raio-sm); background: var(--superficie-2); box-shadow: var(--sombra-kbd) }
+
+/* WhatsApp */
+.conversa { display: grid; grid-template-columns: var(--avatar) minmax(0, 1fr) auto; gap: var(--icone); align-items: center; min-height: var(--linha); padding: var(--item) 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; width: 100%; cursor: pointer }
+.conversa + .conversa, .conversa + .mensagens + .conversa { border-top: 1px solid var(--borda) }
+.avatar { width: var(--avatar); height: var(--avatar); border-radius: 50%; background: var(--superficie-2); display: grid; place-items: center; font-weight: 600; font-size: var(--texto-sm); color: var(--texto-2) }
+.avatar svg { width: 20px; height: 20px }
+.conversa .nome-c { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.conversa .nome-c small { color: var(--texto-2); font-weight: 400; font-size: var(--texto-xs); margin-left: var(--item) }
+.conversa .previa { color: var(--texto-2); font-size: var(--texto-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.conversa .lado { display: grid; justify-items: end; gap: var(--item); font-size: var(--texto-xs); color: var(--texto-2); font-variant-numeric: tabular-nums }
+.conversa .qtd { min-width: 22px; height: 22px; padding: 0 var(--item); border-radius: var(--raio-pilula); background: var(--sucesso); color: var(--fundo); font-weight: 700; display: grid; place-items: center }
+.mensagens { margin: 0 0 var(--icone) calc(var(--avatar) + var(--icone)); display: grid; gap: var(--item) }
+.mensagens p { margin: 0; background: var(--superficie-2); border-radius: var(--raio-sm) var(--raio) var(--raio) var(--raio); padding: var(--item) var(--icone); font-size: var(--texto-sm); max-width: 90% }
+.mensagens p small { display: block; color: var(--texto-2); font-size: var(--texto-xs) }
+.mensagens .btn { justify-self: start }
+
+/* sessões (folha) */
+.item-sessao { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--item) var(--pad); padding: var(--icone) 0; align-items: center }
+.item-sessao + .item-sessao { border-top: 1px solid var(--borda) }
+.item-sessao b { font-size: var(--texto-base) }
+.item-sessao b small { color: var(--texto-2); font-weight: 400; font-size: var(--texto-xs); margin-left: var(--item) }
+.item-sessao p { margin: 0; grid-column: 1; color: var(--texto-2); font-size: var(--texto-sm); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden }
+.item-sessao .acoes { grid-row: 1 / span 2; grid-column: 2; display: flex; gap: var(--item) }
+
+/* agenda: lista por data (padrão) e mês */
+.folha.cheia { height: 100%; left: 0; right: 0; border-radius: 0; padding-left: var(--seguro-esq); padding-right: var(--seguro-dir) }
+.vertical .folha.cheia { height: 100%; padding-top: var(--seguro-cima) }
+.grupo-data h3 { position: sticky; top: 0; margin: 0; padding: var(--icone) 0 var(--item); font-size: var(--texto-sm); color: var(--texto-2); background: var(--superficie); z-index: 1 }
+.ev-linha { display: grid; grid-template-columns: 64px 4px minmax(0, 1fr); gap: var(--icone); align-items: center; min-height: var(--linha); width: 100%; padding: var(--item) 0; border: 0; border-top: 1px solid var(--borda); background: none; color: inherit; font: inherit; text-align: left; cursor: pointer }
+.ev-linha time { font-size: var(--texto-sm); color: var(--texto-2); font-variant-numeric: tabular-nums }
+.ev-linha > i { align-self: stretch; border-radius: var(--raio-pilula) }
+.ev-linha .tx { min-width: 0; display: grid }
+.ev-linha b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.ev-linha .tx span { font-size: var(--texto-sm); color: var(--texto-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.ev-detalhe { margin: 0 0 var(--icone) calc(64px + 4px + 2 * var(--icone)); display: grid; gap: var(--item); justify-items: start; font-size: var(--texto-sm); color: var(--texto-2) }
+
+/* rola sem barra visível: no iPhone a barra já some sozinha, no desktop ela só atrapalha */
+.folha .corpo, .lista-dia, .vista-lista { scrollbar-width: none }
+.folha .corpo::-webkit-scrollbar, .lista-dia::-webkit-scrollbar, .vista-lista::-webkit-scrollbar { display: none }
+
+/* ícone pequeno de serviço (Claude, Codex, Spotify) ao lado do nome */
+.ic-mini { width: var(--ic-mini); height: var(--ic-mini); border-radius: var(--raio-mini); margin-right: var(--item); flex: none; display: inline-grid; place-items: center; vertical-align: -3px; --contorno-imagem: transparent; outline-color: transparent }
+.ic-mini.svg { background: var(--superficie-2); color: var(--texto) }
+.ic-mini.svg svg { width: 11px; height: 11px }
+.cartao-titulo > span:first-child { display: inline-flex; align-items: center }
+/* nada rodando: ícone do serviço, o que está acontecendo e o que fazer, centralizado no cartão */
+.vazio-rico { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--pad); align-items: center; align-self: stretch; height: 100%; text-align: left }
+.vazio-rico img { width: var(--ic-vazio); height: var(--ic-vazio); border-radius: var(--raio-icone); opacity: .85; outline-color: transparent }
+.vazio-rico div { display: grid; gap: var(--item) }
+.vazio-rico strong { font-size: var(--texto-md); font-weight: 600; line-height: var(--altura-titulo) }
+.vazio-rico span { font-size: var(--texto-sm); color: var(--texto-2) }
+.player.vazio { display: flex; align-items: center }
+.sessoes .vazio-rico { flex: 1 }
+
+/* ---------- Teclas: apps no carrossel, divisória com os pontinhos, "Nova" isolada ---------- */
+.teclas { --divisor: 8px; display: grid; gap: var(--grade); min-width: 0; min-height: 0 }
+/* deitado na A: carrossel | divisória vertical | Nova, todas as teclas com a mesma largura */
+.comp-a .teclas { grid-template-columns: minmax(0, 1fr) var(--divisor) calc((100% - var(--divisor) - 6 * var(--grade)) / 6) }
+/* B: a grade 3 x 3 de sempre, centralizada na coluna; pontinhos numa linha embaixo só com mais de uma página */
+.comp-b .teclas { grid-template-rows: minmax(0, 1fr) }
+.comp-b .teclas:has(.divisor) { grid-template-rows: minmax(0, 1fr) var(--divisor) }
+.carrossel { min-width: 0; min-height: 0 }
+/* folga em cima e embaixo pro tremor e pro lápis não serem cortados pela rolagem */
+.paginas { height: calc(100% + 2 * var(--item)); margin: calc(-1 * var(--item)); padding: var(--item); scroll-padding-inline: var(--item); display: flex; gap: var(--grade); overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior-x: contain }
+.paginas::-webkit-scrollbar { display: none }
+/* esmaecido fixo, só na folga lateral: tecla parada nunca chega nele, então não liga nem desliga */
+.paginas { -webkit-mask-image: linear-gradient(to right, transparent, var(--ilha) var(--item), var(--ilha) calc(100% - var(--item)), transparent); mask-image: linear-gradient(to right, transparent, var(--ilha) var(--item), var(--ilha) calc(100% - var(--item)), transparent) }
+/* páginas separadas pelo mesmo vão das teclas: nada da página vizinha encosta nem aparece na borda */
+.pagina { flex: 0 0 100%; scroll-snap-align: start; scroll-snap-stop: always; display: flex; justify-content: center; gap: var(--grade) }
+.comp-a .pagina .tecla { width: calc((100% - 4 * var(--grade)) / 5); flex: none }
+.comp-b .pagina { flex-wrap: wrap; align-content: flex-start } /* a grade começa sempre do topo */
+.comp-b .pagina .tecla { width: calc((100% - 2 * var(--grade)) / 3); height: calc((100% - 2 * var(--grade)) / 3); flex: none }
+.vertical .pagina { flex-wrap: wrap; align-content: start }
+.vertical .pagina .tecla { width: calc((100% - 2 * var(--grade)) / 3); height: auto; aspect-ratio: 1.05; flex: none }
+.vertical .paginas { height: auto }
+.menu-area { display: flex; justify-content: center; min-height: 0 }
+.menu-area .tecla { width: 100%; height: 100% }
+.divisor { position: relative; display: flex; align-items: center; justify-content: center; gap: var(--item) }
+.comp-a .divisor { flex-direction: column }
+.divisor .linha { background: var(--borda); border-radius: var(--raio-pilula) }
+.comp-a .divisor .linha { width: 1px; height: 60% }
+.comp-b .divisor .linha { height: 1px; width: 60% }
+.divisor .ponto { width: 6px; height: 6px; border-radius: 50%; background: var(--borda); flex: none }
+.divisor .indicador { position: absolute; border-radius: var(--raio-pilula); background: var(--texto-2) }
+.comp-a .divisor .indicador { left: 50%; width: 6px; translate: -50% 0 }
+.comp-b .divisor .indicador { top: 50%; height: 6px; translate: 0 -50%; left: 0; width: auto }
+
+/* ---------- Uso: quando cada conta renova ---------- */
+.cartao.uso .uso-linha { grid-template-columns: 116px minmax(0, 1fr) 56px }
+.renova, .renova-tit { font-size: var(--texto-xs); color: var(--texto-2); text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap }
+.renova-tit { font-weight: 400 }
+
+/* ---------- Sessões: cada linha abre a sua sessão, título abre a lista ---------- */
+.sessoes { display: flex; flex-direction: column; justify-content: flex-start }
+.sessao { grid-template-columns: minmax(0, 176px) minmax(0, 1fr) 48px }
+.sessao time { font-size: var(--texto-xs); color: var(--texto-2); text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap }
+.sessao time.velha { color: var(--aviso) }
+.vertical .sessao { grid-template-columns: minmax(0, 1fr) auto }
+.vertical .sessao span { grid-column: 1 / -1; grid-row: 2 }
+
+/* ---------- Player: brilho com as cores da capa, barra de tempo arrastável ---------- */
+.player { background: radial-gradient(120% 140% at 0% 50%, var(--capa-1, transparent), transparent 62%), radial-gradient(90% 120% at 100% 0%, var(--capa-2, transparent), transparent 60%), var(--superficie) }
+.player .info { row-gap: var(--icone) }
+.progresso .trilho { position: relative; overflow: visible; cursor: pointer; touch-action: none }
+.progresso .trilho::before { content: ""; position: absolute; left: 0; right: 0; top: calc(-1 * var(--icone)); bottom: calc(-1 * var(--pad)) } /* área de arrasto alta, só abaixo dos botões */
+.progresso .trilho i { position: relative }
+.progresso.arrastando .trilho { height: 6px }
+.progresso.arrastando .trilho i::after { content: ""; position: absolute; right: -7px; top: 50%; width: 14px; height: 14px; translate: 0 -50%; border-radius: 50%; background: var(--texto); box-shadow: var(--sombra-2) }
+
+/* ---------- Sem música: o player sai, as sessões ocupam o lugar ---------- */
+.sem-musica .player { display: none }
+.comp-a.sem-musica .sessoes { grid-area: 1 / 2 / 3 / 3 }
+.comp-b.sem-musica .esquerda { grid-template-rows: auto minmax(0, 1fr) }
+.sem-musica .sessoes .sessao:nth-of-type(n+5) { display: grid }
+.sem-musica .sessoes .sessao:nth-of-type(n+8) { display: none }
+
+/* ---------- Agenda no estilo do StandBy ---------- */
+.folha.cheia { background: var(--cal-fundo) }
+.folha.calendario { grid-template-rows: minmax(0, 1fr) }
+.fechar-cal { position: absolute; top: var(--pad); right: var(--seguro-dir); z-index: 2 }
+.cal-corpo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--secao); min-height: 0; padding: var(--pad) 0 var(--seguro-baixo) }
+.mes-sb { display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: var(--item); min-height: 0; touch-action: pan-y; transition: opacity var(--mov-padrao) var(--curva-move), translate var(--mov-padrao) var(--curva-move) }
+.mes-sb.saindo-esq { opacity: 0; translate: calc(-1 * var(--margem)) 0; transition-duration: var(--mov-sai-rapido) }
+.mes-sb.saindo-dir { opacity: 0; translate: var(--margem) 0; transition-duration: var(--mov-sai-rapido) }
+.mes-topo { display: flex; align-items: center; gap: var(--item) }
+.mes-topo h2 { margin: 0 auto 0 0; font-size: var(--texto-2xl); font-weight: 700; color: var(--cal-vermelho); text-transform: uppercase; line-height: var(--altura-titulo) }
+.seta { width: var(--alvo-sm); height: var(--alvo-sm); border: 0; border-radius: 50%; background: none; color: var(--texto-3); display: grid; place-items: center; cursor: pointer }
+.seta svg { width: 20px; height: 20px }
+.sb-semana, .sb-grade { display: grid; grid-template-columns: repeat(7, 1fr); justify-items: center; text-align: center }
+.sb-semana { font-size: var(--texto-lg); font-weight: 600; color: var(--texto) }
+.sb-grade { grid-auto-rows: minmax(0, 1fr); align-items: center }
+.sb-semana .fds, .sb-dia.fds { color: var(--texto-2) }
+.sb-dia { position: relative; width: var(--dia-cal); height: var(--dia-cal); border: 0; border-radius: 50%; background: none; color: var(--texto); font: inherit; font-size: var(--texto-xl); font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1; cursor: pointer; display: grid; place-items: center }
+.sb-dia.hoje { background: var(--cal-vermelho); color: var(--destaque-bloco-texto) }
+.sb-dia.sel { background: var(--superficie-2) }
+.sb-dia.tem::after { content: ""; position: absolute; bottom: calc(-1 * var(--item)); left: 50%; width: 4px; height: 4px; translate: -50% 0; border-radius: 50%; background: var(--texto-3) }
+.lista-cal { overflow: auto; overscroll-behavior: contain; scrollbar-width: none; border-left: 1px solid var(--borda); padding: var(--secao) var(--seguro-dir) 0 var(--pad); margin-right: calc(-1 * var(--seguro-dir)) }
+.lista-cal::-webkit-scrollbar { display: none }
+.folha.cheia .grupo-data h3 { background: var(--cal-fundo) }
+.vertical .cal-corpo { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); padding-top: var(--seguro-cima) }
+.vertical .lista-cal { border-left: 0; border-top: 1px solid var(--borda); padding: 0; margin: 0 }
+.vertical .sb-grade { grid-auto-rows: var(--dia-cal) }
+
+/* ---------- Em pé: apps em 2 fileiras, divisória horizontal, "+" numa seção só dele (botão baixo) ---------- */
+.vertical .teclas { grid-template-columns: none; grid-template-rows: auto var(--divisor) auto }
+.vertical .divisor { flex-direction: row }
+.vertical .divisor .linha { width: 60%; height: 1px }
+.vertical .divisor .indicador { top: 50%; left: 0; width: auto; height: 6px; translate: 0 -50% }
+.vertical .relogio-linha .uso-tira { justify-content: center }
+.vertical .menu-area .tecla.menu { width: auto; height: var(--alvo); grid-auto-flow: column; gap: var(--item); padding: 0 var(--pad) 0 var(--icone); border-radius: var(--raio-pilula) }
+.vertical .menu-area .tecla.menu .svg { width: 24px; height: 24px }
+.vertical .menu-area .tecla.menu .svg svg { width: 18px; height: 18px }
+.vertical .menu-area .tecla.menu .nome { font-size: var(--texto-sm) }
+/* em pé o uso ganha respiro e vira três cartõezinhos: nome em cima, número em destaque com a barra embaixo */
+.vertical .relogio-linha .uso-tira { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--item); width: 100%; margin-top: var(--pad) }
+.vertical .uso-tira > span:not(.esconder-bloco) { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "ic nome pct" "bar bar bar"; align-items: center; column-gap: var(--item); row-gap: var(--item); background: var(--superficie); border-radius: var(--raio); padding: var(--item) var(--icone) }
+.vertical .uso-tira .ic-mini { grid-area: ic; margin-right: 0 }
+.vertical .uso-tira .nome-u { grid-area: nome; overflow: hidden; text-overflow: ellipsis; text-align: left }
+.vertical .uso-tira b { grid-area: pct; font-size: var(--texto-base) }
+.vertical .uso-tira .mini { grid-area: bar; width: auto }
+
+/* telas inteiras (WhatsApp, Sessões): mesmo molde da Agenda */
+.folha.cheia > header { padding: var(--pad) 0 var(--item) }
+.folha.cheia .corpo { padding: 0 0 var(--seguro-baixo) }
+.vertical .folha.cheia > header { padding-top: var(--item) }
+.folha.cheia .mensagens p { background: var(--superficie) }
+
+/* sessões: o cartão inteiro é o botão, com retorno ao apertar */
+button.cartao.sessoes { font: inherit; color: inherit; text-align: left; border: 0; width: 100%; cursor: pointer; transition: scale var(--mov-rapido) var(--curva-move) }
+button.cartao.sessoes:active { scale: .98 }
+
+/* editor em tela inteira: rodapé sem a linha, ações no fim da coluna */
+.folha.cheia.editor > header { padding-right: 0 }
+.folha.cheia.editor > footer { padding-left: 0; padding-right: 0 }
+
+/* esconder bloco (modo organizar): "−" no canto, como o lápis das teclas */
+.esconder-bloco { display: none; position: absolute; top: calc(-1 * var(--item)); left: calc(-1 * var(--item)); box-shadow: var(--sombra-1); width: 24px; height: 24px; border-radius: 50%; background: var(--texto-2); color: var(--fundo); place-items: center; z-index: 3; cursor: pointer }
+.esconder-bloco svg { width: 13px; height: 13px }
+.organizando .esconder-bloco { display: grid }
+.organizando .player, .organizando .cartao.uso, .organizando .sessoes { overflow: visible } /* o "−" fica na quina, metade para fora */
+.organizando .player, .organizando .cartao.uso, .organizando .sessoes, .organizando .uso-tira { animation: tremer 260ms ease-in-out infinite alternate }
+.player, .cartao.uso, .sessoes, .uso-tira { position: relative }
+.escondidos { display: flex; gap: var(--item) }
+.escondidos:empty { display: none }
+.chip-volta { display: inline-flex; align-items: center; gap: var(--item); font: inherit; font-size: var(--texto-xs); min-height: 28px; padding: 0 var(--icone); border-radius: var(--raio-pilula); border: 0; background: var(--superficie-2); color: var(--texto); cursor: pointer }
+.chip-volta svg { width: 12px; height: 12px }
+/* o espaço do bloco escondido não fica vazio */
+.comp-a.sem-sessoes .player { grid-area: 1 / 2 / 3 / 3 }
+.comp-a.sem-uso .relogio-linha { grid-area: 1 / 1 / 3 / 2; align-self: center }
+.comp-a.sem-musica.sem-sessoes .cartao.uso { grid-area: 1 / 2 / 3 / 3 }
+.comp-a.sem-musica.sem-sessoes .relogio-linha { grid-area: 1 / 1 / 3 / 2; align-self: center }
+.comp-b .esquerda:not(:has(.sessoes)) { grid-template-rows: auto auto }
+.player > .esconder-bloco { left: auto; right: calc(-1 * var(--item)) } /* a barra do organizar cobre a quina esquerda do player */
+
+/* Menu: folha pequena ancorada na tecla, com Nova tecla e a troca de perfil */
+.lista-perfis { position: absolute; z-index: 20; min-width: 200px; background: var(--superficie-2); border-radius: var(--raio-card); box-shadow: var(--sombra-3); padding: var(--item); display: grid; gap: var(--micro-gap) }
+.lista-perfis[hidden] { display: none }
+.lista-perfis [role=listbox] { display: grid; gap: var(--micro-gap) }
+.rotulo-lista { font-size: var(--texto-xs); color: var(--texto-2); font-weight: 600; padding: var(--item) var(--icone) 0 }
+.lista-perfis button { display: flex; justify-content: space-between; align-items: center; gap: var(--pad); min-height: var(--alvo); padding: 0 var(--icone); border: 0; border-radius: var(--raio); background: none; color: var(--texto); font: inherit; text-align: left; cursor: pointer }
+.lista-perfis button small { color: var(--texto-2); font-size: var(--texto-xs) }
+.lista-perfis button[aria-selected="true"] { background: var(--sucesso-suave); box-shadow: inset 0 0 0 2px var(--led) }
+.dica-perfis { font-size: var(--texto-xs); color: var(--texto-2); padding: var(--item) var(--icone) var(--item) }

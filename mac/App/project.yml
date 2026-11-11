@@ -1,0 +1,103 @@
+# App do Mac (barra de menus). Gere o projeto com `xcodegen generate` nesta pasta.
+# O núcleo (../Nucleo) compila direto dentro do app: os tipos dele são internos, então não dá para
+# importar como pacote. Sem assinatura paga: "Sign to Run Locally" (identidade "-").
+name: Deck
+options:
+  bundleIdPrefix: com.leonardorejani
+  deploymentTarget:
+    macOS: "13.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "-"
+    DEVELOPMENT_TEAM: ""
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+    MACOSX_DEPLOYMENT_TARGET: "13.0"
+
+# Tudo que o app e o renderizador de fotos dividem.
+targetTemplates:
+  Tela:
+    type: application
+    platform: macOS
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_LSUIElement: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Deck
+        INFOPLIST_KEY_NSHumanReadableCopyright: "Feito por Leonardo Rejani"
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.utilities
+        INFOPLIST_KEY_NSCalendarsUsageDescription: "Para mostrar seus eventos na Agenda do iPhone."
+        INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription: "Para mostrar seus eventos na Agenda do iPhone."
+        INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription: "Para o app do iPhone falar com o Mac pelo Bluetooth, sem Wi-Fi."
+        INFOPLIST_KEY_NSAppleEventsUsageDescription: "Para o player do iPhone mostrar a música e controlar o Spotify, e para contar as não lidas do WhatsApp Web aberto no navegador."
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ENABLE_HARDENED_RUNTIME: NO
+    sources:
+      - ../Nucleo
+      - Tema.swift
+      - Ajustes
+      - Inicial
+      - Menu
+      - Modelo
+      - Comum
+      - path: Recursos
+        buildPhase: resources
+
+targets:
+  Deck:
+    templates: [Tela]
+    sources:
+      - Deck
+      # A página que o iPhone recebe (o painel, sem os testes) vai dentro do app: instalado em /Applications não há repo por perto.
+      - path: ../../painel
+        type: folder
+        buildPhase: resources
+    # Pasta de recurso entra inteira: os testes do painel (Chrome, servidor de mentira) ficam de fora do pacote.
+    postBuildScripts:
+      - name: Tirar os testes do painel do pacote
+        script: rm -rf "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/painel/teste"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.leonardorejani.deck
+        PRODUCT_NAME: Deck
+        ENABLE_APP_SANDBOX: NO
+
+  # Só para fotografar as telas (ImageRenderer) e comparar com o protótipo. Não é entregue.
+  DeckFotos:
+    templates: [Tela]
+    sources:
+      - path: Fotos
+        excludes: ["*.mjs", "*.sh"]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.leonardorejani.deck.fotos
+        PRODUCT_NAME: DeckFotos
+
+  DeckTestes:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - Testes
+    dependencies:
+      - target: Deck
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.leonardorejani.deck.testes
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Deck.app/Contents/MacOS/Deck"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+
+schemes:
+  Deck:
+    build:
+      targets:
+        Deck: all
+        DeckFotos: all
+    run:
+      config: Debug
+    test:
+      targets: [DeckTestes]

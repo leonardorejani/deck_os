@@ -1,0 +1,70 @@
+# Lefthook config — portable git hooks.
+# Docs: https://github.com/evilmartians/lefthook
+# Install: `npm i -D lefthook` or `brew install lefthook` + `lefthook install`
+
+pre-commit:
+  commands:
+    verificar:
+      # o mesmo do CI: sintaxe do JS do protótipo + validadores do keepwright
+      run: bash .claude/verificar.sh
+
+commit-msg:
+  commands:
+    conventional-commits:
+      run: |
+        # Block a message that does not follow Conventional Commits
+        MSG_FILE="{1}"
+        MSG=$(head -1 "$MSG_FILE")
+        if ! echo "$MSG" | grep -qE "^(feat|fix|refactor|docs|style|test|chore|perf|init|wip)(\([a-z0-9-]+\))?: .+"; then
+          echo "❌ Commit message does not follow Conventional Commits."
+          echo "   Pattern: type(scope)?: description"
+          echo "   Types: feat | fix | refactor | docs | style | test | chore | perf | init | wip"
+          exit 1
+        fi
+    no-ai-mention:
+      run: |
+        # Block any mention of AI/Claude (default human-author rule)
+        MSG=$(head -1 "{1}")
+        if echo "$MSG" | grep -qiE "(claude|ai\s+gen|gpt|copilot|cursor|sonnet|opus)"; then
+          echo "❌ Commit message mentions AI. Author is human, no reference to the tool."
+          exit 1
+        fi
+
+pre-push:
+  commands:
+    empirical-proof-reminder:
+      # Reminder (does NOT block): warns if the branch touches functional code, so you
+      # don't forget the EMPIRICAL VALIDATION section when opening the PR. The HARD gate runs in
+      # CI against the PR body. See .claude/rules/08-empirical-proof.md.
+      run: |
+        V=scripts/validators/validate-empirical-proof.ts
+        if [ -f "$V" ] && command -v bun >/dev/null 2>&1; then
+          git fetch origin main --quiet 2>/dev/null || true
+          FILES_CHANGED="$(git diff --name-only origin/main...HEAD 2>/dev/null)" bun run "$V" || true
+        fi
+    no-direct-to-main:
+      run: |
+        # Block direct push to main (without a PR).
+        # Exceptional bypass: LEFTHOOK_ALLOW_MAIN_PUSH=1
+        BRANCH=$(git rev-parse --abbrev-ref HEAD)
+        if [[ "$BRANCH" == "main" ]]; then
+          if [[ -z "$LEFTHOOK_ALLOW_MAIN_PUSH" ]]; then
+            echo "❌ Direct push to main blocked. Open a PR via 'gh pr create'."
+            echo "   Exceptional bypass: LEFTHOOK_ALLOW_MAIN_PUSH=1 git push"
+            exit 1
+          fi
+        fi
+    no-force-push:
+      run: |
+        # Block force-push on main and require a bypass on other branches.
+        if echo "$LEFTHOOK_PUSH_OPTIONS" | grep -q "force"; then
+          BRANCH=$(git rev-parse --abbrev-ref HEAD)
+          if [[ "$BRANCH" == "main" ]]; then
+            echo "❌ Force-push to main is NEVER allowed."
+            exit 1
+          fi
+          if [[ -z "$LEFTHOOK_ALLOW_FORCE" ]]; then
+            echo "❌ Force-push blocked. Bypass: LEFTHOOK_ALLOW_FORCE=1 git push --force"
+            exit 1
+          fi
+        fi

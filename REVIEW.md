@@ -1,0 +1,221 @@
+# REVIEW.md — Constitution consumed by the Claude AI review
+
+> Single source of truth for the `pr-auto-review.yml` workflow (claude-review step). Everything here is a canonical principle, ranked by severity.
+>
+> **Replace `{{...}}` placeholders with your project's content.**
+
+---
+
+## 1. Project summary
+
+{{PROJECT_SHORT_DESCRIPTION}}
+
+**Stack**: static-site
+**Layers**: spec, prototipo, mac (detail in `.claude/rules/02-pipeline-equalization.md`)
+
+---
+
+## 2. Canonical principles (catalogued lessons)
+
+> Add §2.1, §2.2, ... as you catalogue lessons in `docs/lessons/L-XXX-*.md`. Keep them in chronological catalogue order.
+
+### 2.1. {{LESSON_TITLE}} (L-XXX)
+
+Catalogued after {{INCIDENT_DATE}}. {{ROOT_CAUSE_SHORT}}.
+
+**Canonical principle**: {{INVARIANT_RULE}}.
+
+**Canonical mitigation**:
+1. {{COMPONENT_1}}
+2. {{COMPONENT_2}}
+3. {{COMPONENT_3}}
+
+**Founding case**: `docs/reference-cases/{{SLUG}}-2026-11-10.md` or `docs/lessons/L-XXX-{{SLUG}}.md`.
+
+---
+
+## 3. Canonical merge criteria
+
+### 3.1. Critical — blocks merge
+
+- Hardcoded secret in the diff (`sk-ant-(api|oat)\d{2}-`, `ghp_`, `pk_live_`, `sk_live_`)
+- Invariant violation in `.claude/rules/01-invariants.md`
+- A change touching 1 layer when it should touch the whole set (equalization)
+- P5→P1 hierarchy inversion in the PR body without adjacent surgical evidence
+- `--no-verify` used without explicit maintainer sign-off
+
+### 3.2. Caveats — comments but does not block
+
+- Missing new test on a behavior change
+- Missing validator after a catalogued bug (>2 recurrences)
+- Operational feature doc without an "E2E smoke" block
+
+### 3.3. Approval
+
+- `mergeStateStatus: CLEAN` required
+- The `scripts/gh-pr-merge-safe.sh` wrapper is the only path
+
+### 3.4. Epistemic hierarchy
+
+P1 (symptom reported by the maintainer) > P2 (prod logs) > P3 (DB state) > P4 (code) > P5 (abstract audit). A "ZERO bugs" verdict without surgical reproduction of the symptom via 5 empirical sources = investigation FAILURE, NOT a valid verdict.
+
+---
+
+## 4. Delivered fronts
+
+| Wave | Date | PR | Result |
+|---|---|---|---|
+| {{WAVE_N}} | 2026-11-10 | #{{PR}} | {{DESCRIPTION}} |
+
+---
+
+## 5. Validators active in CI
+
+| Validator | Runs on | Function |
+|---|---|---|
+| `validate-no-secrets.ts` | pre-commit + CI | aggressive grep of secret patterns |
+| `validate-claude-md-sync.ts` | pre-commit + CI | every rule in `.claude/rules/` has a pointer in CLAUDE.md |
+| `validate-webhook-active.ts` | CI | documented webhook exists in `gh api .../hooks` (L-001) |
+| `validate-epistemic-hierarchy.ts` | commit-msg + CI | P5→P1 language without surgical evidence |
+
+---
+
+## 6. Canonical vocabulary
+
+{{PROJECT_VOCABULARY}}
+
+---
+
+## 7. API endpoints + integrations
+
+{{ENDPOINTS_AND_INTEGRATIONS}}
+
+---
+
+## 8. Mandatory Review output format
+
+The Claude review comment must structure:
+
+```markdown
+## Status
+
+APPROVED | APPROVED WITH CAVEATS | REJECTED
+
+## Layers touched
+
+- C/EXT-N: description
+
+## Critical findings (blocks)
+
+- [ ] item
+
+## Caveat findings (comments)
+
+- [ ] item
+
+## Recommendation
+
+<1-3 lines — confident merge / waiting on fix / requests additional E2E smoke>
+```
+
+Direct language, no fluff. Does not duplicate the auto-review heuristics.
+
+---
+
+## 9. Canonical fallback
+
+If `claude-code-action` fails twice in a row (known upstream bugs: AJV crash, max-turns, App token 401), the executor escalates to a **manual Director Code Review** via the native cloud multi-agent review:
+
+```
+/code-review ultra              # cloud multi-agent review of the diff
+/security-review                # for sensitive diffs (auth, secrets, deploy)
+```
+
+Requires a recent Claude Code CLI version. The consolidated verdict carries the SAME weight as the automatic verdict.
+
+Known causes of automatic-review failure:
+
+- **`App token exchange failed: Workflow validation failed`** — a PR mixing a workflow change + production code violates GitHub's anti-supply-chain check. Fix: put the workflow change in an isolated PR and merge it first.
+- **`Failed to authenticate. API Error: 401 Invalid bearer token`** — secret malformed by pipe (L-007) OR the GitHub App Claude is not installed on the repo.
+- **AJV crash / fd 4 directory mismatch / error_max_turns** — intermittent bugs in upstream `anthropics/claude-code-action`. The double retry in the workflow mitigates them.
+
+---
+
+## 10. Workflow branch → PR → merge
+
+Canonical flow per change:
+
+1. **Branch:** `feat/<slug>`, `fix/<slug>`, `refactor/<slug>`, `docs/<slug>`, `chore/<slug>`, `test/<slug>`.
+2. **Intermediate commits:** Conventional Commits (`feat:`, `fix:`, `refactor:`, `docs:`, `chore:`, `test:`), always a human author, NEVER mention AI/Claude.
+3. **Local pre-push:** lefthook runs validators (no-secrets, claude-md-sync, epistemic-hierarchy) + the stack's type check.
+4. **PR opened:** `.github/PULL_REQUEST_TEMPLATE.md` filled in (layers touched, E2E smoke, cataloguing).
+5. **Automatic heuristics:** `pr-auto-review.yml` job 1 comments on touched files + checks banned terms + validates hierarchy + validates webhook.
+6. **Claude AI review:** comments an APPROVED / APPROVED WITH CAVEATS / REJECTED verdict on the PR (§8 format).
+7. **Human approval:** the maintainer (CODEOWNERS) reads the verdict + caveats and decides.
+8. **Merge:** ONLY via the `scripts/gh-pr-merge-safe.sh <PR>` wrapper (checks `mergeStateStatus: CLEAN` first — double gate).
+9. **Post-merge:** cataloguing (`docs/lessons/L-XXX-*.md` if applicable + a chronological entry in `build-log.md`).
+
+---
+
+## 11. Commit + PR description standard
+
+### Commits
+- **Conventional Commits** required: `<type>(<scope>): <description>`
+- Valid types: `feat`, `fix`, `refactor`, `docs`, `style`, `test`, `chore`, `perf`, `init`, `wip`
+- Optional body with descriptive bullets
+- **Required footer:** `Autor: Leonardo Rejani` (NEVER Claude/AI)
+
+### PR description
+`.github/PULL_REQUEST_TEMPLATE.md` covers:
+- Summary (1-3 bullets of what changed and why)
+- Layers touched (reference §2 of the pipeline equalization)
+- E2E smoke run (which + result)
+- Derived cataloguing (L-XXX lessons created, rules updated)
+- Test plan (checklist of what to verify before merging)
+
+---
+
+## 12. Absolute prohibitions
+
+❌ **Hardcoded secret in the diff.** Patterns blocked by `validate-no-secrets.ts`: `sk-ant-(api|oat)\d{2}-`, `ghp_`, `pk_live_`, `sk_live_`, `sbp_`, `EAA…{60+}`. The validator is a hard gate.
+
+❌ **Mentioning AI/Claude in commits or code.** The author is always human. `validate-no-secrets.ts` also detects `Claude <noreply@anthropic`, `Co-Authored-By: Claude`, etc.
+
+❌ **`--no-verify` on commit/push.** A failing hook = diagnose the root cause, not bypass it. Exception only with explicit sign-off documented in the commit body.
+
+❌ **`gh pr merge` directly.** Always via the `scripts/gh-pr-merge-safe.sh` wrapper, which validates `mergeStateStatus: CLEAN`.
+
+❌ **PR mixing a workflow change + production code.** GitHub validates the workflow against the default branch — the exchange fails 401 deterministically. A workflow change goes in an isolated PR.
+
+❌ **`gh secret set` with a pipe** (`echo $T | gh secret set --body -`). Invisible bytes (newline/BOM) make the bearer malformed (L-007). ALWAYS via a file stdin redirect: `gh secret set ... < /tmp/file.bin`.
+
+❌ **P5→P1 hierarchy inversion** in the PR body. A generic audit (parser/regex) NEVER refutes a reported symptom. The `validate-epistemic-hierarchy.ts` validator is a hard gate.
+
+---
+
+## 13. Empirical evidence requests in the PR
+
+When the PR touches a critical pipeline (gateway, sender, runtime, deploy, auth), the Claude review may require:
+
+- **Real cURL against a project endpoint** (not docs) captured in the PR description
+- **A SELECT query against the DB** showing pre/post state
+- **Server logs** in production or staging during symptom reproduction
+- **E2E smoke** documented in `tests/e2e/` or via a runbook in `docs/`
+
+A descriptive doc treated as a validated implementation is the most dangerous failure pattern (L-001 "a doc without a smoke is fiction"). Surgical evidence > aspirational spec.
+
+---
+
+## 14. Cross references
+
+- `CLAUDE.md` root — constitution + pointers to the 7 rules
+- `.claude/rules/01-invariants.md` — numbered inviolable invariants
+- `.claude/rules/02-pipeline-equalization.md` — the project's C1-CN layers
+- `.claude/rules/03-epistemic-hierarchy.md` — detailed P1-P5 protocol
+- `.claude/rules/04-pr-flow.md` — full PR flow
+- `.claude/rules/05-lesson-cataloging.md` — where/how to catalogue
+- `.claude/rules/06-parallel-workstreams.md` — `.planning/workstreams/` workflow
+- `.claude/rules/07-safe-merge.md` — double gate + `mergeStateStatus`
+- `docs/lessons/L-XXX-*.md` — catalogued lessons (growing folder)
+- `docs/reference-cases/YYYY-MM-DD-*.md` — empirical founding cases
+- `build-log.md` — raw append-only chronology

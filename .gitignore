@@ -1,0 +1,35 @@
+# testes locais do protótipo (Playwright, caminhos da máquina)
+.teste/
+# credenciais do projeto, nunca no git
+.claude/tokens-ferramentas.md
+.env
+.env.*
+!.env.example
+# lixo do sistema e de build
+.DS_Store
+node_modules/
+.build/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+# saída do gerador de imagem
+prototipo/icone/log-*.txt
+# worktrees das sessões e dos agentes
+.claude/worktrees/
+# projeto e build gerados da prova 0.3
+provas/casca/*.xcodeproj/
+provas/casca/build/
+
+# app do Mac: o projeto é gerado pelo xcodegen
+mac/App/Deck.xcodeproj/
+mac/App/build/
+# app do iPhone: página empacotada, projeto gerado pelo xcodegen e build
+ios/Pagina/
+ios/Deck.xcodeproj/
+ios/build/
+ios/Pacote/.build/
+# gerado pelo build.sh
+dist/
+
+# cache do auditor de PWA da tatile
+.pwa-nativo/

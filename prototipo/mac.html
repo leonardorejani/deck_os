@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="pt-BR" data-tema="escuro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#1C1C1C">
+<title>Deck no Mac: protótipo | DECK</title>
+<link rel="icon" href="icones/deck-128.png">
+<link rel="stylesheet" href="tatile/cor.css">
+<link rel="stylesheet" href="tatile/tipo.css">
+<link rel="stylesheet" href="tatile/espaco.css">
+<link rel="stylesheet" href="tatile/forma.css">
+<link rel="stylesheet" href="tatile/movimento.css">
+<link rel="stylesheet" href="mac.css?v=34">
+</head>
+<body>
+
+<header class="cabeca">
+  <h1>Deck no Mac: protótipo (v1)</h1>
+  <p>É aqui que tudo se configura, e o iPhone só mostra. Clique no ícone do Deck na barra de menus, lá em cima à direita. Para ver a sincronia, <a href="index.html" target="_blank" rel="noopener">abra o iPhone em outra aba</a>: o que mudar aqui aparece lá na hora, e o modo organizar do iPhone volta para cá. A fase 5 (app nativo) está nos controles "App nativo", em Conectar iPhone e no menu: pareamento por etapa, último canal e renovação da instalação. O iPhone dela está em <a href="nativo.html" target="_blank" rel="noopener">nativo.html</a>, e os dois seguem o mesmo seletor.</p>
+</header>
+
+<div class="palco" id="palco">
+  <div class="mesa" id="mesa">
+    <div class="barra-menus" role="menubar">
+      <span class="app-frente"><b>Finder</b><span>Arquivo</span><span>Editar</span><span>Visualizar</span><span>Ir</span><span>Janela</span><span>Ajuda</span></span>
+      <span class="status-menus">
+        <button class="item-menu" id="b-deck" aria-label="Deck" aria-haspopup="dialog" aria-expanded="false"></button>
+        <span class="item-menu" aria-hidden="true" id="ic-wifi"></span>
+        <span class="item-menu relogio-menu" id="relogio-menu"></span>
+      </span>
+    </div>
+
+    <section class="popover" id="popover" role="dialog" aria-label="Deck" hidden></section>
+
+    <section class="janela" id="janela" role="dialog" aria-labelledby="j-titulo" hidden>
+      <div class="lateral">
+        <div class="semaforo" aria-hidden="true"><i class="fechar-j" data-fechar-janela></i><i></i><i></i></div>
+        <nav id="nav" aria-label="Seções"></nav>
+        <footer class="autor">Feito por Leonardo Rejani</footer>
+      </div>
+      <div class="conteudo">
+        <header class="j-topo"><h2 id="j-titulo"></h2><span class="sincronia" id="sincronia" role="status" aria-live="polite"></span></header>
+        <div class="j-corpo" id="j-corpo"></div>
+      </div>
+      <div class="modal-j" id="modal-j" hidden></div>
+    </section>
+
+    <section class="ini" id="ini" role="dialog" aria-label="Configuração inicial" hidden></section>
+
+    <div class="alerta-sis" id="alerta-sis" hidden></div>
+
+    <div class="aviso" id="aviso" role="status" aria-live="polite"></div>
+  </div>
+</div>
+
+<section class="controles" aria-label="Controles do protótipo">
+  <div class="controle"><h2>Quem abre</h2><div class="opcoes" data-grupo="perfil"><button data-v="leo">Exemplo (já configurado)</button><button data-v="novo">Usuário novo</button></div></div>
+  <div class="controle"><h2>iPhone</h2><div class="opcoes" data-grupo="iphone"><button data-v="on">Conectado</button><button data-v="off">Nenhum pareado</button></div></div>
+  <div class="controle"><h2>Acessos</h2><div class="opcoes" data-grupo="perms"><button data-v="faltando">2 recusados</button><button data-v="todas">Todos liberados</button></div></div>
+  <div class="controle"><h2>Simular</h2><div class="opcoes" data-grupo="simular"><button data-v="whats">iPhone abriu o WhatsApp</button></div></div>
+  <div class="controle"><h2>App nativo: etapa</h2><div class="opcoes" data-nativo="et"><button data-v="vazio">1. Primeira abertura</button><button data-v="procurando">2. Procurando</button><button data-v="confirmar">3. Confirmar o código</button><button data-v="pronto">4. Pronto</button><button data-v="cabo">Segunda via: no cabo</button><button data-v="codigo">Segunda via: código</button></div></div>
+  <div class="controle"><h2>App nativo: canal</h2><div class="opcoes" data-nativo="canal"><button data-v="cabo">Cabo</button><button data-v="bluetooth">Bluetooth</button></div></div>
+  <div class="controle"><h2>App nativo: renovação</h2><div class="opcoes" data-nativo="ren"><button data-v="ok">Em dia</button><button data-v="pendente">Falhou, com prazo</button><button data-v="falhou">Prazo apertando</button></div></div>
+  <div class="controle"><h2>Atalhos</h2><div class="opcoes" data-grupo="abrir"><button data-v="popover">Abrir o menu</button><button data-v="janela">Abrir Ajustes</button></div></div>
+</section>
+
+<script src="dados.js?v=34"></script>
+<script src="nativo-dados.js?v=2"></script>
+<script src="mac.js?v=27"></script>
+</body>
+</html>

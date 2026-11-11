@@ -1,0 +1,370 @@
+// Mac de mentira para testar o painel: serve a página e implementa as rotas do contrato
+// (mac/Nucleo/Modelos.swift) com dados de exemplo. Só módulos nativos do node.
+// O cenário troca por uma rota que só existe aqui: POST /__cenario com um JSON parcial, GET /__cenario
+// para ler o cenário e os contadores, POST /__reset para voltar ao começo.
+//   node painel/teste/servidor-falso.mjs 4881      ->  http://localhost:4881/?codigo=ABCDEFGHJKLMNPQRSTUV
+import http from 'node:http';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+export const CODIGO = 'ABCDEFGHJKLMNPQRSTUV';
+export const CODIGO_NOVO = 'NOVOCODIGOGIRADOPELO';  // o que o rodízio do Mac gera (mac/Nucleo/Rodizio.swift)
+const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+export const CODIGO_PAREAR = '482913';  // os 6 dígitos que o Mac mostra em Conectar iPhone (vale uma vez, como o Pareamento.swift)
+const TIPOS = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.json': 'application/json', '.webmanifest': 'application/manifest+json' };
+
+const padrao = () => ({
+  mac: 'on',                 // on | off (o Mac nem atende)
+  pendurar: false,           // o Mac atende e nunca responde o estado
+  atraso: 0,                 // ms de espera antes de responder o estado
+  spotify: 'tocando',        // tocando | pausado | fechado
+  agenda: 'normal',          // normal | vazia | sem | muitas (um dia lotado) | erro (a rota falha)
+  sessoes: 5,                // 0 a 12
+  sessaoMuda: false,         // a primeira sessão chega com outra pergunta (ela mudou)
+  whatsapp: 'normal',        // normal | vazio | muitas (30 conversas) | erro (a rota falha)
+  whatsappOrigem: 'app',     // app | web (só o total, pelo título da aba) | web-fechado (sem aba aberta)
+  uso: 'normal',             // normal | sem-medicao
+  relogioMs: 0,              // adianta o relógio do Mac (o "há X min" das sessões anda)
+  atrasoListas: 0,           // ms de espera nas listas de WhatsApp e Agenda
+  textoLongo: false,         // URL e caminho de arquivo sem espaço nas mensagens e nas perguntas
+  perguntaGigante: false,    // a pergunta da primeira sessão é um texto de 40 linhas (a sessão aberta tem que rolar)
+  comAcao: false,            // uma tecla de Calendário com acao (calendario-dia): vai pro Mac, não abre a lista do iPhone
+  falha: false,              // toda tecla falha com o motivo do Mac
+  teclas: 'poucas',          // poucas (4) | muitas (12)
+  perfis: 'um',              // um | dois
+  comp: 'a',
+  blocos: { spotify: true, agenda: true, whatsapp: true, sessoes: true, uso: true },
+  nomeMac: 'MacBook Pro de Teste',
+  faixa: 'Faixa de Exemplo', artista: 'Artista Exemplo',
+  acesas: ['acordado'],
+  xss: false,                // texto do Mac, do WhatsApp e das sessões chega com HTML malicioso
+  config500: false,          // GET /api/config responde erro 500
+  rejeitar: '',              // PUT /api/config recusa com esse motivo (422), como a validação do Mac
+  rodizio: '',               // trocar (o primeiro pedido troca o código) | botao (só um pedido de tecla troca)
+  atrasoGravar: 0,           // ms de espera antes de o Mac aceitar o PUT /api/config
+  atrasoAcao: 0,             // ms de espera antes de o Mac fazer uma tecla (POST /api/botao) ou um comando do Spotify
+  spotifyRecusa: '',         // todo comando do Spotify é recusado (422) com esse motivo
+  album: 'Artista Exemplo (Deluxe)', repetir: false, aleatorio: false,
+  reunioes: false,           // os eventos de Meet, Zoom e Teams chegam com o link da sala (Evento.link)
+  reuniaoRecusa: '',         // POST /api/reuniao/entrar falha (422) com esse motivo
+  sessaoAbre: 'terminal',    // o que "Abrir no Mac" de uma sessão fez: terminal (trouxe o app do terminal) | pasta (abriu o Terminal na pasta)
+  sessaoAbreRecusa: '',      // POST /api/sessoes/<id>/abrir falha (422) com esse motivo
+  spotifyExtras: 'nao',      // nao (Mac antigo: sem volume nem login) | volume (só o do Spotify) | dois (Spotify e Mac) | login (conectado: curtir, aparelhos, fila e repetir só a música)
+  volume: 60, volumeMac: 40, curtida: false, repetirFaixa: false, aparelhoAtivo: 'd-mac', volumeAparelho: 35,
+  filaVazia: false,          // GET /api/spotify/fila devolve a fila sem próximas
+  aparelhosErro: '',         // GET /api/spotify/dispositivos falha (500) com esse motivo
+  apps: 'antigo',            // antigo (Mac sem as rotas de apps: 404, o editor usa a lista curta) | normal | erro (a lista falha com 500) | muitos (140 apps)
+  acoesAtraso: 0,            // ms de espera antes de o Mac responder o que um app oferece (ler as contas do Mail demora)
+  mailAviso: '',             // a lista de contas do Mail não pôde ser lida: o motivo vem no aviso da ação
+  spotifyModos: 'sim',       // sim | sem (Mac antigo: o estado não traz álbum, repetir nem aleatório)
+});
+let c = padrao();
+let T0 = Date.now(); // as sessões esperam desde um instante fixo (o Mac real manda sempre o mesmo `desde` até a sessão mudar)
+let cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, whatsapp: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [] };
+let posicaoBase = { s: 132, desde: Date.now() };
+let perfilAtivo = 'trabalho';
+let codigoAtual = CODIGO, codigoAnterior = null; // rodízio: o atual, e o anterior que ainda vale (a folga de 10 min)
+let parearGasto = false, parearErros = 0; // o código de 6 dígitos serve uma vez e aguenta 5 erros
+let gravada = null; // o que o iPhone gravou: perfis e blocos, como o Mac guardaria no config.json
+const zerar = () => { parearGasto = false; parearErros = 0; codigoAtual = CODIGO; codigoAnterior = null; T0 = Date.now(); gravada = null; c = padrao(); cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, whatsapp: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [] }; posicaoBase = { s: 132, desde: Date.now() }; perfilAtivo = 'trabalho' };
+
+// com xss ligado, todo texto que a página mostra chega como HTML que tenta executar código
+const X = t => c.xss ? `"><img src=x onerror="window.__xss=(window.__xss||0)+1">${t}` : t;
+const T = (id, nome, tipo, valor, extra = {}) => ({ id, nome, tipo, valor, ...extra });
+function perfisConfig() {
+  if (gravada) return gravada.perfis;
+  const trabalho = [
+    T('acordado', X('Manter acordado'), 'tecla', 'ctrl+opt+cmd+k', { estado: "pmset -g assertions | grep -q 'Vorssaint'", icone: 'Vorssaint' }),
+    T('whatsapp', X('WhatsApp'), 'app', 'WhatsApp', { icone: c.xss ? X('x') : 'WhatsApp' }),
+    T('calendario', 'Agenda', 'app', 'Calendar', { icone: 'Calendar' }),
+    T('apagar', 'Apagar tela', 'comando', 'pmset displaysleepnow', { icone: 'svg:tela' }),
+  ];
+  if (c.comAcao) trabalho.push(T('cal-dia', 'Natal', 'app', 'Calendar', { icone: 'Calendar', acao: { id: 'calendario-dia', valor: '2026-12-25' } }));
+  if (c.teclas === 'muitas') for (const n of ['Safari', 'Notes', 'Terminal', 'Finder', 'Spotify', 'Vorssaint', 'WhatsApp', 'Calendar']) trabalho.push(T('x' + n, n === 'Notes' ? 'Notas' : n, 'app', n, { icone: n }));
+  const ensaio = [T('e-spotify', 'Spotify', 'app', 'Spotify', { icone: 'Spotify' }), T('e-cifras', 'Cifras', 'app', 'Notes', { icone: 'Notes' }), T('e-agenda', 'Agenda', 'app', 'Calendar', { icone: 'Calendar' }), T('e-apagar', 'Apagar tela', 'comando', 'pmset displaysleepnow', { icone: 'svg:tela' }), T('e-terminal', 'Terminal', 'app', 'Terminal', { icone: 'Terminal' })];
+  return c.perfis === 'dois' ? [{ id: 'trabalho', nome: X('Trabalho'), teclas: trabalho }, { id: 'ensaio', nome: 'Ensaio', teclas: ensaio }] : [{ id: 'trabalho', nome: X('Trabalho'), teclas: trabalho }];
+}
+const contas = () => [
+  { id: 'claude-leo', nome: 'Claude', conta: X('leo'), mostrar: true },
+  { id: 'claude-equipe', nome: 'Claude', conta: 'equipe', mostrar: true },
+  { id: 'codex', nome: 'Codex', conta: 'pro', mostrar: true },
+];
+const configCompleta = () => ({ versao: 1, perfis: perfisConfig(), perfilAtivo: perfilAtivo === 'ensaio' && c.perfis === 'dois' ? 'ensaio' : 'trabalho', comp: c.comp, contas: contas(), blocos: c.blocos, nomeMac: X(c.nomeMac), porta: 4777 });
+
+const emDias = (dias, h, m = 0) => { const d = new Date(); d.setDate(d.getDate() + dias); d.setHours(h, m, 0, 0); return d.toISOString() };
+const SESSOES = () => [...SESSOES_BASE(), ...Array.from({ length: 7 }, (_, i) => ({ id: 's' + (6 + i), nome: 'sessão extra ' + (i + 1), projeto: 'projeto_' + (i + 1), pergunta: 'Pergunta longa da sessão extra ' + (i + 1) + ', com bastante texto para passar de duas linhas na lista e mostrar inteira só quando a pessoa tocar em Responder, sem cortar nada. '.repeat(4), desde: new Date(T0 - (5 + i) * 86400000).toISOString() }))];
+const SESSOES_BASE = () => [
+  { id: 's1', nome: X('convite novos usuarios'), projeto: X('app_web'), pergunta: c.perguntaGigante ? Array.from({ length: 40 }, (_, i) => `Linha ${i + 1} da pergunta: posso seguir com o plano e abrir o PR agora?`).join('\n') : c.textoLongo ? 'Posso editar /Users/exemplo/projeto/painel/paineis.js agora?' : X(c.sessaoMuda ? 'Agora pode salvar o TXT no DNS?' : 'Salvar o TXT de verificação do domínio no DNS?'), desde: new Date(T0 - 5 * 60000).toISOString() },
+  { id: 's2', nome: 'EXPORTAR_VIDEO_1080', projeto: 'video', pergunta: '1080p medido, aguarda decisão sobre times, PR e vídeo.', desde: new Date(T0 - 13 * 3600000).toISOString() },
+  { id: 's3', nome: 'CI_RUNNER_02', projeto: 'infra', pergunta: 'Você aprova o plano do runner 02 (e2e do ci-1)?', desde: new Date(T0 - 14 * 3600000).toISOString() },
+  { id: 's4', nome: 'instala repo', projeto: 'app_web', pergunta: 'Registro essa conclusão na memória do projeto?', desde: new Date(T0 - 16 * 3600000).toISOString() },
+  { id: 's5', nome: 'podio ranking pontuação', projeto: 'app_web', pergunta: 'Posso fazer o commit e abrir o PR?', desde: new Date(T0 - 4 * 86400000).toISOString() },
+];
+
+// WhatsApp: as 5 conversas do protótipo (o tempo é relativo a agora, para "hoje" e "ontem" não envelhecerem)
+const WHATSAPP = () => {
+  if (c.whatsapp === 'vazio') return [];
+  const ha = min => new Date(T0 - min * 60000).toISOString(), M = (de, texto, hora = '10:00') => ({ de: X(de), texto: X(texto), hora });
+  const base = [
+    { id: 'w1', nome: X('Ministério de Louvor'), grupo: true, naoLidas: 12, ultima: ha(3), mensagens: [M('Carla', c.textoLongo ? 'Olha o PR: https://github.com/leonardorejani/deck_os/pull/30/files#diff-8f3b2c1d9e7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e' : 'Ensaio confirmado quinta 20h?'), M('Pedro', 'Mandei a setlist no drive'), M('Carla', 'Quem leva o cabo P10?')] },
+    { id: 'w2', nome: 'Mãe', grupo: false, naoLidas: 2, ultima: ha(20), mensagens: [M('', 'Vem almoçar domingo?'), M('', 'Traz a Bia também')] },
+    { id: 'w3', nome: 'Equipe do app', grupo: true, naoLidas: 5, ultima: ha(40), mensagens: [M('Rafael', 'Subi o build novo'), M('Lucas', 'Testei no Android, ok')] },
+    { id: 'w4', nome: 'Pastor João', grupo: false, naoLidas: 3, ultima: emDias(-1, 12), mensagens: [M('', 'Leo, sobre domingo...'), M('', 'Me liga quando puder')] },
+    { id: 'w5', nome: 'Rafael', grupo: false, naoLidas: 1, ultima: emDias(-1, 11), mensagens: [M('', 'Consegue ver o PR hoje?')] },
+  ];
+  if (c.whatsapp !== 'muitas') return base;
+  return [...base, ...Array.from({ length: 25 }, (_, i) => ({ id: 'wx' + i, nome: 'Contato ' + (i + 1), grupo: i % 4 === 0, naoLidas: 1 + i % 3, ultima: ha(60 + i * 90), mensagens: [M(i % 4 === 0 ? 'Alguém' : '', 'Mensagem número ' + (i + 1))] }))];
+};
+
+// Agenda: eventos semanais e avulsos por dia do mês (como o protótipo), devolvidos para o intervalo pedido
+const AZUL = '#60A5FA', VERDE = '#5FD49B', AMARELO = '#E8B95B', ROSA = '#F09090';
+const mesmoDiaF = (a, b) => a.toDateString() === b.toDateString();
+function eventosDoDia(d) {
+  const dow = d.getDay(), dia = d.getDate(), ev = [], E = (h, m, titulo, cor, calendario, local, diaTodo = false, link = '') => { const q = new Date(d); q.setHours(h, m, 0, 0); ev.push({ titulo: X(titulo), inicio: q.toISOString(), diaTodo, calendario: X(calendario), cor, ...(local ? { local: X(local) } : {}), ...(link && c.reunioes ? { link } : {}) }) };
+  if (dow === 2) E(10, 30, 'Reunião de produto', AZUL, 'Trabalho', 'Google Meet', false, 'https://meet.google.com/abc-defg-hij');
+  if (dow === 4) E(20, 0, 'Ensaio do louvor', VERDE, 'Louvor', 'Templo');
+  if (dow === 0) { E(9, 0, 'Escola dominical', AMARELO, 'Igreja', 'Sala 2'); E(19, 0, 'Culto', AMARELO, 'Igreja', 'Templo') }
+  const avulsos = { 3: [14, 0, 'Revisão do projeto', AZUL, 'Trabalho', c.reunioes ? 'https://us02web.zoom.us/j/81234567890?pwd=abc123' : '', false, 'https://us02web.zoom.us/j/81234567890?pwd=abc123'], 10: [16, 0, 'Dentista', ROSA, 'Pessoal'], 12: [12, 30, 'Almoço com Rafael', VERDE, 'Trabalho'], 15: [0, 0, 'Aniversário da Ana', ROSA, 'Pessoal', '', true], 21: [15, 0, 'Gravação do podcast', AZUL, 'Trabalho', '', false, 'https://teams.microsoft.com/l/meetup-join/19%3ameeting_abc'], 27: [18, 0, 'Entrega do cliente', AZUL, 'Trabalho'] };
+  if (avulsos[dia]) E(...avulsos[dia]);
+  if (c.agenda === 'muitas' && mesmoDiaF(d, new Date(Date.now() + 86400000))) for (let i = 0; i < 14; i++) E(7 + i, 0, 'Compromisso ' + (i + 1), AZUL, 'Trabalho', 'Sala ' + (i + 1));
+  return ev;
+}
+function eventos(de, dias) {
+  const [a, m, di] = String(de).split('-').map(Number), lista = [];
+  for (let i = 0; i < (dias || 0); i++) lista.push(...eventosDoDia(new Date(a, m - 1, di + i)));
+  return lista;
+}
+const aparelhos = () => [
+  { id: 'd-mac', nome: X('MacBook Pro de Teste'), tipo: 'computer', ativo: c.aparelhoAtivo === 'd-mac', volume: c.aparelhoAtivo === 'd-mac' ? c.volumeAparelho : 60, restrito: false },
+  { id: 'd-sala', nome: X('Caixa da sala'), tipo: 'speaker', ativo: c.aparelhoAtivo === 'd-sala', volume: c.aparelhoAtivo === 'd-sala' ? c.volumeAparelho : 35, restrito: false },
+  { id: 'd-tv', nome: 'TV do quarto', tipo: 'tv', ativo: false, volume: null, restrito: true },
+  { id: 'd-cel', nome: 'Celular', tipo: 'smartphone', ativo: c.aparelhoAtivo === 'd-cel', volume: null, restrito: false },
+];
+const FILA = () => ({ atual: { faixa: X('Faixa de Exemplo'), artista: X('Artista Exemplo') }, proximas: c.filaVazia ? [] : Array.from({ length: 9 }, (_, i) => ({ faixa: X('Próxima música ' + (i + 1)), artista: i % 3 === 0 ? 'Artista Exemplo, Convidado' : 'Banda ' + (i + 1) })) });
+// os apps do Mac de quem usa (GET /api/apps) e o que cada um oferece (GET /api/apps/<id>/acoes), como o Apps.swift e o AcoesDeApp.swift
+const APPS_MAC = () => [
+  ...[['Calculadora', 'Calculator', 'com.apple.calculator'], ['Calendário', 'Calendar', 'com.apple.iCal'], ['Finder', 'Finder', 'com.apple.finder'], ['Mail', 'Mail', 'com.apple.mail'], ['Notas', 'Notes', 'com.apple.Notes'], ['Terminal', 'Terminal', 'com.apple.Terminal'], ['WhatsApp', 'WhatsApp', 'net.whatsapp.WhatsApp'], ['Spotify', 'Spotify', 'com.spotify.client']]
+    .map(([nome, valor, bundle]) => ({ nome: X(nome), valor, bundle, navegador: false })),
+  { nome: 'Google Chrome', valor: 'Google Chrome', bundle: 'com.google.Chrome', navegador: true }, { nome: 'Safari', valor: 'Safari', bundle: 'com.apple.Safari', navegador: true },
+  ...(c.apps === 'muitos' ? Array.from({ length: 130 }, (_, i) => ({ nome: 'Aplicativo ' + String(i + 1).padStart(3, '0'), valor: 'App' + (i + 1), bundle: 'com.exemplo.app' + (i + 1), navegador: false })) : []),
+].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+const ACAO_LINK = { id: 'link', nome: 'Abrir um endereço', entrada: 'texto', rotulo: 'Endereço', exemplo: 'https://github.com' };
+const ACAO_GMAIL = { id: 'gmail', nome: 'Abrir o Gmail de uma conta', entrada: 'texto', rotulo: 'Conta (número ou e-mail)', exemplo: '1 ou nome@gmail.com' };
+function acoesDoApp(bundle) {
+  if (bundle === 'navegador-padrao') return [ACAO_LINK, ACAO_GMAIL];
+  const a = APPS_MAC().find(x => x.bundle === bundle); if (!a) return null;
+  const lista = bundle === 'com.apple.mail' ? [c.mailAviso
+      ? { id: 'mail-caixa', nome: 'Abrir a caixa de entrada de uma conta', entrada: 'lista', rotulo: 'Conta', opcoes: [], aviso: c.mailAviso }
+      : { id: 'mail-caixa', nome: 'Abrir a caixa de entrada de uma conta', entrada: 'lista', rotulo: 'Conta', opcoes: [{ valor: 'conta-1', nome: 'iCloud', detalhe: 'maria@icloud.com' }, { valor: 'conta-2', nome: 'Trabalho', detalhe: 'maria@empresa.com.br' }, { valor: 'conta-3', nome: 'Pessoal', detalhe: 'maria@gmail.com' }] },
+      { id: 'mail-novo', nome: 'Escrever um e-mail novo', entrada: 'nenhuma' }]
+    : bundle === 'com.apple.Notes' ? [{ id: 'notas-pasta', nome: 'Abrir uma pasta', entrada: 'lista', rotulo: 'Pasta', opcoes: [{ valor: 'p1', nome: 'Receitas', detalhe: 'iCloud' }, { valor: 'p2', nome: 'Cifras', detalhe: 'iCloud' }] }]
+    : bundle === 'com.apple.iCal' ? [{ id: 'calendario-hoje', nome: 'Mostrar hoje', entrada: 'nenhuma' }, { id: 'calendario-dia', nome: 'Mostrar um dia', entrada: 'texto', rotulo: 'Dia', exemplo: '2026-12-25' }]
+    : [];
+  return a.navegador ? [...lista, ACAO_LINK, ACAO_GMAIL] : lista;
+}
+function estadoSpotify() {
+  if (c.spotify === 'fechado') return null;
+  const tocando = c.spotify === 'tocando';
+  const s = posicaoBase.s + (tocando ? (Date.now() - posicaoBase.desde) / 1000 : 0);
+  return { tocando, faixa: X(c.faixa), artista: X(c.artista), posicao: Math.min(221, Math.floor(s)), duracao: 221, capaId: X('capa-1'), cores: c.xss ? [X('#963030'), X('#285A64')] : ['#963030', '#285A64'],
+    ...(c.spotifyModos === 'sem' ? {} : { album: X(c.album), repetir: c.repetir, aleatorio: c.aleatorio }),
+    ...(c.spotifyExtras === 'nao' ? {} : { volume: c.volume, ...(c.spotifyExtras === 'volume' ? {} : { volumeMac: c.volumeMac }),
+      ...(c.spotifyExtras === 'login' ? { conectado: true, curtida: c.curtida, repetirFaixa: c.repetirFaixa, aparelho: aparelhos().find(a => a.ativo).nome } : { conectado: false }) }) };
+}
+function estado() {
+  const semMed = c.uso === 'sem-medicao';
+  const selos = { whatsapp: c.xss ? X('23') : '23' };
+  if (c.agenda === 'sem') selos.calendario = '!';
+  return {
+    agora: new Date(Date.now() + c.relogioMs).toISOString(), nomeMac: X(c.nomeMac), perfilAtivo: configCompleta().perfilAtivo, comp: c.comp, blocos: c.blocos,
+    spotify: estadoSpotify(),
+    uso: [
+      { id: 'claude-leo', nome: 'Claude', conta: X('leo'), semana: semMed ? null : 61, renova: emDias(3, 14) },
+      { id: 'claude-equipe', nome: 'Claude', conta: 'equipe', semana: semMed ? null : 77, renova: emDias(1, 9) },
+      { id: 'codex', nome: 'Codex', conta: 'pro', semana: semMed ? null : 4, renova: emDias(0, 23) },
+    ],
+    sessoes: SESSOES().slice(0, c.sessoes),
+    whatsapp: c.whatsappOrigem === 'web' ? { total: 23, conversas: 0, origem: 'web', navegador: 'Google Chrome', aberto: true }
+      : c.whatsappOrigem === 'web-fechado' ? { total: 0, conversas: 0, origem: 'web', navegador: 'Arc', aberto: false }
+      : { total: 23, conversas: 5, origem: 'app' },
+    agenda: c.agenda === 'sem' ? { permissao: false, proximo: null }
+      : { permissao: true, proximo: c.agenda === 'vazia' ? null : { titulo: X('Reunião de produto'), inicio: new Date(Date.now() + 2 * 3600000).toISOString(), diaTodo: false, calendario: X('Trabalho'), cor: X('#60A5FA'), local: X('Google Meet') } },
+    acesas: c.acesas, selos, avisos: [],
+  };
+}
+
+// a validação do Mac (ConfigDeck.validar): id único, nome, tipo conhecido e ação preenchida
+function validar(cfg) {
+  if (!Array.isArray(cfg.perfis) || !cfg.perfis.some(p => p.id === cfg.perfilAtivo)) return 'Perfil ativo inexistente.';
+  const ids = new Set();
+  for (const t of cfg.perfis.flatMap(p => p.teclas)) {
+    if (!t.id || ids.has(t.id)) return 'Tecla com id vazio ou repetido.';
+    ids.add(t.id);
+    if (!String(t.nome || '').trim()) return 'Tecla sem nome.';
+    if (!['app', 'atalho', 'tecla', 'comando'].includes(t.tipo)) return `Tipo inválido em "${t.nome}".`;
+    if (!String(t.valor || '').trim()) return `"${t.nome}" está sem ação.`;
+    if (t.acao) { // a validação do Mac (Config.validarAcao)
+      const esc = String(t.acao.valor || '').trim();
+      if (t.tipo !== 'app') return `Só tecla de app pode ter ação ("${t.nome}").`;
+      if (!['mail-caixa', 'mail-novo', 'link', 'gmail', 'notas-pasta', 'calendario-hoje', 'calendario-dia', 'abrir-arquivo'].includes(t.acao.id)) return `A ação da tecla "${t.nome}" não existe.`;
+      if (['mail-caixa', 'notas-pasta'].includes(t.acao.id) && !esc) return `A tecla "${t.nome}" está sem a escolha da ação.`;
+      if (t.acao.id === 'link' && !/^(https?:\/\/)?[^\s/]+\.[^\s/]+/.test(esc)) return `O endereço da tecla "${t.nome}" não é válido.`;
+      if (t.acao.id === 'calendario-dia' && !/^\d{4}-\d{2}-\d{2}$/.test(esc)) return `O dia da tecla "${t.nome}" não é válido.`;
+    }
+  }
+  return null;
+}
+const json = (res, status, corpo) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(corpo)) };
+const lerCorpo = req => new Promise(r => { let b = ''; req.on('data', x => b += x); req.on('end', () => { try { r(JSON.parse(b || '{}')) } catch { r({}) } }) });
+
+async function api(req, res, url) {
+  if (c.mac === 'off') return req.socket.destroy();
+  const codigo = req.headers['x-deck-codigo'] || url.searchParams.get('codigo');
+  const rota = url.pathname, m = req.method;
+  // como o Rotas.swift: o único pedido de /api que não leva código de acesso. 6 dígitos certos devolvem o código longo
+  if (rota === '/api/parear' && m === 'POST') {
+    const dig = String((await lerCorpo(req)).codigo || '').trim();
+    cont.parear.push(dig);
+    if (parearErros >= 5) return json(res, 429, { erro: 'Muitas tentativas erradas. Gere um novo código no Mac.' });
+    if (parearGasto || dig !== CODIGO_PAREAR) { parearErros++; return json(res, 401, { erro: `Código incorreto. Restam ${5 - parearErros} tentativas.` }) }
+    parearGasto = true;
+    return json(res, 200, { codigoAcesso: codigoAtual });
+  }
+  // como o Rodizio.swift: a troca acontece no pedido que a dispara, e quem veio com o código anterior (na folga) recebe o novo
+  // no cabeçalho X-Deck-Codigo-Novo, em qualquer status. Código fora da folga é 401 sem cabeçalho.
+  if (codigo === codigoAtual && codigoAtual === CODIGO && (c.rodizio === 'trocar' || (c.rodizio === 'botao' && rota.startsWith('/api/botao/')))) { codigoAnterior = CODIGO; codigoAtual = CODIGO_NOVO }
+  if (codigo !== codigoAtual && !(codigo && codigo === codigoAnterior)) return json(res, 401, { erro: 'Código de acesso inválido. Abra o Deck no Mac e leia o QR de novo.' });
+  cont.codigos.push(codigo);
+  if (codigo === codigoAnterior) res.setHeader('X-Deck-Codigo-Novo', codigoAtual);
+  if (rota === '/api/estado' && m === 'GET') {
+    const meu = cont; // o reset troca o objeto: quem fecha depois desconta do contador antigo
+    meu.estado++; meu.simultaneos++; meu.maxSimultaneos = Math.max(meu.maxSimultaneos, meu.simultaneos);
+    res.on('close', () => { meu.simultaneos-- });
+    if (c.pendurar) return;
+    if (c.atraso) await new Promise(r => setTimeout(r, c.atraso));
+    if (!res.writableEnded && !res.destroyed) json(res, 200, estado());
+    return;
+  }
+  if (rota === '/api/config' && m === 'GET') return c.config500 ? json(res, 500, { erro: 'config quebrada' }) : json(res, 200, configCompleta());
+  if (rota === '/api/config' && m === 'PUT') {
+    const nova = await lerCorpo(req); cont.configsGravadas.push(nova);
+    if (c.atrasoGravar) await new Promise(r => setTimeout(r, c.atrasoGravar));
+    const erro = c.rejeitar || validar(nova);
+    if (erro) return json(res, 422, { erro });
+    if (nova.perfilAtivo) perfilAtivo = nova.perfilAtivo;
+    gravada = { perfis: nova.perfis };
+    if (nova.blocos) c.blocos = nova.blocos;
+    return json(res, 200, { ...nova, versao: 1, porta: 4777 });
+  }
+  if (rota.startsWith('/api/botao/') && m === 'POST') {
+    const id = decodeURIComponent(rota.slice(11)), tecla = perfisConfig().flatMap(p => p.teclas).find(t => t.id === id);
+    if (c.atrasoAcao) await new Promise(r => setTimeout(r, c.atrasoAcao));
+    if (!tecla) return json(res, 404, { erro: 'Essa tecla não existe mais no Mac.' });
+    if (c.falha) return json(res, 500, { erro: 'O Mac não deixou: ligue a Acessibilidade para o Deck nos Ajustes do Sistema.' });
+    cont.botoes.push(id);
+    if (id === 'acordado') c.acesas = c.acesas.includes(id) ? [] : [id];
+    return json(res, 200, { ok: true });
+  }
+  const semLogin = () => c.spotifyExtras !== 'login' && (json(res, 409, { erro: 'O Spotify não está conectado. Conecte nos Ajustes do Mac.' }), true); // responde 409 e devolve true
+  if (rota === '/api/spotify/dispositivos' && m === 'GET') {
+    cont.aparelhos = (cont.aparelhos || 0) + 1;
+    if (semLogin()) return;
+    if (c.aparelhosErro) return json(res, 500, { erro: c.aparelhosErro });
+    return json(res, 200, aparelhos());
+  }
+  if (rota === '/api/spotify/fila' && m === 'GET') { cont.filas = (cont.filas || 0) + 1; if (semLogin()) return; return json(res, 200, FILA()) }
+  if (rota.startsWith('/api/spotify/') && m === 'POST') {
+    const acao = rota.slice(13);
+    if (c.atrasoAcao) await new Promise(r => setTimeout(r, c.atrasoAcao));
+    if (c.spotify === 'fechado') return json(res, 409, { erro: 'O Spotify está fechado no Mac.' });
+    if (c.spotifyRecusa) return json(res, 422, { erro: c.spotifyRecusa });
+    if (['curtir', 'dispositivo'].includes(acao) || (acao === 'repetir' && url.searchParams.has('modo'))) { if (semLogin()) return }
+    if (acao === 'volume') {
+      const alvo = url.searchParams.get('alvo') || 'spotify', v = +url.searchParams.get('v');
+      cont.spotify.push(`volume:${alvo}:${v}`);
+      if (alvo === 'spotify') c.volume = v; else if (alvo === 'mac') c.volumeMac = v; else c.volumeAparelho = v;
+      return json(res, 200, { ok: true });
+    }
+    if (acao === 'curtir') { cont.spotify.push('curtir:' + url.searchParams.get('v')); c.curtida = url.searchParams.get('v') === '1'; return json(res, 200, { ok: true }) }
+    if (acao === 'dispositivo') { const id = url.searchParams.get('id'); cont.spotify.push('dispositivo:' + id); if (aparelhos().some(a => a.id === id && !a.restrito)) c.aparelhoAtivo = id; return json(res, 200, { ok: true }) }
+    if (acao === 'repetir' && url.searchParams.has('modo')) { const modo = url.searchParams.get('modo'); cont.spotify.push('repetir:modo=' + modo); c.repetirFaixa = modo === 'faixa'; c.repetir = modo === 'contexto'; return json(res, 200, { ok: true }) }
+    cont.spotify.push(acao + (acao === 'posicao' ? ':' + url.searchParams.get('s') : acao === 'repetir' || acao === 'aleatorio' ? ':' + (url.searchParams.get('v') ?? 'alterna') : ''));
+    if (acao === 'repetir' || acao === 'aleatorio') { const v = url.searchParams.get('v'); c[acao] = v === null ? !c[acao] : v === '1' }
+    const agora = estadoSpotify().posicao;
+    if (acao === 'tocar') { c.spotify = 'tocando'; posicaoBase = { s: agora, desde: Date.now() } }
+    if (acao === 'pausar') { c.spotify = 'pausado'; posicaoBase = { s: agora, desde: Date.now() } }
+    if (acao === 'posicao') posicaoBase = { s: +url.searchParams.get('s'), desde: Date.now() };
+    return json(res, 200, { ok: true });
+  }
+  if (rota === '/api/reuniao/entrar' && m === 'POST') {
+    const link = String((await lerCorpo(req)).link || '');
+    if (!/^https:\/\/(meet\.google\.com|([a-z0-9-]+\.)?zoom\.us|teams\.microsoft\.com|teams\.live\.com)\//.test(link)) return json(res, 400, { erro: 'Esse link não é de uma reunião do Meet, do Zoom ou do Teams.' });
+    if (c.reuniaoRecusa) return json(res, 422, { erro: c.reuniaoRecusa });
+    cont.reunioes.push(link);
+    return json(res, 200, { ok: true });
+  }
+  const abrir = rota.match(/^\/api\/sessoes\/([^/]+)\/abrir$/);
+  if (abrir && m === 'POST') {
+    const id = decodeURIComponent(abrir[1]);
+    if (!SESSOES().some(x => x.id === id)) return json(res, 404, { erro: 'Essa sessão não existe mais neste Mac.' });
+    if (c.sessaoAbreRecusa) return json(res, 422, { erro: c.sessaoAbreRecusa });
+    cont.sessoesAbertas.push(id);
+    return json(res, 200, { ok: true, como: c.sessaoAbre, app: c.sessaoAbre === 'pasta' ? 'Terminal' : 'Orca' });
+  }
+  if (rota === '/api/apps' || rota.startsWith('/api/apps/')) {
+    if (m !== 'GET') return json(res, 405, { erro: 'Esse pedido não é aceito nessa rota.' });
+    if (c.apps === 'antigo') return json(res, 404, { erro: 'Essa rota não existe.' });
+    if (rota === '/api/apps') { cont.apps++; return c.apps === 'erro' ? json(res, 500, { erro: 'O Mac não conseguiu listar os apps.' }) : json(res, 200, APPS_MAC()) }
+    const [bundle, parte] = rota.slice(10).split('/');
+    if (parte === 'icone') { cont.icones.push(bundle); res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'private, max-age=86400' }); return res.end(fs.readFileSync(path.join(RAIZ, 'icones/deck-128.png'))) }
+    if (parte === 'acoes') {
+      cont.acoesApp.push(bundle);
+      if (c.acoesAtraso) await new Promise(r => setTimeout(r, c.acoesAtraso));
+      const acoes = acoesDoApp(bundle);
+      return acoes ? json(res, 200, { bundle, acoes }) : json(res, 404, { erro: 'Esse app não está instalado neste Mac.' });
+    }
+    return json(res, 404, { erro: 'Essa rota não existe.' });
+  }
+  if (rota === '/api/capa') { cont.capas++; res.writeHead(200, { 'Content-Type': 'image/png' }); return res.end(fs.readFileSync(path.join(RAIZ, 'icones/deck.png'))) }
+  if (rota === '/api/sessoes') { cont.sessoes++; return json(res, 200, SESSOES().slice(0, c.sessoes)) }
+  if ((rota === '/api/whatsapp' || rota === '/api/agenda') && c.atrasoListas) await new Promise(r => setTimeout(r, c.atrasoListas));
+  if (rota === '/api/whatsapp') {
+    cont.whatsapp++;
+    if (c.whatsappOrigem !== 'app') return json(res, 200, []); // pelo navegador o Mac não tem lista por conversa
+    if (c.whatsapp === 'erro') return json(res, 500, { erro: 'O WhatsApp não respondeu no Mac.' });
+    return json(res, 200, WHATSAPP());
+  }
+  if (rota === '/api/agenda') {
+    cont.agenda.push(`${url.searchParams.get('de')}|${url.searchParams.get('dias')}`);
+    if (c.agenda === 'erro') return json(res, 500, { erro: 'O Calendário não respondeu no Mac.' });
+    if (c.agenda === 'sem') return json(res, 403, { erro: 'O Deck não tem permissão para ler o Calendário.' });
+    return json(res, 200, c.agenda === 'vazia' ? [] : eventos(url.searchParams.get('de'), Number(url.searchParams.get('dias'))));
+  }
+  json(res, 404, { erro: 'Rota desconhecida.' });
+}
+
+export function iniciar(porta) {
+  const servidor = http.createServer(async (req, res) => {
+    const url = new URL(req.url, 'http://x');
+    if (url.pathname === '/__cenario') {
+      if (req.method === 'POST') { const p = await lerCorpo(req); const { blocos, ...resto } = p; Object.assign(c, resto); if (blocos) c.blocos = { ...c.blocos, ...blocos }; if (p.spotify === 'tocando' || p.spotify === 'pausado') posicaoBase = { s: estadoSpotify()?.posicao ?? 132, desde: Date.now() } }
+      return json(res, 200, { cenario: c, contadores: cont });
+    }
+    if (url.pathname === '/__reset') { zerar(); return json(res, 200, { ok: true }) }
+    if (url.pathname.startsWith('/api/')) return api(req, res, url);
+    // o certificado público do CA do Deck: sem código de acesso (o iPhone ainda não confia no Deck quando o baixa)
+    if (url.pathname === '/ca.crt') { cont.ca++; res.writeHead(200, { 'Content-Type': 'application/x-x509-ca-cert', 'Content-Disposition': 'attachment; filename="Deck.crt"' }); return res.end('CERTIFICADO DE MENTIRA') }
+    let arquivo = path.join(RAIZ, url.pathname === '/' ? 'index.html' : decodeURIComponent(url.pathname));
+    if (!arquivo.startsWith(RAIZ) || arquivo.includes(path.sep + 'teste' + path.sep) || !fs.existsSync(arquivo) || fs.statSync(arquivo).isDirectory()) { res.writeHead(404); return res.end('não achei') }
+    res.writeHead(200, { 'Content-Type': TIPOS[path.extname(arquivo)] || 'application/octet-stream', 'Cache-Control': 'no-store' });
+    fs.createReadStream(arquivo).pipe(res);
+  });
+  return new Promise(ok => servidor.listen(porta, () => ok(servidor)));
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const porta = Number(process.argv[2] || 4881);
+  await iniciar(porta);
+  console.log(`Mac de mentira no ar: http://localhost:${porta}/?codigo=${CODIGO}`);
+}

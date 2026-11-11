@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="pt-BR" data-tema="escuro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1C1C1C">
+<title>Deck: protótipo | DECK</title>
+<link rel="icon" href="icones/deck-128.png">
+<link rel="apple-touch-icon" href="icones/deck.png">
+<link rel="stylesheet" href="tatile/cor.css">
+<link rel="stylesheet" href="tatile/tipo.css">
+<link rel="stylesheet" href="tatile/espaco.css">
+<link rel="stylesheet" href="tatile/forma.css">
+<link rel="stylesheet" href="tatile/movimento.css">
+<link rel="stylesheet" href="deck.css?v=36">
+</head>
+<body>
+
+<header class="cabeca">
+  <h1>Deck: protótipo de tela (v2)</h1>
+  <p>iPhone 15 Pro Max deitado (932 x 430), dados de mentira. Toque executa. Segurar meio segundo entra no modo organizar: arraste para mudar de lugar, toque para trocar o app. Toque no player abre o Spotify no Mac, no WhatsApp abre as não lidas, na Agenda abre a lista por data (e o mês), em "Sessões esperando" abre as sessões. A configuração mora no Mac: <a href="mac.html" target="_blank" rel="noopener">abra o protótipo do Mac</a> ao lado e veja os dois sincronizando.</p>
+</header>
+
+<div class="palco">
+  <div class="moldura horizontal" id="moldura">
+    <div class="tela" id="tela">
+            <div id="conteudo"></div>
+      <div class="barra-organizar" role="toolbar"><span>Arraste para mudar de lugar, toque para trocar</span><span class="escondidos" id="escondidos"></span><button class="btn primario" id="b-pronto">Pronto</button></div>
+      <div class="tela-offline" role="status" aria-live="polite"><div>
+        <strong>Mac desconectado</strong>
+        <span class="disp"><span class="girando" aria-hidden="true"></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="11" rx="1.5"/><path d="M2 19h20"/></svg><span id="nome-mac">MacBook Pro de Exemplo</span></span>
+        <span class="dica-off">Confira se ele está ligado e no mesmo Wi-Fi.</span>
+      </div></div>
+      <div class="aviso" id="aviso" role="status" aria-live="polite"><span id="aviso-txt"></span><button id="aviso-acao" hidden>Desfazer</button></div>
+      <div class="lista-perfis" id="lista-perfis" role="dialog" aria-label="Menu" hidden></div>
+      <div class="veu" id="veu"></div>
+
+      <section class="folha cheia editor" id="f-editor" role="dialog" aria-modal="true" aria-labelledby="ed-titulo">
+        <header><h2 id="ed-titulo">Editar tecla</h2><button class="fechar" data-fechar aria-label="Fechar"></button></header>
+        <div class="corpo">
+          <div class="coluna">
+            <div class="campo"><label for="ed-nome">Nome</label><input id="ed-nome" autocomplete="off"></div>
+            <div class="campo"><span class="rotulo">Tipo</span>
+              <div class="segmentos" id="ed-tipo"><button data-tipo="app">App</button><button data-tipo="tecla">Teclado</button><button data-tipo="comando">Comando</button><button data-tipo="atalho">Atalho</button></div>
+            </div>
+          </div>
+          <div class="coluna">
+            <div class="campo" id="ed-acao"></div>
+            <div class="campo" id="ed-campo-icone"><span class="rotulo">Ícone</span><div class="icones" id="ed-icones"></div></div>
+          </div>
+        </div>
+        <footer><button class="btn perigo" id="ed-excluir">Excluir</button><span class="espaco"></span><button class="btn secundario" data-fechar>Cancelar</button><button class="btn primario" id="ed-salvar">Salvar</button></footer>
+      </section>
+
+      <section class="folha cheia" id="f-whats" role="dialog" aria-modal="true" aria-labelledby="wa-titulo">
+        <header><h2 id="wa-titulo"></h2>
+          <div class="segmentos" id="wa-filtro"><button data-f="todas">Todas</button><button data-f="contatos">Contatos</button><button data-f="grupos">Grupos</button></div>
+          <button class="btn secundario pequeno" id="wa-abrir">Abrir no Mac</button><button class="fechar" data-fechar aria-label="Fechar"></button></header>
+        <div class="corpo" id="wa-lista"></div>
+      </section>
+
+      <section class="folha cheia" id="f-sessoes" role="dialog" aria-modal="true" aria-labelledby="se-titulo">
+        <header><h2 id="se-titulo"></h2><button class="fechar" data-fechar aria-label="Fechar"></button></header>
+        <div class="corpo" id="se-lista"></div>
+      </section>
+
+      <section class="folha cheia calendario" id="f-cal" role="dialog" aria-modal="true" aria-label="Agenda">
+        <button class="fechar fechar-cal" data-fechar aria-label="Fechar"></button>
+        <div class="cal-corpo">
+          <div class="mes-sb" id="ca-mes">
+            <div class="mes-topo"><h2 id="ca-titulo"></h2><button class="seta" id="ca-ant" aria-label="Mês anterior"></button><button class="seta" id="ca-prox" aria-label="Próximo mês"></button></div>
+            <div class="sb-semana" aria-hidden="true"><span class="fds">D</span><span>S</span><span>T</span><span>Q</span><span>Q</span><span>S</span><span class="fds">S</span></div>
+            <div class="sb-grade" id="ca-grade"></div>
+          </div>
+          <div class="lista-cal" id="ca-lista"></div>
+        </div>
+      </section>
+
+      <div class="indicador-home"></div>
+    </div>
+  </div>
+</div>
+
+<section class="controles" aria-label="Controles do protótipo">
+  <div class="controle"><h2>Composição</h2><div class="opcoes" data-grupo="comp"><button data-v="a">A: relógio em cima</button><button data-v="b">B: deck 3 x 3</button></div></div>
+  <div class="controle"><h2>Posição do iPhone</h2><div class="opcoes" data-grupo="posicao"><button data-v="horizontal">Deitado</button><button data-v="vertical">Em pé</button></div></div>
+  <div class="controle"><h2>Mac</h2><div class="opcoes" data-grupo="mac"><button data-v="on">Conectado</button><button data-v="off">Desconectado</button></div></div>
+  <div class="controle"><h2>Spotify</h2><div class="opcoes" data-grupo="spotify"><button data-v="tocando">Tocando</button><button data-v="pausado">Pausado</button><button data-v="fechado">Fechado</button></div></div>
+  <div class="controle"><h2>Agenda</h2><div class="opcoes" data-grupo="agenda"><button data-v="normal">Com eventos</button><button data-v="vazia">Vazia</button><button data-v="sem">Sem permissão</button></div></div>
+  <div class="controle"><h2>Quantidade de teclas</h2><div class="opcoes" data-grupo="qtd"><button data-v="poucas">4</button><button data-v="muitas">12 (carrossel)</button></div></div>
+  <div class="controle"><h2>Sessões esperando</h2><div class="opcoes" data-grupo="sessoes"><button data-v="5">5</button><button data-v="0">Nenhuma</button></div></div>
+</section>
+
+<script src="dados.js?v=34"></script>
+<script src="deck.js?v=39"></script>
+</body>
+</html>

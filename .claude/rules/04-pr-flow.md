@@ -1,0 +1,53 @@
+# PR Flow
+
+Every merge into `main` goes through a PR. No exceptions, even for a typo.
+
+## Before opening the PR
+
+1. **Branch:** `feat/<description>`, `fix/<description>`, `refactor/<description>`, `docs/<description>`, `chore/<description>`
+2. **Commits:** Conventional Commits (`feat:`, `fix:`, `refactor:`, `docs:`, `chore:`). Author `Leonardo Rejani`. NEVER mention AI.
+3. **Type check / build:** run the check for the touched stack (e.g. `tsc --noEmit`, `deno check`, `go build`, `pytest --collect-only`). Green before push.
+4. **Validators:** run locally via `scripts/validators/run-all.sh`. They block if they fail.
+5. **Equalization:** check `.claude/rules/02-pipeline-equalization.md` — were all the required layers touched?
+6. **Smoke test:** if you changed the behavior of a critical feature, simulate the end-to-end flow with realistic data before opening the PR.
+
+## PR template
+
+`.github/PULL_REQUEST_TEMPLATE.md` is mandatory. Always fill in:
+
+- **Touched layers** (list of layers from `02-pipeline-equalization.md`)
+- **Smoke test run** (which one, result)
+- **Breaks contract with a neighboring module?** (layers that need to produce the same result)
+- **Catalog a lesson?** (reference to the `docs/lessons/L-XXX-*.md` created)
+
+## Review
+
+- **Auto-review** runs via the GitHub Action `pr-auto-review.yml` (heuristic + Claude Code review of the diff)
+- **Human approval:** the maintainer via CODEOWNERS. Merge follows `.claude/rules/07-safe-merge.md` (double gate + `mergeStateStatus CLEAN`)
+- Auto-review can flag `request-changes` if it detects:
+  - Behavior change without a corresponding test
+  - Invariant violation (`.claude/rules/01-invariants.md`)
+  - Critical business rule changed without updating the canonical doc
+  - New contract (tool/endpoint/schema) without a complete definition
+  - A layer touching a neighboring module without ratifying it at the neighbor's callsite
+
+## Merge
+
+- Squash merge (clean history line on `main`)
+- The squash message follows Conventional Commits
+- Branch deleted after merge
+- Tag if it's a release: `v0.X.Y` (semver)
+
+## Post-merge — cataloging
+
+1. If the PR touched 3+ layers, create `docs/reference-cases/YYYY-MM-DD-title.md`
+2. If the PR fixed a bug, add an entry in `docs/lessons/L-XXX-title.md`
+3. If the PR established a new convention, turn it into a rule in `.claude/rules/` (and add a pointer in `CLAUDE.md`)
+4. Append to `build-log.md` (chronological line)
+
+## Anti-pattern
+
+❌ Direct merge without a PR (even the maintainer)
+❌ `--no-verify` to skip a hook that failed
+❌ Squash merge without editing the message (keeps the branch's bad commits)
+❌ Closing a PR without cataloging the lesson

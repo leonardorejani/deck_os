@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+# gh-pr-merge-safe.sh — gate: merge only with mergeStateStatus CLEAN.
+# Rule: .claude/rules/07-safe-merge.md
+#
+# usage: bash scripts/gh-pr-merge-safe.sh <PR> [extra args for gh pr merge]
+#   e.g.: bash scripts/gh-pr-merge-safe.sh 42 --squash --delete-branch
+#
+# bypass (very rare, requires documented owner sign-off):
+#   DECK_MERGE_UNSAFE=1 bash scripts/gh-pr-merge-safe.sh 42 --squash
+
+set -euo pipefail
+
+PR="${1:-}"
+if [ -z "$PR" ]; then
+  echo "usage: gh-pr-merge-safe.sh <PR_NUMBER> [--squash --delete-branch ...]" >&2
+  exit 2
+fi
+shift
+REPO="${PR_MERGE_REPO:-leonardorejani/deck_os}"
+
+STATE=$(gh pr view "$PR" -R "$REPO" --json mergeStateStatus,state \
+  -q '.mergeStateStatus + "|" + .state')
+MSS="${STATE%%|*}"
+ST="${STATE##*|}"
+
+if [ "$ST" != "OPEN" ]; then
+  echo "❌ PR #$PR is not OPEN (state=$ST). Aborted." >&2
+  exit 1
+fi
+
+if [ "$MSS" != "CLEAN" ]; then
+  if [ "${DECK_MERGE_UNSAFE:-}" = "1" ]; then
+    echo "⚠️  mergeStateStatus=$MSS — BYPASS active. Requires owner sign-off." >&2
+  else
+    echo "❌ mergeStateStatus=$MSS (expected CLEAN). Merge blocked." >&2
+    echo "── checks for PR #$PR ──" >&2
+    gh pr checks "$PR" -R "$REPO" >&2 || true
+    exit 1
+  fi
+fi
+
+echo "✅ PR #$PR mergeStateStatus=$MSS — merging."
+gh pr merge "$PR" -R "$REPO" "$@"

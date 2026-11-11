@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="200" viewBox="0 0 1280 200">
+<defs>
+<linearGradient id="cor" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#0E0E0E"/><stop offset="0.55" stop-color="#1B2A23"/><stop offset="1" stop-color="#2E6B52"/></linearGradient>
+<linearGradient id="volume" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".16"/><stop offset=".35" stop-color="#fff" stop-opacity="0"/><stop offset=".7" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".32"/></linearGradient>
+<filter id="grao" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" seed="7" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/><feComponentTransfer><feFuncA type="linear" slope=".09"/></feComponentTransfer></filter>
+<pattern id="riscas" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(-30)"><rect width="1" height="6" fill="#fff" opacity=".035"/></pattern>
+<clipPath id="forma"><path d="M 100.0 0 L 1180.0 0 A 100.0 100.0 0 0 1 1180.0 200 L 100.0 200 A 100.0 100.0 0 0 1 100.0 0 Z"/></clipPath>
+</defs>
+<g clip-path="url(#forma)">
+<rect width="1280" height="200" fill="url(#cor)"/>
+<rect width="1280" height="200" fill="url(#riscas)"/>
+<rect width="1280" height="200" filter="url(#grao)"/>
+<rect width="1280" height="200" fill="url(#volume)"/>
+</g>
+<path d="M 100.0 0 L 1180.0 0 A 100.0 100.0 0 0 1 1180.0 200 L 100.0 200 A 100.0 100.0 0 0 1 100.0 0 Z" fill="none" stroke="#4FD39A" stroke-opacity=".25" stroke-width="1.5"/>
+<text x="50%" y="88" text-anchor="middle" dominant-baseline="middle" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="68" font-weight="800" fill="#ECE8E0" letter-spacing="-1.5">Deck</text><text x="50%" y="142" text-anchor="middle" dominant-baseline="middle" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif" font-size="22" font-weight="500" fill="#E6EEF0" letter-spacing="0.3">Painel de mesa no iPhone que controla o Mac</text>
+</svg>

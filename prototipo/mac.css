@@ -1,0 +1,460 @@
+/*
+ * Deck no Mac, protótipo. Mesma identidade do iPhone: fundo quase preto da tela, cartões em
+ * --superficie com --raio-card, teclas iguais às do celular, verde só para o que está ligado e azul
+ * só no botão principal. Tokens do tatile. Os do Deck repetem os valores de deck.css.
+ */
+:root {
+  /* identidade do Deck (iguais a deck.css) */
+  --tela-fundo: #0E0E0E; --moldura-borda: #2A2A2A; --led: var(--sucesso);
+  --raio-icone: 10px; --tecla-icone: 44px; --selo: 22px; --sombra-kbd: inset 0 -2px 0 rgb(0 0 0 / .4);
+  /* só do Mac */
+  --mesa-larg: 1280px; --mesa-alt: 800px; --menus-alt: 28px;
+  --janela-larg: 1040px; --janela-alt: 700px; --lateral: 220px; --popover-larg: 320px;
+  --codigo-tam: 48px;   /* código de pareamento: lido de longe, do iPhone na mão */
+  --ini-larg: 880px; --ini-alt: 660px;
+  --app-busca: 52px; --app-busca-col: 100px;   /* ícones da busca de app, grandes para reconhecer de relance */
+  --modal-larg: 540px;
+  --tecla-mac: 100px; --ic-sec: 26px; --qr: 152px; --ic-conta: 28px;
+  --papel-1: #1E2A44; --papel-2: #2E2238; --papel-3: #0B0F17;   /* fundo da mesa do Mac */
+  --menus-fundo: rgb(20 20 24 / .55); --menus-ativo: rgb(255 255 255 / .2);
+  --semaforo-1: #FF5F57; --semaforo-2: #FEBC2E; --semaforo-3: #28C840;
+  --alvo: 44px; --alvo-sm: 32px;               /* mouse: 32 basta (tatile, forma 5) */
+  --fino: 2px; --micro: 4px; --mini: 6px;
+  --raio-fino: 2px; --raio-ic-p: 8px;
+  --branco: #fff; --pop-direita: 120px;
+  --rolagem: rgb(255 255 255 / .22);   /* barra de rolagem: fina, sem trilho, como a do macOS */
+  --veu-sis: rgb(0 0 0 / .35);   /* fundo atrás do alerta do macOS */
+  --escala: 1;
+}
+* { box-sizing: border-box }
+html, body { margin: 0 }
+body { min-height: 100dvh; display: grid; justify-items: center; align-content: start; padding: var(--secao) var(--margem); gap: var(--pad); background: var(--fundo); color: var(--texto); font-family: var(--fonte) }
+.cabeca { max-width: var(--mesa-larg); width: 100% }
+.cabeca h1 { font-size: var(--texto-xl); margin: 0 0 var(--item) }
+.cabeca p { color: var(--texto-2); margin: 0; max-width: 90ch }
+.cabeca a { color: var(--destaque) }
+.palco { width: 100%; max-width: var(--mesa-larg); display: grid; justify-items: start; overflow: hidden }
+.controles { max-width: var(--mesa-larg); width: 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--grade) }
+.controle { background: var(--superficie); box-shadow: var(--sombra-1); border-radius: var(--raio-card); padding: var(--pad) }
+.controle h2 { font-size: var(--texto-sm); color: var(--texto-2); margin: 0 0 var(--item); font-weight: 600; letter-spacing: 0 }
+.opcoes { display: flex; flex-wrap: wrap; gap: var(--item) }
+.opcoes button { font: inherit; font-size: var(--texto-sm); min-height: var(--alvo-sm); padding: 0 var(--icone); border-radius: var(--raio-pilula); border: 0; background: var(--superficie-2); color: var(--texto); cursor: pointer }
+.opcoes button[aria-pressed="true"] { background: var(--destaque); color: var(--destaque-texto) }
+
+/* ---------- a tela do Mac ---------- */
+.mesa {
+  /* coluna de espaço do Deck no Mac: mesma lógica do celular, um degrau maior para mouse e tela grande */
+  --margem: 28px; --pad: 20px; --secao: 28px; --linha: 52px; --icone: 12px; --grade: 12px; --item: 8px;
+  width: var(--mesa-larg); height: var(--mesa-alt); position: relative; overflow: hidden; border-radius: var(--raio-card);
+  transform: scale(var(--escala)); transform-origin: 0 0; flex: none; font-size: var(--texto-sm);
+  background: radial-gradient(120% 90% at 15% 10%, var(--papel-2), transparent 60%), radial-gradient(100% 80% at 90% 100%, var(--papel-1), transparent 60%), var(--papel-3);
+}
+.barra-menus { position: absolute; inset: 0 0 auto; height: var(--menus-alt); display: flex; align-items: center; justify-content: space-between; padding: 0 var(--icone); background: var(--menus-fundo); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); z-index: 5 }
+.app-frente { display: flex; gap: var(--pad) }
+.status-menus { display: flex; align-items: center; gap: var(--item) }
+.item-menu { height: calc(var(--menus-alt) - 4px); min-width: 28px; padding: 0 var(--item); border-radius: var(--raio-sm); display: inline-grid; place-items: center; border: 0; background: none; color: var(--texto); font: inherit }
+button.item-menu { cursor: pointer }
+.item-menu svg { width: 16px; height: 16px }
+.item-menu[aria-expanded="true"] { background: var(--menus-ativo) }
+.relogio-menu { font-variant-numeric: tabular-nums }
+
+/* logo: o ícone do app (A-3). Na barra de menus, o desenho de uma cor só */
+.logo { width: 36px; height: 36px; display: block }
+.logo.grande { width: 96px; height: 96px; filter: drop-shadow(0 8px 30px var(--sucesso-suave)) }
+#b-deck svg { width: 17px; height: 17px }
+
+/* ---------- cartão do Deck (o mesmo do celular) ---------- */
+.cartao { background: var(--superficie); box-shadow: var(--sombra-1); border-radius: var(--raio-card); padding: var(--pad); min-width: 0 }
+.ponto { width: 8px; height: 8px; border-radius: 50%; background: var(--texto-3); flex: none; display: inline-block }
+.ponto.on { background: var(--led); box-shadow: 0 0 6px var(--led) }
+
+/* ---------- menu do Deck (popover) ---------- */
+.popover { position: absolute; top: calc(var(--menus-alt) + 6px); right: var(--pop-direita); width: var(--popover-larg); z-index: 8; background: var(--tela-fundo); border: 1px solid var(--moldura-borda); border-radius: var(--raio-card); box-shadow: var(--sombra-3); padding: var(--icone); display: grid; gap: var(--item); transform-origin: top center; animation: abre-pop var(--mov-padrao) var(--curva-entra) }
+@keyframes abre-pop { from { opacity: 0; scale: .96; translate: 0 -4px } }
+.pop-topo { display: grid; grid-template-columns: auto 1fr; gap: 0 var(--icone); align-items: center; padding: var(--micro) var(--micro) var(--item) }
+.pop-topo .logo { grid-row: span 2 }
+.pop-topo b { font-size: var(--texto-base) }
+.pop-topo > span:last-child { color: var(--texto-2); font-size: var(--texto-xs); display: flex; align-items: center; gap: var(--item) }
+.pop-bloco { background: var(--superficie); box-shadow: var(--sombra-1); border-radius: var(--raio-card); padding: var(--icone); display: grid; gap: var(--item) }
+.pop-bloco .rotulo { font-size: var(--texto-xs); color: var(--texto-2); font-weight: 600 }
+.pop-passo { color: var(--texto-2) }
+.pop-alerta { display: flex; align-items: center; gap: var(--icone); width: 100%; text-align: left; font: inherit; color: var(--aviso); background: var(--superficie); border: 0; border-radius: var(--raio); padding: var(--item) var(--icone); min-height: var(--alvo-sm); cursor: pointer }
+.pop-alerta svg { width: 16px; height: 16px; flex: none }
+.pop-sep { height: 1px; background: var(--borda); margin: var(--micro) var(--item) }
+.pop-item { display: flex; justify-content: space-between; align-items: center; width: 100%; min-height: var(--alvo-sm); padding: 0 var(--item); border: 0; border-radius: var(--raio-sm); background: none; color: var(--texto); font: inherit; cursor: pointer; text-align: left }
+.pop-item kbd { font: inherit; color: var(--texto-2) }
+
+/* ---------- janela de Ajustes ---------- */
+.janela { position: absolute; left: calc((var(--mesa-larg) - var(--janela-larg)) / 2); top: calc(var(--menus-alt) + 36px); width: var(--janela-larg); height: var(--janela-alt); display: grid; grid-template-columns: var(--lateral) minmax(0, 1fr); background: var(--tela-fundo); border: 1px solid var(--moldura-borda); border-radius: var(--raio-card); box-shadow: var(--sombra-3); overflow: hidden; z-index: 4; animation: abre-jan var(--mov-padrao) var(--curva-entra) }
+@keyframes abre-jan { from { opacity: 0; scale: .98 } }
+.janela[hidden], .popover[hidden], .ini[hidden] { display: none }
+.lateral { border-right: 1px solid var(--borda); padding: var(--icone) var(--item); display: grid; grid-template-rows: auto 1fr auto; gap: var(--pad); min-height: 0 }
+.semaforo { display: flex; gap: var(--item); padding: var(--item) var(--item) 0 }
+.semaforo i { width: 12px; height: 12px; border-radius: 50%; background: var(--semaforo-2) }
+.semaforo i:first-child { background: var(--semaforo-1); cursor: pointer }
+.semaforo i:last-child { background: var(--semaforo-3) }
+nav { display: grid; align-content: start; gap: var(--fino) }
+nav button { display: grid; grid-template-columns: var(--ic-sec) 1fr auto; align-items: center; gap: var(--icone); min-height: 40px; padding: 0 var(--item); border: 0; border-radius: var(--raio); background: none; color: var(--texto-2); font: inherit; text-align: left; cursor: pointer; transition: background var(--mov-rapido) var(--curva-move), color var(--mov-rapido) var(--curva-move) }
+nav button[aria-current="page"] { background: var(--superficie); box-shadow: var(--sombra-1); color: var(--texto); font-weight: 600 }
+nav .grupo-nav { height: var(--item) }
+.ic-sec { width: var(--ic-sec); height: var(--ic-sec); border-radius: var(--raio-ic-p); display: grid; place-items: center; background: var(--superficie-2); color: var(--texto) }
+.ic-sec svg { width: 15px; height: 15px }
+nav button[aria-current="page"] .ic-sec { color: var(--led) }
+.selo-nav { min-width: 20px; height: 20px; padding: 0 var(--mini); border-radius: var(--raio-pilula); background: var(--perigo); color: var(--fundo); font-size: var(--texto-xs); font-weight: 700; display: grid; place-items: center; font-variant-numeric: tabular-nums }
+.conteudo { display: grid; grid-template-rows: auto minmax(0, 1fr); min-width: 0; min-height: 0 }
+.j-topo { display: flex; align-items: center; justify-content: space-between; gap: var(--icone); padding: var(--pad) var(--margem) var(--icone) }
+.j-topo h2 { margin: 0; font-size: var(--texto-lg) }
+.sincronia { color: var(--texto-2); font-size: var(--texto-xs); display: flex; align-items: center; gap: var(--item); transition: color var(--mov-padrao) var(--curva-move) }
+.sincronia.agora { color: var(--led) }
+.j-corpo { overflow: auto; overscroll-behavior: contain; padding: var(--item) var(--margem) var(--margem); display: grid; align-content: start; gap: var(--secao); scrollbar-width: thin }
+
+/* grupos e linhas */
+.grupo { display: grid; gap: var(--item) }
+.grupo > h3 { margin: 0; font-size: var(--texto-sm); color: var(--texto-2); font-weight: 600; display: flex; gap: var(--item); align-items: baseline; flex-wrap: wrap }
+.grupo > h3 small { font-weight: 400; font-size: var(--texto-xs); color: var(--texto-2) }
+.nota, .grupo > .nota { margin: 0; font-size: var(--texto-xs); color: var(--texto-2) }
+.linhas { background: var(--superficie); box-shadow: var(--sombra-1); border-radius: var(--raio-card); padding: 0 var(--pad) }
+.linha-a { display: flex; align-items: center; gap: var(--icone); min-height: var(--linha); padding: var(--icone) 0 }
+.linha-a + .linha-a { border-top: 1px solid var(--borda) }
+.linha-a .txt { flex: 1; min-width: 0; display: grid; gap: var(--fino) }
+.linha-a .txt small { color: var(--texto-2); font-size: var(--texto-xs) }
+.linha-a img.ic { width: var(--ic-conta); height: var(--ic-conta); border-radius: var(--raio-ic-p) }
+.estado-ok { color: var(--led); display: inline-flex; align-items: center; gap: var(--mini); font-size: var(--texto-sm) }
+.estado-falta { color: var(--aviso); font-size: var(--texto-sm) }
+.estado-ok svg { width: 14px; height: 14px }
+.falta-perm { display: inline-flex; align-items: center; gap: var(--mini); justify-self: start; border: 0; background: none; padding: 0; margin-top: var(--micro); font: inherit; font-size: var(--texto-xs); color: var(--aviso); cursor: pointer }
+.falta-perm svg { width: 13px; height: 13px }
+.chips { display: flex; flex-wrap: wrap; gap: var(--item); margin-top: var(--item) }
+.chip { font: inherit; font-size: var(--texto-xs); min-height: 28px; padding: 0 var(--icone); border-radius: var(--raio-pilula); border: 0; background: var(--superficie-2); color: var(--texto-2); cursor: pointer }
+.chip[aria-pressed="true"] { background: var(--sucesso-suave); color: var(--texto); box-shadow: inset 0 0 0 1px var(--led) }
+.entrada { font: inherit; font-size: var(--texto-sm); min-height: var(--alvo-sm); border-radius: var(--raio-sm); border: 1px solid var(--borda); background: var(--tela-fundo); color: var(--texto); padding: 0 var(--icone); min-width: 0 }
+.entrada:focus-visible { outline: 2px solid var(--destaque); outline-offset: 1px }
+
+/* interruptor (verde = ligado, como a tecla acesa) */
+.chave { --l: 38px; --a: 22px; width: var(--l); height: var(--a); flex: none; border-radius: var(--raio-pilula); border: 0; padding: var(--fino); background: var(--superficie-2); cursor: pointer; display: grid; transition: background var(--mov-rapido) var(--curva-move) }
+.chave::after { content: ""; width: calc(var(--a) - 4px); height: calc(var(--a) - 4px); border-radius: 50%; background: var(--branco); box-shadow: var(--sombra-1); transition: translate var(--mov-rapido) var(--curva-move) }
+.chave[aria-checked="true"] { background: var(--led) }
+.chave[aria-checked="true"]::after { translate: calc(var(--l) - var(--a)) 0 }
+
+.btn { font: inherit; font-size: var(--texto-sm); font-weight: 600; min-height: var(--alvo-sm); padding: 0 var(--icone); border-radius: var(--raio); border: 0; cursor: pointer; white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; gap: var(--item); transition: transform var(--mov-rapido) var(--curva-move) }
+a.btn { text-decoration: none }
+.btn:active { transform: scale(.97) }
+.btn:disabled { opacity: .4; cursor: default; transform: none }
+.btn svg { width: 15px; height: 15px }
+.btn.primario { background: var(--destaque); color: var(--destaque-texto) }
+.btn.secundario { background: var(--superficie-2); color: var(--texto) }
+.btn.perigo { background: none; color: var(--perigo); padding: 0 var(--item) }
+.btn.link { background: none; color: var(--texto-2) }
+.segmentos { --folga: 3px; display: inline-grid; grid-auto-flow: column; grid-auto-columns: 1fr; background: var(--tela-fundo); border-radius: var(--raio); padding: var(--folga); gap: var(--folga) }
+.segmentos button { font: inherit; font-size: var(--texto-sm); min-height: 28px; border: 0; border-radius: calc(var(--raio) - var(--folga)); background: none; color: var(--texto-2); cursor: pointer; padding: 0 var(--icone); white-space: nowrap }
+.segmentos button[aria-pressed="true"] { background: var(--superficie-2); color: var(--texto); box-shadow: var(--sombra-1) }
+.campo { display: grid; gap: var(--item); align-content: start }
+.campo label, .campo .rotulo { font-size: var(--texto-xs); color: var(--texto-2); font-weight: 600 }
+.campo input, .editor-mac textarea { font: inherit; font-size: var(--texto-sm); min-height: var(--alvo-sm); border-radius: var(--raio-sm); border: 1px solid var(--borda); background: var(--tela-fundo); color: var(--texto); padding: 0 var(--icone); width: 100% }
+.editor-mac textarea { padding: var(--item) var(--icone); font-family: ui-monospace, monospace; resize: vertical; min-height: 64px }
+.campo input:focus-visible, .editor-mac textarea:focus-visible, .busca:focus-within { outline: 2px solid var(--destaque); outline-offset: 1px }
+.ajuda { font-size: var(--texto-xs); color: var(--texto-2) }
+code { font-family: ui-monospace, monospace; font-size: .95em; background: var(--superficie-2); border-radius: var(--raio-fino); padding: 0 var(--micro) }
+
+/* composição */
+.comps, .comps-ini { display: grid; grid-template-columns: 1fr 1fr; gap: var(--grade) }
+.comp { display: grid; gap: var(--icone); padding: var(--icone); border-radius: var(--raio-card); border: 0; background: var(--superficie); box-shadow: var(--sombra-1); color: var(--texto); font: inherit; text-align: left; cursor: pointer }
+.comp[aria-pressed="true"] { box-shadow: inset 0 0 0 2px var(--led), 0 0 10px -2px var(--led); background: var(--sucesso-suave) }
+.comp small { color: var(--texto-2); font-size: var(--texto-xs) }
+.mini-tela { aspect-ratio: 932 / 430; background: var(--tela-fundo); border-radius: var(--raio-ic-p); padding: var(--mini); display: grid; gap: var(--micro) }
+.mini-tela i { background: var(--superficie-2); border-radius: var(--raio-fino); display: block }
+.mini-tela .r { background: var(--texto-3) }
+.mini-a { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr 1.1fr }
+.mini-a .k { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(5, 1fr) 2px 1fr; gap: var(--micro); background: none }
+.mini-a .k b, .mini-b .k b { background: var(--superficie-2); border-radius: var(--raio-fino) }
+.mini-b { grid-template-columns: 1fr 1fr }
+.mini-b .k { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--micro); background: none }
+.mini-b .e { display: grid; gap: var(--micro); background: none }
+
+/* ---------- teclas: a mesma do iPhone ---------- */
+.tecla-m {
+  position: relative; display: grid; place-items: center; align-content: center; gap: var(--item);
+  width: var(--tecla-mac); height: var(--tecla-mac); background: var(--superficie); box-shadow: var(--sombra-1); border-radius: var(--raio-card);
+  border: 0; color: var(--texto); font: inherit; cursor: grab; padding: var(--icone) var(--item) var(--pad);
+  transition: transform var(--mov-rapido) var(--curva-move), background var(--mov-rapido) var(--curva-move), box-shadow var(--mov-rapido) var(--curva-move);
+}
+.tecla-m:active { transform: scale(.97) }
+.tecla-m img, .tecla-m .svg { width: var(--tecla-icone); height: var(--tecla-icone); border-radius: var(--raio-icone); pointer-events: none; -webkit-user-drag: none }
+.tecla-m .svg { display: grid; place-items: center; background: var(--superficie-2); color: var(--texto) }
+.tecla-m .svg svg { width: 22px; height: 22px }
+.svg.letra { font-size: var(--texto-lg); font-weight: 700; color: var(--texto-2) }
+.tecla-m .nome { font-size: var(--texto-xs); color: var(--texto-2); line-height: 1.2; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.tecla-m .led { position: absolute; bottom: var(--item); left: 50%; translate: -50% 0; width: 18px; height: 3px; border-radius: var(--raio-pilula); background: var(--borda) }
+.tecla-m.acesa { background: var(--sucesso-suave); box-shadow: inset 0 0 0 2px var(--led), 0 0 10px -2px var(--led) }
+.tecla-m.acesa .led { width: 36px; height: 4px; background: var(--led); box-shadow: 0 0 10px 1px var(--led) }
+.tecla-m.acesa .nome { color: var(--texto) }
+.tecla-m .editar { display: none; position: absolute; top: var(--item); left: var(--item); width: 22px; height: 22px; border-radius: 50%; background: var(--texto-2); color: var(--fundo); place-items: center }
+.tecla-m .editar svg { width: 12px; height: 12px }
+.tecla-m[aria-selected="true"] { background: var(--superficie-2) }
+.tecla-m[aria-selected="true"] .editar { display: grid }
+.tecla-m[aria-selected="true"] .nome { color: var(--texto) }
+.tecla-m.arrastando { opacity: .35 }
+.tecla-m.nova { background: transparent; box-shadow: inset 0 0 0 1.5px var(--borda); color: var(--texto-2); cursor: pointer }
+.tecla-m.nova .svg { background: none; color: var(--texto-2) }
+.abas-pag { display: flex; width: fit-content; gap: var(--fino); padding: var(--fino); margin-bottom: var(--icone); border-radius: var(--raio); background: var(--superficie) }
+.aba-pag { font: inherit; font-size: var(--texto-sm); min-height: var(--alvo-sm); padding: 0 var(--icone); border: 0; border-radius: var(--raio-sm); background: none; color: var(--texto-2); cursor: pointer; transition: background var(--mov-rapido) var(--curva-move), color var(--mov-rapido) var(--curva-move) }
+.aba-pag[aria-selected="true"] { background: var(--superficie-2); color: var(--texto); font-weight: 600; box-shadow: var(--sombra-1) }
+.aba-pag.soltar { box-shadow: inset 0 0 0 1.5px var(--led); color: var(--texto) }
+.grade-mac { display: grid; grid-auto-flow: column; grid-template-rows: var(--tecla-mac); grid-auto-columns: var(--tecla-mac); justify-content: start; gap: var(--item) }
+
+/* editor em 3 passos */
+.editor-mac { display: grid; gap: var(--pad) }
+.ed-topo { display: grid; grid-template-columns: auto 1fr auto; gap: var(--pad); align-items: center; padding-bottom: var(--pad); border-bottom: 1px solid var(--borda) }
+.ed-topo .previa .tecla-m { cursor: default; background: var(--tela-fundo) }
+.ed-nome { display: grid; gap: var(--micro); min-width: 0 }
+.entrada.titulo { font-size: var(--texto-lg); font-weight: 700; min-height: 40px; border-color: transparent; background: none; padding: 0 var(--item); margin-left: calc(-1 * var(--item)) }
+.entrada.titulo:focus { border-color: var(--borda); background: var(--tela-fundo) }
+.ed-topo small { color: var(--texto-2); padding-left: var(--fino) }
+.passo { display: grid; gap: var(--icone) }
+.passo h4 { margin: 0; font-size: var(--texto-sm); display: flex; align-items: center; gap: var(--item) }
+.passo h4 i { font-style: normal; width: 22px; height: 22px; border-radius: 50%; background: var(--superficie-2); color: var(--texto-2); display: grid; place-items: center; font-size: var(--texto-xs); font-variant-numeric: tabular-nums }
+.tipos { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--item) }
+.paineis-esc { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--item) }
+.tipo { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: var(--icone); padding: var(--icone); border-radius: var(--raio); border: 0; background: var(--tela-fundo); color: var(--texto); font: inherit; text-align: left; cursor: pointer; transition: background var(--mov-rapido) var(--curva-move), box-shadow var(--mov-rapido) var(--curva-move) }
+.tipo span { display: grid; gap: var(--fino); min-width: 0 }
+.tipo small { color: var(--texto-2); font-size: var(--texto-xs); line-height: 1.35 }
+.tipo .ic-tipo { width: 28px; height: 28px; border-radius: var(--raio-ic-p); background: var(--superficie-2); display: grid; place-items: center }
+.tipo .ic-tipo svg { width: 16px; height: 16px }
+.tipo[aria-pressed="true"] { background: var(--sucesso-suave); box-shadow: inset 0 0 0 2px var(--led) }
+.tipo[aria-pressed="true"] .ic-tipo { color: var(--led) }
+.busca { display: flex; align-items: center; gap: var(--item); min-height: 36px; padding: 0 var(--icone); border-radius: var(--raio); border: 1px solid var(--borda); background: var(--tela-fundo); color: var(--texto-2) }
+.busca svg { width: 16px; height: 16px; flex: none }
+.busca input { flex: 1; border: 0; background: none; color: var(--texto); font: inherit; font-size: var(--texto-sm); outline: 0; min-height: 34px }
+.lista-busca { max-height: 300px; overflow: auto; overscroll-behavior: contain; display: grid; gap: var(--item); align-content: start; padding-right: var(--micro); scrollbar-width: thin }
+.lista-busca h5 { margin: var(--micro) 0 0; font-size: var(--texto-xs); color: var(--texto-2); font-weight: 600 }
+.grade-apps { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--app-busca-col), 1fr)); gap: var(--micro) }
+.grade-apps button { display: grid; justify-items: center; gap: var(--mini); padding: var(--item) var(--micro); border: 0; border-radius: var(--raio); background: none; color: var(--texto-2); font: inherit; font-size: var(--texto-xs); cursor: pointer }
+.grade-apps img, .grade-apps .svg { width: var(--app-busca); height: var(--app-busca); border-radius: var(--raio-icone) }
+.grade-apps .svg { display: grid; place-items: center; background: var(--superficie-2) }
+.grade-apps .svg.letra { font-size: var(--texto-lg) }
+.grade-apps span:last-child { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.grade-apps button[aria-pressed="true"], .lista-atalhos button[aria-pressed="true"] { background: var(--sucesso-suave); color: var(--texto); box-shadow: inset 0 0 0 1.5px var(--led) }
+.lista-atalhos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--micro) }
+.lista-atalhos button { display: flex; align-items: center; gap: var(--item); min-height: 36px; padding: 0 var(--icone); border: 0; border-radius: var(--raio); background: var(--tela-fundo); color: var(--texto); font: inherit; font-size: var(--texto-sm); cursor: pointer; text-align: left }
+.lista-atalhos svg { width: 15px; height: 15px; color: var(--texto-2) }
+.sem-achar { margin: 0; color: var(--texto-2); padding: var(--pad) 0 }
+.aparencia { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: var(--pad) }
+.icones { display: grid; grid-template-columns: repeat(auto-fill, 36px); gap: var(--mini) }
+.icones button { width: 36px; height: 36px; border-radius: var(--raio-ic-p); border: 0; padding: 0; background: var(--superficie-2); display: grid; place-items: center; color: var(--texto); cursor: pointer }
+.icones button img { width: 36px; height: 36px; border-radius: var(--raio-ic-p) }
+.icones button[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--led) }
+.icones svg { width: 18px; height: 18px }
+.gravador { display: flex; align-items: center; gap: var(--item); flex-wrap: wrap; min-height: 44px; padding: var(--micro) var(--item); border: 1px dashed var(--borda); border-radius: var(--raio); background: var(--tela-fundo); cursor: pointer; font: inherit; color: var(--texto-2); width: 100% }
+.gravador.ouvindo { border: 1px solid var(--led); color: var(--texto); box-shadow: 0 0 10px -2px var(--led) }
+.gravador kbd { font: inherit; font-size: var(--texto-xs); color: var(--texto); min-width: 28px; height: 28px; padding: 0 var(--item); display: grid; place-items: center; border-radius: var(--raio-sm); background: var(--superficie-2); box-shadow: var(--sombra-kbd) }
+.teste-saida { font-family: ui-monospace, monospace; font-size: var(--texto-xs); color: var(--texto-2) }
+.rodape-ed { display: flex; justify-content: space-between; align-items: center; gap: var(--item) }
+
+/* ---------- contas de IA: painel ---------- */
+.resumo-uso { margin: 0; color: var(--texto-2) }
+.resumo-uso b { color: var(--texto) }
+.dash { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--grade) }
+.conta { display: grid; gap: var(--item); align-content: start }
+.conta header { display: grid; grid-template-columns: var(--ic-conta) minmax(0, 1fr) auto; gap: var(--item); align-items: center }
+.conta header img { width: var(--ic-conta); height: var(--ic-conta); border-radius: var(--raio-ic-p) }
+.nome-conta { font-weight: 600; border-color: transparent; background: none; padding: 0 var(--micro) }
+.nome-conta:focus { border-color: var(--borda); background: var(--tela-fundo) }
+.no-iphone { display: flex; align-items: center; gap: var(--item); font-size: var(--texto-xs); color: var(--texto-2) }
+.servico { color: var(--texto-2); font-size: var(--texto-xs) }
+.numero { display: flex; align-items: baseline; gap: var(--item); margin-top: var(--item) }
+.numero b { font-size: var(--texto-2xl); font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1 }
+.numero span { color: var(--texto-2) }
+.trilho { height: 6px; border-radius: var(--raio-pilula); background: var(--superficie-2); overflow: hidden; display: block }
+.trilho i { display: block; height: 100%; border-radius: var(--raio-pilula); background: var(--texto-2) }
+.conta.alto .numero b { color: var(--aviso) } .conta.alto .trilho i { background: var(--aviso) }
+.conta.cheio .numero b { color: var(--perigo) } .conta.cheio .trilho i { background: var(--perigo) }
+.conta.oculta { opacity: .55 }
+.conta footer { display: flex; justify-content: space-between; align-items: center; color: var(--texto-2); font-size: var(--texto-xs); margin-top: var(--micro) }
+.conta.nova { border: 0; background: transparent; box-shadow: inset 0 0 0 1.5px var(--borda); color: var(--texto-2); font: inherit; cursor: pointer; place-content: center; justify-items: center; min-height: 120px }
+.conta.nova svg { width: 22px; height: 22px }
+.conta.nova b { color: var(--texto) }
+.nota-somar { margin: var(--item) 0 0; font-size: var(--texto-xs); color: var(--texto-2) }
+
+/* adicionar conta: janela por cima dos Ajustes */
+.modal-j { position: absolute; inset: 0; z-index: 6; display: grid; place-items: center; background: var(--veu-sis); padding: var(--pad) }
+.modal-j[hidden] { display: none }
+.modal-j.no-ini { inset: auto; left: calc((var(--mesa-larg) - var(--ini-larg)) / 2); top: calc(var(--menus-alt) + 40px); width: var(--ini-larg); height: var(--ini-alt); border-radius: var(--raio-card); z-index: 9 }
+.modal-caixa { width: min(var(--modal-larg), 100%); max-height: 100%; overflow: auto; overscroll-behavior: contain; background: var(--tela-fundo); border: 1px solid var(--moldura-borda); border-radius: var(--raio-card); box-shadow: var(--sombra-3); padding: var(--pad); display: grid; gap: var(--pad); animation: abre-pop var(--mov-padrao) var(--curva-entra) }
+.modal-caixa > header { display: flex; align-items: center; justify-content: space-between }
+.modal-caixa h3 { margin: 0; font-size: var(--texto-lg) }
+.fechar-c { width: var(--alvo-sm); height: var(--alvo-sm); border: 0; border-radius: 50%; background: var(--superficie-2); color: var(--texto-2); display: grid; place-items: center; cursor: pointer }
+.fechar-c svg { width: 16px; height: 16px; rotate: 45deg }
+.modal-caixa > footer { display: flex; justify-content: flex-end; gap: var(--item) }
+.servicos { display: grid; grid-template-columns: 1fr 1fr; gap: var(--item) }
+.serv { display: flex; align-items: center; gap: var(--icone); min-height: var(--alvo); padding: 0 var(--icone); border: 0; border-radius: var(--raio); background: var(--superficie); color: var(--texto-2); font: inherit; font-size: var(--texto-sm); font-weight: 600; cursor: pointer }
+.serv img { width: var(--ic-conta); height: var(--ic-conta) }
+.serv[aria-pressed="true"] { background: var(--sucesso-suave); color: var(--texto); box-shadow: inset 0 0 0 1.5px var(--led) }
+.bloco-c { display: grid; gap: var(--item) }
+.bloco-c h4 { margin: 0; font-size: var(--texto-xs); color: var(--texto-2); font-weight: 600 }
+.passos-c { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--icone); counter-reset: passo }
+.passos-c li { display: grid; grid-template-columns: var(--selo) minmax(0, 1fr); column-gap: var(--icone); row-gap: var(--item); counter-increment: passo }
+.passos-c li::before { content: counter(passo); grid-row: span 3; width: var(--selo); height: var(--selo); border-radius: 50%; background: var(--superficie-2); color: var(--texto-2); font-size: var(--texto-xs); font-weight: 700; display: grid; place-items: center; font-variant-numeric: tabular-nums }
+.passos-c li > * { grid-column: 2 }
+.passos-c .txt { display: grid; gap: var(--fino) }
+.passos-c .txt b { font-size: var(--texto-sm) }
+.passos-c .txt small { color: var(--texto-2); font-size: var(--texto-xs); line-height: 1.4 }
+.cmd { display: flex; align-items: center; gap: var(--item) }
+.cmd code { flex: 1; min-width: 0; min-height: var(--alvo-sm); display: flex; align-items: center; padding: 0 var(--icone); border-radius: var(--raio-sm); background: var(--superficie); font-size: var(--texto-sm) }
+.campo-token { display: flex; gap: var(--item) }
+.campo-token .entrada { flex: 1; font-family: ui-monospace, monospace }
+.entrada[aria-invalid="true"] { border-color: var(--perigo) }
+.erro-c { margin: 0; min-height: 1.4em; font-size: var(--texto-xs); color: var(--perigo) }   /* espaço reservado: o erro aparece sem empurrar nada */
+.esperando { margin: 0; min-height: 1.4em; display: flex; align-items: center; gap: var(--item); font-size: var(--texto-xs); color: var(--texto-2) }
+
+/* pareamento */
+.parear { display: grid; grid-template-columns: var(--qr) minmax(0, 1fr); gap: var(--pad); background: var(--superficie); box-shadow: var(--sombra-1); border-radius: var(--raio-card); padding: var(--pad) }
+.qr { width: var(--qr); height: var(--qr); background: var(--branco); border-radius: var(--raio-sm); padding: var(--item) }
+.qr svg { width: 100%; height: 100%; display: block }
+.parear-dados { display: grid; gap: var(--pad); align-content: center }
+.codigo-linha { display: grid; gap: var(--item) }
+.codigo-linha small { color: var(--texto-2) }
+.passos-n { list-style: none; margin: var(--item) 0; padding: 0; display: grid; gap: var(--icone); color: var(--texto-2) }
+.passos-n li { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: var(--icone); align-items: start }
+.passos-n i { font-style: normal; width: 22px; height: 22px; border-radius: 50%; background: var(--superficie-2); color: var(--texto); display: grid; place-items: center; font-size: var(--texto-xs); font-variant-numeric: tabular-nums }
+.passos-n span { padding-top: var(--fino) }
+.passos-n b { color: var(--texto) }
+.endereco { font-family: ui-monospace, monospace; font-size: var(--texto-xs); background: var(--tela-fundo); border-radius: var(--raio-sm); padding: var(--item) var(--icone); display: flex; justify-content: space-between; gap: var(--item); align-items: center }
+.codigo { font-size: var(--codigo-tam); font-weight: 700; letter-spacing: .14em; font-variant-numeric: tabular-nums; line-height: 1 }
+.girando { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--borda); border-top-color: var(--texto); animation: girar 900ms linear infinite; flex: none }
+@keyframes girar { to { rotate: 360deg } }
+
+/* ---------- configuração inicial ---------- */
+.ini { position: absolute; left: calc((var(--mesa-larg) - var(--ini-larg)) / 2); top: calc(var(--menus-alt) + 40px); width: var(--ini-larg); height: var(--ini-alt); z-index: 7; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; background: radial-gradient(80% 60% at 50% 0%, var(--sucesso-suave), transparent 70%), var(--tela-fundo); border: 1px solid var(--moldura-borda); border-radius: var(--raio-card); box-shadow: var(--sombra-3); overflow: hidden; animation: abre-jan var(--mov-lento) var(--curva-entra) }
+.ini-barra { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: var(--mini); padding: var(--pad) var(--secao) 0 }
+.ini-barra i { height: 4px; border-radius: var(--raio-pilula); background: var(--superficie-2); transition: background var(--mov-padrao) var(--curva-move) }
+.ini-barra i.cheia { background: var(--led); box-shadow: 0 0 6px var(--led) }
+.ini-corpo { padding: var(--secao) var(--secao) var(--pad); overflow: auto; overscroll-behavior: contain; display: grid; align-content: center; justify-items: center; text-align: center; gap: var(--pad) }   /* tudo centralizado, na largura e na altura */
+.ini-corpo > h2 { margin: 0; font-size: var(--texto-xl); text-wrap: balance }
+.ini-corpo > p { margin: 0; color: var(--texto-2); max-width: 56ch; text-wrap: balance }
+.ini-corpo > * { max-width: 100% }
+.ini-centro { display: grid; justify-items: center; text-align: center; gap: var(--pad) }
+.ini-centro h2 { margin: var(--item) 0 0; font-size: var(--texto-2xl); text-wrap: balance }
+.ini-centro p { margin: 0; color: var(--texto-2); max-width: 46ch; text-wrap: balance }
+.ini footer { display: flex; align-items: center; gap: var(--item); padding: var(--pad) var(--secao); border-top: 1px solid var(--borda) }
+.ini footer .espaco { flex: 1 }
+.ini footer .btn { min-height: 36px; padding: 0 var(--pad) }
+.esperando { display: flex; align-items: center; gap: var(--item); color: var(--texto-2) }
+.esperando.ok { color: var(--led) }
+.esperando svg { width: 16px; height: 16px }
+.escolhas { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--item); width: 100%; text-align: left }
+.escolha.conectar { background: transparent; box-shadow: inset 0 0 0 1.5px var(--borda); grid-template-columns: 36px minmax(0, 1fr) }
+.escolha.conectar > svg { width: 22px; height: 22px; justify-self: center; color: var(--texto-2) }
+.escolha { display: grid; grid-template-columns: 36px minmax(0, 1fr) 22px; gap: var(--icone); align-items: center; padding: var(--icone); border-radius: var(--raio-card); border: 0; background: var(--superficie); box-shadow: var(--sombra-1); color: var(--texto); font: inherit; text-align: left; cursor: pointer; transition: background var(--mov-rapido) var(--curva-move), box-shadow var(--mov-rapido) var(--curva-move) }
+.escolha img { width: 36px; height: 36px; border-radius: var(--raio-ic-p) }
+.escolha span { display: grid; gap: var(--fino); min-width: 0 }
+.escolha small { color: var(--texto-2); font-size: var(--texto-xs) }
+.marca { width: 22px; height: 22px; border-radius: 50%; background: var(--superficie-2); color: transparent; display: grid; place-items: center }
+.marca svg { width: 13px; height: 13px }
+[aria-pressed="true"] > .marca { background: var(--led); color: var(--fundo) }
+.escolha[aria-pressed="true"] { background: var(--sucesso-suave); box-shadow: inset 0 0 0 2px var(--led) }
+.grade-ini { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--icone); width: 100% }
+.grade-ini .tecla-m { width: auto; height: auto; aspect-ratio: 1 }
+.grade-ini .tecla-m img, .grade-ini .tecla-m .svg { width: var(--app-busca); height: var(--app-busca) }
+.grade-ini .tecla-m .nome { font-size: var(--texto-sm) }
+.tecla-m.sug { cursor: pointer }
+.tecla-m.sug .marca { position: absolute; top: var(--item); right: var(--item) }
+.tecla-m.sug[aria-pressed="true"] { background: var(--sucesso-suave); box-shadow: inset 0 0 0 2px var(--led) }
+.feito { width: 64px; height: 64px; border-radius: 50%; background: var(--led); color: var(--fundo); display: grid; place-items: center; box-shadow: 0 0 40px -6px var(--led) }
+.feito svg { width: 30px; height: 30px }
+.acessos-ini { display: grid; gap: var(--item); width: 100%; text-align: left }
+.acesso-ini { display: flex; align-items: center; gap: var(--pad); padding: var(--icone) var(--pad); border-radius: var(--raio-card); background: var(--superficie); box-shadow: var(--sombra-1); min-height: 64px }
+.acesso-ini .txt { flex: 1; display: grid; gap: var(--fino); min-width: 0 }
+.acesso-ini .txt small { color: var(--texto-2); font-size: var(--texto-xs) }
+.acesso-ini.ok { background: var(--sucesso-suave) }
+.liberado { display: flex; align-items: center; gap: var(--mini); color: var(--led); font-size: var(--texto-sm); font-weight: 600; min-height: var(--alvo-sm) }
+.liberado svg { width: 16px; height: 16px }
+
+.alerta-sis { position: absolute; inset: 0; z-index: 12; display: grid; place-items: center; background: var(--veu-sis) }
+.alerta-sis[hidden] { display: none }
+.alerta-caixa { width: 260px; background: var(--superficie); border: 1px solid var(--moldura-borda); border-radius: var(--raio-card); box-shadow: var(--sombra-3); padding: var(--pad) var(--pad) var(--icone); display: grid; justify-items: center; gap: var(--item); text-align: center; animation: abre-pop var(--mov-padrao) var(--curva-entra) }
+.alerta-caixa img { width: 56px; height: 56px }
+.alerta-caixa b { font-size: var(--texto-sm); line-height: 1.35 }
+.alerta-caixa p { margin: 0; font-size: var(--texto-xs); color: var(--texto-2); line-height: 1.4 }
+.alerta-botoes { display: grid; gap: var(--item); width: 100%; margin-top: var(--item) }
+.alerta-botoes button { font: inherit; font-size: var(--texto-sm); min-height: 28px; border: 0; border-radius: var(--raio-sm); background: var(--superficie-2); color: var(--texto); cursor: pointer }
+.alerta-botoes button.padrao { background: var(--destaque); color: var(--destaque-texto); font-weight: 600 }
+.ic-vazio { width: 32px; height: 32px; color: var(--led) }
+.comps-pop { display: grid; grid-template-columns: 1fr 1fr; gap: var(--item) }
+.comps-pop .comp { padding: var(--item); gap: var(--mini); justify-items: center; background: var(--tela-fundo); box-shadow: none }
+.comps-pop .comp small { color: var(--texto-2) }
+.comps-pop .comp[aria-pressed="true"] small { color: var(--texto) }
+.comps-ini { width: 100% }
+.comp-ini { display: grid; justify-items: center; gap: var(--mini); padding: var(--icone); border: 0; border-radius: var(--raio-card); background: var(--superficie); box-shadow: var(--sombra-1); color: var(--texto); font: inherit; cursor: pointer; transition: background var(--mov-rapido) var(--curva-move), box-shadow var(--mov-rapido) var(--curva-move) }
+.comp-ini img { width: 100%; height: auto; border-radius: var(--raio); margin-bottom: var(--mini) }
+.comp-ini small { color: var(--texto-2); font-size: var(--texto-xs); text-wrap: balance }
+.comp-ini[aria-pressed="true"] { background: var(--sucesso-suave); box-shadow: inset 0 0 0 2px var(--led), 0 0 14px -4px var(--led) }
+.perfis-barra { display: grid; gap: var(--icone) }
+.perfil-abas { display: flex; gap: var(--item); flex-wrap: wrap }
+.perfil-aba { display: inline-flex; align-items: center; gap: var(--item); min-height: 34px; padding: 0 var(--pad); border-radius: var(--raio-pilula); border: 0; background: var(--superficie); box-shadow: var(--sombra-1); color: var(--texto-2); font: inherit; font-weight: 600; cursor: pointer }
+.perfil-aba[aria-selected="true"] { background: var(--superficie-2); color: var(--texto); box-shadow: inset 0 0 0 1.5px var(--borda) }
+.perfil-aba.novo { background: none; box-shadow: inset 0 0 0 1.5px var(--borda); font-weight: 400 }
+.perfil-aba.novo svg { width: 14px; height: 14px }
+.perfil-acoes { display: flex; align-items: center; gap: var(--icone) }
+.perfil-acoes .entrada { width: 220px; font-weight: 600 }
+.perfil-acoes .espaco { flex: 1 }
+.no-iphone-agora { display: inline-flex; align-items: center; gap: var(--item); color: var(--texto-2); font-size: var(--texto-xs) }
+.aviso { position: absolute; left: 50%; bottom: var(--pad); translate: -50% var(--item); opacity: 0; z-index: 9; background: var(--superficie-2); box-shadow: var(--sombra-3); border-radius: var(--raio); padding: var(--icone) var(--pad); font-size: var(--texto-sm); transition: opacity var(--mov-sai-padrao) var(--curva-sai), translate var(--mov-sai-padrao) var(--curva-sai); pointer-events: none }
+.aviso.visivel { opacity: 1; translate: -50% 0; transition: opacity var(--mov-padrao) var(--curva-entra), translate var(--mov-padrao) var(--curva-entra) }
+.sobre { display: grid; gap: var(--pad) }
+.sobre-topo { display: flex; align-items: center; gap: var(--pad); padding: var(--item) 0 }
+.sobre-topo h3 { margin: 0; font-size: var(--texto-xl) }
+.sobre-topo p { margin: var(--micro) 0 0; color: var(--texto-2) }
+.linha-a .valor { color: var(--texto-2); font-variant-numeric: tabular-nums }
+.autor { color: var(--texto-2); font-size: var(--texto-xs); padding: 0 var(--item) }
+.vazio { color: var(--texto-2); text-align: center; padding: var(--secao) 0; display: grid; gap: var(--item); justify-items: center }
+@media (prefers-reduced-motion: reduce) { .girando { animation: none; opacity: .5 } }
+
+@media (hover: hover) {
+  .entrada.titulo:hover { border-color: var(--borda) }
+  .nome-conta:hover { border-color: var(--borda); background: var(--tela-fundo) }
+  nav button:not([aria-current]):hover { background: var(--superficie) ; color: var(--texto) }
+  .pop-item:hover { background: var(--superficie) }
+  .pop-alerta:hover { background: var(--superficie-2) }
+  .tecla-m:not([aria-selected="true"]):not(.previa *):hover { background: var(--superficie-2) }
+  .tipo:not([aria-pressed="true"]):hover, .lista-atalhos button:hover { background: var(--superficie-2) }
+  .grade-apps button:not([aria-pressed="true"]):hover { background: var(--superficie-2); color: var(--texto) }
+}
+.mesa { --contorno-imagem: transparent } /* ícone de app já tem a forma dele, sem o contorno de imagem do tatile */
+.comps-pop .mini-tela { width: 100% }
+.comps-pop .comp[aria-pressed="true"] { background: var(--sucesso-suave); box-shadow: inset 0 0 0 2px var(--led) }
+
+/* 14.6: "Remover" some em repouso e aparece ao passar o mouse ou com foco do teclado */
+@media (hover: hover) {
+  .conta footer .btn.perigo { opacity: 0; transition: opacity var(--mov-rapido) var(--curva-move) }
+  .conta:hover footer .btn.perigo, .conta:focus-within footer .btn.perigo { opacity: 1 }
+}
+.aviso { display: flex; align-items: center; gap: var(--icone) }
+.aviso.visivel { pointer-events: auto }
+.aviso button { font: inherit; font-weight: 600; color: var(--destaque); background: none; border: 0; padding: 0; min-height: var(--alvo-sm); cursor: pointer }
+
+.girando { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--borda); border-top-color: var(--texto); animation: girar 900ms linear infinite; flex: none }
+@keyframes girar { to { rotate: 360deg } }
+@media (prefers-reduced-motion: reduce) { .girando { animation: none; opacity: .5 } }
+
+/* na configuração tudo fica no centro, mas a lista numerada lê da esquerda, colada no número */
+.ini-corpo .passos-n { width: fit-content; text-align: left }
+
+/* barra de rolagem do macOS: fina, sem trilho e só aparece com o mouse em cima da área que rola */
+* { scrollbar-width: thin; scrollbar-color: transparent transparent }
+@media (hover: hover) { *:hover { scrollbar-color: var(--rolagem) transparent } }
+
+/* ---------- app nativo (fase 5) ---------- */
+.codigo.medio { font-size: var(--texto-2xl); letter-spacing: .1em }
+.titulo-n { font-size: var(--texto-md); font-weight: 600; display: flex; align-items: center; gap: var(--icone) }
+.pop-botoes { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: var(--item) }
+.botoes-linha { display: flex; gap: var(--item) }
+.parear.sem-qr { grid-template-columns: minmax(0, 1fr) }
+.linha-a .valor.alerta { color: var(--aviso) }
+.linha-a .valor.recusado { color: var(--perigo); font-weight: 600 }
+.lado-acesso { display: flex; align-items: center; gap: var(--item) }
+.lado-acesso .valor { margin-right: 0 }
+.linha-a:has(.btn) .valor { margin-right: var(--item) }
+.alerta-linha { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--icone); align-items: center; background: var(--superficie); box-shadow: var(--sombra-1); border-radius: var(--raio-card); padding: var(--pad); margin-bottom: var(--grade) }
+.alerta-linha > svg { width: var(--ic-sec); height: var(--ic-sec); color: var(--aviso) }
+.alerta-linha .txt { display: grid; gap: var(--fino) }
+.alerta-linha small { color: var(--texto-2); font-size: var(--texto-xs) }

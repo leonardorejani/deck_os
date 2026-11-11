@@ -1,0 +1,62 @@
+/*
+ * Movimento por papel: duracao e curva em token, nunca numero solto na animacao.
+ * Entrar e mais lento que sair (saida a 70%): a pessoa ja decidiu, nao espera.
+ * Espelho em TS: movimento.ts (MOV e CURVA). Os dois dizem os mesmos valores, o teste confere.
+ * Reduzir movimento zera as duracoes aqui, entao tudo que usa token vira troca direta.
+ */
+:root {
+  --mov-rapido: 180ms;      /* hover, apertar, liga/desliga */
+  --mov-padrao: 320ms;      /* aba, acordeao, aviso, modal */
+  --mov-lento: 480ms;       /* painel de baixo, lista para detalhe */
+  --mov-sai-rapido: 130ms;  /* saida: 70% da entrada */
+  --mov-sai-padrao: 220ms;
+  --mov-sai-lento: 340ms;
+  --mov-icone: 200ms;       /* troca de icone com desfoque */
+  --mov-contar: 600ms;      /* numero que conta ate o valor novo */
+  --mov-cascata: 80ms;      /* intervalo entre itens da entrada em cascata */
+
+  --curva-move: cubic-bezier(.65, 0, .35, 1);   /* padrao: acelera e desacelera gradual */
+  --curva-entra: cubic-bezier(.22, 1, .36, 1);  /* chega rapido e assenta (ease-out forte) */
+  --curva-sai: cubic-bezier(.32, 0, .67, 0);    /* sai devagar e acelera (ease-in) */
+  --curva-salto: cubic-bezier(.34, 1.56, .64, 1); /* passa um pouco e volta: so confirmacao pequena (check, like) e mola do painel */
+  /* linear fica de fora: so barra de tempo, skeleton e giro continuo (spinner) */
+
+  --veu-modal: rgb(0 0 0 / 0.42); /* fundo atras do modal */
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --mov-rapido: 0.01ms;
+    --mov-padrao: 0.01ms;
+    --mov-lento: 0.01ms;
+    --mov-sai-rapido: 0.01ms;
+    --mov-sai-padrao: 0.01ms;
+    --mov-sai-lento: 0.01ms;
+    --mov-icone: 0.01ms;
+    --mov-contar: 0.01ms;
+    --mov-cascata: 0.01ms;
+  }
+}
+
+/* Retorno ao apertar: encolhe um pouco, como botao fisico. Vale para todo botao e icone clicavel. */
+.apertavel { transition: transform var(--mov-rapido) var(--curva-move); }
+.apertavel:active { transform: scale(0.97); }
+
+/*
+ * Troca de icone: dois icones empilhados na mesma celula. O que sai some com desfoque e
+ * encolhendo, o que entra faz o caminho inverso. Ligar com [data-ativo="true"] ou aria-pressed="true".
+ * Filho 1 = estado de repouso, filho 2 = estado ativo.
+ */
+.troca-icone { display: inline-grid; place-items: center; }
+.troca-icone > * {
+  grid-area: 1 / 1;
+  transition: opacity var(--mov-icone) var(--curva-move), transform var(--mov-icone) var(--curva-move), filter var(--mov-icone) var(--curva-move);
+}
+.troca-icone > :nth-child(1),
+.troca-icone[data-ativo="true"] > :nth-child(2),
+[aria-pressed="true"] > .troca-icone > :nth-child(2),
+[aria-pressed="true"].troca-icone > :nth-child(2) { opacity: 1; transform: none; filter: none; }
+.troca-icone > :nth-child(2),
+.troca-icone[data-ativo="true"] > :nth-child(1),
+[aria-pressed="true"] > .troca-icone > :nth-child(1),
+[aria-pressed="true"].troca-icone > :nth-child(1) { opacity: 0; transform: scale(0.25); filter: blur(4px); }

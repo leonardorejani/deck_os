@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="pt-BR" data-tema="escuro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1C1C1C">
+<title>Deck: app nativo | DECK</title>
+<link rel="icon" href="icones/deck-128.png">
+<link rel="stylesheet" href="tatile/cor.css">
+<link rel="stylesheet" href="tatile/tipo.css">
+<link rel="stylesheet" href="tatile/espaco.css">
+<link rel="stylesheet" href="tatile/forma.css">
+<link rel="stylesheet" href="tatile/movimento.css">
+<link rel="stylesheet" href="deck.css?v=35">
+<link rel="stylesheet" href="nativo.css?v=2">
+</head>
+<body>
+
+<header class="cabeca">
+  <h1>Deck: app nativo do iPhone (fase 5)</h1>
+  <p>Só o que é novo, antes de qualquer código. O painel é o mesmo do <a href="index.html" target="_blank" rel="noopener">protótipo do iPhone</a>. Pareamento: o caminho principal é o Bluetooth, com o mesmo código nas duas telas. A segunda via, pelo cabo com código digitado no iPhone, fica num link discreto na tela de procurar. Canal em uso: um aviso de 3 segundos ao trocar. O que o Mac mostra em cada etapa está em <a href="mac.html" target="_blank" rel="noopener" id="l-mac">mac.html</a>: abra ao lado e os dois seguem o mesmo seletor.</p>
+</header>
+
+<div class="palco">
+  <p class="erro-carga">Carregando o painel...</p>
+</div>
+<section class="legenda-n" id="legenda" aria-live="polite"></section>
+
+<section class="controles" id="controles" aria-label="Controles do protótipo">
+  <div class="controle"><h2>Composição</h2><div class="opcoes" data-grupo="comp"><button data-v="a">A: relógio em cima</button><button data-v="b">B: deck 3 x 3</button></div></div>
+  <div class="controle"><h2>Posição do iPhone</h2><div class="opcoes" data-grupo="posicao"><button data-v="horizontal">Deitado</button><button data-v="vertical">Em pé</button></div></div>
+  <div class="controle" data-so="2"><h2>Mac</h2><div class="opcoes" data-grupo="mac"><button data-v="on">Conectado</button><button data-v="off">Desconectado</button></div></div>
+</section>
+
+<script src="nativo-dados.js?v=2"></script>
+<script src="nativo.js?v=2"></script>
+</body>
+</html>

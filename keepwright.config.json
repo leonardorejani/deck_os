@@ -1,0 +1,38 @@
+{
+  "project": "Deck",
+  "repo": "leonardorejani/deck_os",
+  "repoOwner": "leonardorejani",
+  "maintainer": "Leonardo Rejani",
+  "language": "PT-BR",
+  "mode": "setup",
+  "stack": "swift + static-site",
+  "layers": [
+    "spec",
+    "prototipo",
+    "nucleo",
+    "mac",
+    "painel",
+    "ios"
+  ],
+  "deploy": "none",
+  "runner": "self-hosted",
+  "auth": "oauth",
+  "criticalFiles": [
+    "SPEC.md",
+    "prototipo/dados.js",
+    "mac/Package.swift",
+    "mac/Nucleo/Config.swift"
+  ],
+  "customValidators": [
+    {
+      "name": "js-sintaxe",
+      "description": "Todo JS do protótipo precisa passar no node --check",
+      "command": "for f in prototipo/*.js; do node --check \"$f\" || exit 1; done"
+    },
+    {
+      "name": "swift-nucleo",
+      "description": "Build e testes do núcleo Swift sem tela (mac/Package.swift)",
+      "command": "swift test --package-path mac"
+    }
+  ]
+}

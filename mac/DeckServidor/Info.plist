@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key>
+	<string>com.leonardorejani.deck.servidor</string>
+	<key>CFBundleName</key>
+	<string>DeckServidor</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>O Deck usa o Bluetooth para o iPhone achar este Mac e controlar o painel sem cabo nem Wi-Fi.</string>
+</dict>
+</plist>

@@ -1,0 +1,79 @@
+/*
+ * Espacamento por tamanho de tela. Regra: o espaco cresce de dentro pra fora
+ * (icone-texto < respiro do card < gap da grade < margem < entre secoes).
+ * Celular: valores do post do Michael Filipiuk (08/11/2026).
+ * Tablet e desktop: mesma logica, escalada para tela maior e mouse.
+ * Monitor grande (Full HD, QHD, 4K): 3 faixas a mais. Largura em px de CSS ja vem
+ * dividida pela escala do sistema, entao 4K a 150% cai na faixa do QHD e 4K a 100%
+ * (tudo minusculo) cai na ultima, que aumenta espaco e texto juntos.
+ * Skeleton usa estes mesmos tokens, senao a forma certa nao adianta.
+ */
+:root {
+  --margem: 20px;      /* conteudo ate a borda da tela */
+  --pad: 16px;         /* respiro dentro do card */
+  --secao: 32px;       /* entre secoes (grupo com titulo) */
+  --linha: 60px;       /* altura minima da linha de lista */
+  --icone: 12px;       /* icone ate o texto */
+  --grade: 12px;       /* entre cards lado a lado */
+  --item: 8px;         /* titulo da secao ate o conteudo */
+  --conteudo-max: 100%;
+}
+
+@media (min-width: 640px) {
+  :root {
+    --margem: 32px;
+    --pad: 20px;
+    --secao: 40px;
+    --linha: 56px;
+    --grade: 16px;
+  }
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --margem: 40px;
+    --pad: 24px;
+    --secao: 56px;
+    --linha: 52px;     /* mouse e mais preciso: linha mais densa, ainda acima de 44 */
+    --grade: 24px;
+    --item: 12px;
+    --conteudo-max: 1200px;
+  }
+}
+
+/* Full HD (1920) a 100%: so a largura do conteudo cresce, o resto fica igual */
+@media (min-width: 1600px) {
+  :root {
+    --margem: 48px;
+    --secao: 64px;
+    --conteudo-max: 1440px;
+  }
+}
+
+/* QHD (2560) a 100% e 4K a 150%: pixel menor, tudo um degrau acima */
+@media (min-width: 2200px) {
+  :root {
+    --margem: 64px;
+    --pad: 28px;
+    --secao: 72px;
+    --linha: 56px;
+    --icone: 14px;
+    --grade: 32px;
+    --item: 16px;
+    --conteudo-max: 1760px;
+  }
+}
+
+/* 4K (3840) a 100%: sem isso o texto de 15px fica com uns 2 mm na tela */
+@media (min-width: 3000px) {
+  :root {
+    --margem: 80px;
+    --pad: 32px;
+    --secao: 88px;
+    --linha: 64px;
+    --icone: 16px;
+    --grade: 40px;
+    --item: 20px;
+    --conteudo-max: 2240px;
+  }
+}

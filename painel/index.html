@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="pt-BR" data-tema="escuro">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0E0E0E">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Deck">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.webmanifest">
+<title>Deck</title>
+<link rel="icon" href="icones/deck-128.png">
+<link rel="apple-touch-icon" href="icones/pwa/apple-touch-icon-180.png">
+<link rel="stylesheet" href="tatile/cor.css">
+<link rel="stylesheet" href="tatile/tipo.css">
+<link rel="stylesheet" href="tatile/espaco.css">
+<link rel="stylesheet" href="tatile/forma.css">
+<link rel="stylesheet" href="tatile/movimento.css">
+<link rel="stylesheet" href="deck.css">
+</head>
+<body>
+
+<div class="palco">
+  <div class="moldura horizontal" id="moldura">
+    <div class="tela" id="tela">
+      <div id="conteudo"></div>
+      <div class="barra-organizar" role="toolbar"><span>Arraste para mudar de lugar, toque para trocar</span><span class="escondidos" id="escondidos"></span><button class="btn primario" id="b-pronto">Pronto</button></div>
+      <div class="tela-offline" role="status" aria-live="polite"><div>
+        <strong>Mac desconectado</strong>
+        <span class="disp"><span class="girando" aria-hidden="true"></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="11" rx="1.5"/><path d="M2 19h20"/></svg><span id="nome-mac">Seu Mac</span></span>
+        <span class="dica-off">Confira se ele está ligado e no mesmo Wi-Fi.</span>
+      </div></div>
+      <div class="tela-offline acesso" role="status" aria-live="polite"><div>
+        <strong>Deck não pareado</strong>
+        <span class="dica-off">Abra o Deck no Mac e leia o QR de novo.</span>
+        <button class="btn secundario" id="b-digitar" hidden>Digitar o código do Mac</button>
+      </div></div>
+      <section class="tela-parear" id="t-parear" role="dialog" aria-modal="true" aria-labelledby="pa-titulo" hidden>
+        <div class="pa-caixa"><h2 id="pa-titulo"></h2><div id="pa-corpo"></div></div>
+      </section>
+      <div class="aviso" id="aviso" role="status" aria-live="polite"><span id="aviso-txt"></span><button id="aviso-acao" hidden>Desfazer</button></div>
+      <div class="lista-perfis" id="lista-perfis" role="dialog" aria-label="Menu" hidden></div>
+      <div class="veu" id="veu"></div>
+      <section class="relogio-cheio" id="f-relogio" role="dialog" aria-modal="true" aria-label="Relógio. Toque para voltar" tabindex="-1"></section>
+
+      <section class="folha cheia editor" id="f-editor" role="dialog" aria-modal="true" aria-labelledby="ed-titulo">
+        <header><h2 id="ed-titulo">Editar tecla</h2><button class="fechar" data-fechar aria-label="Fechar"></button></header>
+        <div class="corpo">
+          <div class="coluna">
+            <div class="campo"><label for="ed-nome">Nome</label><input id="ed-nome" autocomplete="off"></div>
+            <div class="campo"><span class="rotulo">Tipo</span>
+              <div class="segmentos" id="ed-tipo"><button data-tipo="app">App</button><button data-tipo="tecla">Teclado</button><button data-tipo="comando">Comando</button><button data-tipo="atalho">Atalho</button></div>
+            </div>
+          </div>
+          <div class="coluna">
+            <div class="campo" id="ed-acao"></div>
+            <div class="campo" id="ed-campo-icone"><span class="rotulo">Ícone</span><div class="icones" id="ed-icones"></div></div>
+          </div>
+        </div>
+        <footer><button class="btn perigo" id="ed-excluir">Excluir</button><span class="espaco"></span><button class="btn secundario" data-fechar>Cancelar</button><button class="btn primario" id="ed-salvar">Salvar</button></footer>
+      </section>
+
+      <section class="folha cheia" id="f-whats" role="dialog" aria-modal="true" aria-labelledby="wa-titulo">
+        <header><h2 id="wa-titulo"></h2>
+          <div class="segmentos" id="wa-filtro"><button data-f="todas">Todas</button><button data-f="contatos">Contatos</button><button data-f="grupos">Grupos</button></div>
+          <button class="btn secundario pequeno" id="wa-abrir">Abrir no Mac</button><button class="fechar" data-fechar aria-label="Fechar"></button></header>
+        <div class="corpo" id="wa-lista"></div>
+      </section>
+
+      <section class="folha cheia" id="f-sessoes" role="dialog" aria-modal="true" aria-labelledby="se-titulo">
+        <header><h2 id="se-titulo"></h2><button class="fechar" data-fechar aria-label="Fechar"></button></header>
+        <div class="corpo" id="se-lista"></div>
+        <footer id="se-rodape" hidden><button class="btn secundario" data-dispensar>Dispensar</button><span class="espaco"></span><button class="btn primario" data-voltar>Voltar</button></footer>
+      </section>
+
+      <section class="folha cheia player-cheio" id="f-player" role="dialog" aria-modal="true" aria-label="Tocando agora">
+        <button class="fechar fechar-cal" data-fechar aria-label="Fechar"></button>
+        <div class="pc-corpo" id="pc-corpo"></div>
+        <div class="pc-lista" id="pc-lista" hidden>
+          <header><h2 id="pc-lista-titulo"></h2><button class="btn secundario" data-pc-voltar>Voltar</button></header>
+          <div class="corpo" id="pc-lista-corpo"></div>
+        </div>
+      </section>
+
+      <section class="folha cheia calendario" id="f-cal" role="dialog" aria-modal="true" aria-label="Agenda">
+        <button class="fechar fechar-cal" data-fechar aria-label="Fechar"></button>
+        <div class="cal-corpo">
+          <div class="mes-sb" id="ca-mes">
+            <div class="mes-topo"><h2 id="ca-titulo"></h2><button class="seta" id="ca-ant" aria-label="Mês anterior"></button><button class="seta" id="ca-prox" aria-label="Próximo mês"></button></div>
+            <div class="sb-semana" aria-hidden="true"><span class="fds">D</span><span>S</span><span>T</span><span>Q</span><span>Q</span><span>S</span><span class="fds">S</span></div>
+            <div class="sb-grade" id="ca-grade"></div>
+          </div>
+          <div class="lista-cal" id="ca-lista"></div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script src="util.js"></script>
+<script src="canal.js"></script>
+<script src="paineis.js"></script>
+<script src="player.js"></script>
+<script src="apps.js"></script>
+<script src="deck.js"></script>
+<script src="pwa.js"></script>
+<script src="pareamento.js"></script>
+</body>
+</html>

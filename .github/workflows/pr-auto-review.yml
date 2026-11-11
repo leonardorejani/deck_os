@@ -1,0 +1,266 @@
+name: PR Auto-Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  pull-requests: write
+  contents: read
+  issues: write
+  id-token: write
+
+concurrency:
+  group: pr-auto-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  auto-review:
+    name: Heuristic auto-review
+    runs-on: ${{ fromJSON((github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) && (vars.RUNNER_LEVE || '["self-hosted","leve"]') || '["ubuntu-latest"]') }}
+    steps:
+      - uses: actions/checkout@v5
+        with: { fetch-depth: 0 }
+
+      - name: Get changed files
+        id: changes
+        run: |
+          gh pr view ${{ github.event.pull_request.number }} --json files -q '.files[].path' > changed_files.txt
+          echo "count=$(wc -l < changed_files.txt)" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # These patterns come from keepwright.config.json criticalFiles[]. Edit
+      # them to match YOUR repo's load-bearing files (schemas, auth, core
+      # runtime, senders — anything a reviewer must watch).
+      - name: Detect critical layer changes
+        id: critical
+        run: |
+          if grep -qE "SPEC.md" changed_files.txt; then
+            echo "critical1_changed=true" >> $GITHUB_OUTPUT
+          fi
+          if grep -qE "prototipo/dados.js|mac/Package.swift|mac/Nucleo/Config.swift" changed_files.txt; then
+            echo "critical2_changed=true" >> $GITHUB_OUTPUT
+          fi
+          if grep -qE "\.claude/rules/" changed_files.txt; then
+            echo "rules_changed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Warn critical file 1 changed
+        if: steps.critical.outputs.critical1_changed == 'true'
+        run: |
+          gh pr comment ${{ github.event.pull_request.number }} --body "⚠️ **SPEC.md changed** — confirm invariants {{INVARIANT_REFS}} in \`.claude/rules/01-invariants.md\`. E2E smoke required."
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Warn critical file 2 changed
+        if: steps.critical.outputs.critical2_changed == 'true'
+        run: |
+          gh pr comment ${{ github.event.pull_request.number }} --body "⚠️ **config format or Swift core package changed** (dados.js, Package.swift, Config.swift) — confirm invariants {{INVARIANT_REFS}}. E2E smoke required."
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check banned terms in diff
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          git fetch origin "$BASE_REF"
+          # Skip self-referencing files: workflows and rules mention detection
+          # patterns as educational reference, not as real secrets.
+          BANNED=$(git diff "origin/$BASE_REF...HEAD" \
+            -- '*.ts' '*.md' '*.json' ':!.github/workflows/*.yml' ':!.claude/rules/*.md' ':!REVIEW.md' ':!scripts/validators/validate-no-secrets.ts' \
+            | grep -E "^\+" \
+            | grep -E "Claude <noreply@anthropic|Co-Authored-By: Claude|sk-ant-(api|oat)[0-9]{2}-[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9]{30,}|pk_live_[A-Za-z0-9]{20,}|sk_live_[A-Za-z0-9]{20,}" \
+            | head -5)
+          if [ -n "$BANNED" ]; then
+            gh pr comment "$PR_NUMBER" --body "🚨 **Banned terms detected** in the diff (real Claude authorship or secret shape). See \`.claude/rules/01-invariants.md\` §3 and §6."
+            exit 1
+          fi
+
+      - name: Setup Bun (validators)
+        uses: oven-sh/setup-bun@v2
+        with: { bun-version: latest }
+
+      - name: Validate epistemic hierarchy
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          COMMIT_MESSAGES=$(git log --format='%B' origin/${{ github.event.pull_request.base.ref }}..HEAD)
+          export COMMIT_MESSAGES
+          bun run scripts/validators/validate-epistemic-hierarchy.ts
+
+      - name: Validate webhook active (L-001)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bun run scripts/validators/validate-webhook-active.ts
+
+      - name: Summary
+        run: |
+          FILES=$(wc -l < changed_files.txt)
+          gh pr comment ${{ github.event.pull_request.number }} --body "🤖 **Heuristics done** — $FILES files. Validators (hierarchy + webhook) green. Waiting for Claude review (if token configured) and human approval."
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  check-key:
+    name: Check Claude token
+    runs-on: ${{ fromJSON((github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) && (vars.RUNNER_LEVE || '["self-hosted","leve"]') || '["ubuntu-latest"]') }}
+    outputs:
+      has_key: ${{ steps.check.outputs.has_key }}
+    steps:
+      - id: check
+        run: |
+          if [ -n "${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}" ]; then
+            echo "has_key=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_key=false" >> $GITHUB_OUTPUT
+          fi
+
+  claude-review:
+    name: Claude AI review (informational)
+    runs-on: ${{ fromJSON((github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) && (vars.RUNNER_LEVE || '["self-hosted","leve"]') || '["ubuntu-latest"]') }}
+    needs: check-key
+    if: ${{ needs.check-key.outputs.has_key == 'true' && !github.event.pull_request.draft }}
+    timeout-minutes: 20
+    # Prerequisites (check BEFORE the workflow runs):
+    #
+    # 1. Well-formed CLAUDE_CODE_OAUTH_TOKEN secret.
+    #    Set via `bash scripts/setup-oauth-secret.sh <owner>/<repo>`
+    #    (NEVER via `echo $T | gh secret set --body -` — L-007).
+    #
+    # 2. GitHub App "Claude" installed on the repo.
+    #    Run `/install-github-app` and pick subscription/OAuth — this installs
+    #    the App AND sets CLAUDE_CODE_OAUTH_TOKEN in one step. Without the App,
+    #    the upstream message is: "App token exchange failed".
+    #
+    # ADVISORY ARCHITECTURE (L-IA-ADVISORY):
+    #
+    # - claude-code-action steps: `continue-on-error: true` ALWAYS.
+    #   Self-mod 401 when a PR touches its own workflow is an expected
+    #   failure (GH anti-supply-chain), deterministic exit 1. Without the
+    #   flag, every PR touching a workflow goes UNSTABLE → blocks the
+    #   double-gate merge.
+    #
+    # - Deterministic publish to the PR: the action GENERATES the verdict but
+    #   the POST is done by a separate step (`Publish review`) that reads the
+    #   JSON output and uses `gh pr comment`. Reason: the action allowlist
+    #   swallows the auto-post (`permission_denials_count:3`, job green but
+    #   mute). A deterministic step with `if: always()` posts what it wrote.
+    #
+    # - Artifact `claude-execution-output.json` always uploaded for debug
+    #   (even on failure) — lets you see what it tried to say.
+    #
+    # - Double retry (review-1 + sleep 30s + review-2, both
+    #   `continue-on-error: true`) mitigates intermittent claude-code-action
+    #   bugs (AJV crash, fd 4 mismatch, error_max_turns).
+    #
+    # - Fallback comment flags a manual Director Code Review if both fail.
+    steps:
+      - uses: actions/checkout@v5
+        with: { fetch-depth: 1 }
+
+      # setup-node@v4 required BEFORE the deterministic publish step.
+      # Not all runners ship Node natively, so install it explicitly.
+      # Without it, the node parser reading claude-execution-output.json
+      # fails silently.
+      - name: Setup Node (deterministic publish)
+        uses: actions/setup-node@v4
+        with: { node-version: '20' }
+
+      # `use_sticky_comment: true` is the native alternative to the
+      # deterministic publish below (the action posts/updates a single PR
+      # comment itself). Do NOT swap it in blindly: validate empirically that
+      # the auto-post actually lands first — the allowlist has historically
+      # swallowed it (permission_denials_count:3, job green but mute). Left
+      # off by default; the deterministic publish step is the proven path.
+      #
+      # To run a deeper review, append `--model claude-opus-4-8` to
+      # claude_args below (default is Sonnet).
+      - name: Claude Code Review (attempt 1)
+        id: review-1
+        continue-on-error: true
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: "/pr-review #${{ github.event.pull_request.number }}"
+          claude_args: '--allowed-tools "Bash(gh pr diff:*),Bash(gh pr view:*),Bash(git log:*),Bash(git diff:*),Read,Grep,Glob"'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Anti-leak of the persistent runner's Anthropic env.
+          # Catalyst L-007 + issue anthropics/claude-code#34826.
+          ANTHROPIC_AUTH_TOKEN: ""
+          ANTHROPIC_API_KEY: ""
+          ANTHROPIC_BASE_URL: ""
+
+      - name: Sleep before retry
+        if: steps.review-1.outcome == 'failure'
+        run: sleep 30
+
+      - name: Claude Code Review (attempt 2)
+        id: review-2
+        if: steps.review-1.outcome == 'failure'
+        continue-on-error: true
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: "/pr-review #${{ github.event.pull_request.number }} (retry)"
+          claude_args: '--allowed-tools "Bash(gh pr diff:*),Bash(gh pr view:*),Bash(git log:*),Bash(git diff:*),Read,Grep,Glob"'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ANTHROPIC_AUTH_TOKEN: ""
+          ANTHROPIC_API_KEY: ""
+          ANTHROPIC_BASE_URL: ""
+
+      # Deterministic publish — reads claude-execution-output.json generated
+      # by the action and posts the final message as a PR comment. Runs even
+      # if both attempts "failed" from the action exit code's point of view
+      # (continue-on-error true), because the failure may be a self-mod 401
+      # with valid output generated.
+      - name: Publish review (deterministic)
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          OUTPUT_FILE="${{ steps.review-2.outputs.execution_file || steps.review-1.outputs.execution_file }}"
+          if [ -z "$OUTPUT_FILE" ] || [ ! -f "$OUTPUT_FILE" ]; then
+            echo "No execution_file available from the Claude attempts — skip publish."
+            exit 0
+          fi
+          # Extract the final message from the JSON (last item type=assistant text).
+          REVIEW_BODY=$(node -e "
+            const fs = require('fs');
+            const data = JSON.parse(fs.readFileSync('$OUTPUT_FILE', 'utf8'));
+            const turns = Array.isArray(data) ? data : (data.turns || data.messages || []);
+            const lastAssistant = turns.reverse().find(t => t.type === 'assistant' || t.role === 'assistant');
+            if (!lastAssistant) { console.error('no assistant turn'); process.exit(0); }
+            const content = lastAssistant.message?.content || lastAssistant.content;
+            const text = Array.isArray(content) ? content.filter(c => c.type === 'text').map(c => c.text).join('\n') : content;
+            process.stdout.write(text || '');
+          ")
+          if [ -z "$REVIEW_BODY" ]; then
+            echo "Final message empty — nothing to publish."
+            exit 0
+          fi
+          gh pr comment "$PR_NUMBER" --body "$REVIEW_BODY"
+
+      - name: Upload execution output artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-execution-output-${{ github.event.pull_request.number }}
+          path: |
+            ${{ steps.review-1.outputs.execution_file }}
+            ${{ steps.review-2.outputs.execution_file }}
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Fallback — flag manual Director Code Review
+        if: steps.review-1.outcome == 'failure' && steps.review-2.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr comment "$PR_NUMBER" --body "⚠️ **Claude AI review failed 2 attempts** (known upstream bugs: AJV crash, max-turns, App token 401, fd 4 mismatch, self-mod 401). Trigger **manual Director Code Review** per REVIEW.md §9 — escalate to native \`/code-review ultra\` (cloud multi-agent review) and \`/security-review\` for sensitive diffs (requires a recent Claude Code CLI). Raw output available in artifact \`claude-execution-output-$PR_NUMBER\`."

@@ -1,0 +1,81 @@
+/*
+ * Cor por papel, nunca hex em componente. Claro e escuro trocam so aqui.
+ * Neutros sem matiz (R=G=B): o escuro e cinza, nunca azulado.
+ * Tema: segue o sistema; [data-tema="claro|escuro"] no <html> forca um dos dois.
+ * Junto, no <head>:
+ *   <meta name="theme-color" content="#F7F7F7" media="(prefers-color-scheme: light)">
+ *   <meta name="theme-color" content="#1C1C1C" media="(prefers-color-scheme: dark)">
+ */
+:root {
+  color-scheme: light;
+  --fundo: #F7F7F7;
+  --superficie: #FFFFFF;
+  --superficie-2: #EFEFEF;
+  --borda: #E2E2E2;
+  --texto: #161616;
+  --texto-2: #5E5E5E;
+  --texto-3: #8A8A8A;     /* so para texto grande ou desabilitado */
+  --destaque: #2563EB;
+  --destaque-texto: #FFFFFF;
+  --destaque-suave: #E8EFFD;
+  --destaque-bloco: #2563EB;        /* area grande de cor (banner, card de destaque) */
+  --destaque-bloco-texto: #FFFFFF;
+  --perigo: #B42318;
+  --perigo-suave: #FDECEA;
+  --sucesso: #1F7A4D;
+  --sucesso-suave: #E6F4EC;
+  --aviso: #A15C00;
+  /* Texto de apoio sobre fundo de destaque: puxa o matiz do fundo, nunca cinza puro */
+  --destaque-texto-2: color-mix(in srgb, var(--destaque-texto) 78%, var(--destaque));
+  --destaque-bloco-texto-2: color-mix(in srgb, var(--destaque-bloco-texto) 78%, var(--destaque-bloco));
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-tema="claro"]) {
+    color-scheme: dark;
+    --fundo: #1C1C1C;
+    --superficie: #242424;
+    --superficie-2: #2E2E2E;
+    --borda: #383838;
+    --texto: #EDEDED;
+    --texto-2: #A3A3A3;
+    --texto-3: #7A7A7A;
+    --destaque: #60A5FA;
+    --destaque-texto: #0B1220;
+    --destaque-suave: #1A2740;
+    --destaque-bloco: #1D4ED8;
+    --destaque-bloco-texto: #FFFFFF;
+    --perigo: #F09090;
+    --perigo-suave: #3A1D1B;
+    --sucesso: #5FD49B;
+    --sucesso-suave: #16291F;
+    --aviso: #E8B95B;
+  }
+}
+:root[data-tema="escuro"] {
+  color-scheme: dark;
+  --fundo: #1C1C1C;
+  --superficie: #242424;
+  --superficie-2: #2E2E2E;
+  --borda: #383838;
+  --texto: #EDEDED;
+  --texto-2: #A3A3A3;
+  --texto-3: #7A7A7A;
+  --destaque: #60A5FA;
+  --destaque-texto: #0B1220;
+  --destaque-suave: #1A2740;
+  --destaque-bloco: #1D4ED8;
+  --destaque-bloco-texto: #FFFFFF;
+  --perigo: #F09090;
+  --perigo-suave: #3A1D1B;
+  --sucesso: #5FD49B;
+  --sucesso-suave: #16291F;
+  --aviso: #E8B95B;
+}
+
+body { background: var(--fundo); color: var(--texto); }
+/* Windows: select no escuro perde contraste sem cor explicita */
+select { background-color: var(--superficie); color: var(--texto); }
+
+/* Troca de tema sem tudo deslizando: ver trocarTemaSemTransicao em estados.ts */
+.sem-transicao, .sem-transicao * { transition: none !important }

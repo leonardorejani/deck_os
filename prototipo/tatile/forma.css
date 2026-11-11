@@ -1,0 +1,42 @@
+/*
+ * Forma e profundidade: raio, sombra e contorno.
+ * Raio concentrico: o de dentro e o de fora menos o padding. Raio igual por dentro e por
+ * fora deixa o canto torto. Depende de --pad (espaco.css).
+ */
+:root {
+  --raio-sm: 8px;    /* botao pequeno, selo, campo */
+  --raio: 12px;      /* botao, campo grande */
+  --raio-card: 20px; /* card, folha, modal */
+  --raio-dentro: max(4px, calc(var(--raio-card) - var(--pad, 16px))); /* imagem ou bloco dentro do card */
+  --raio-pilula: 9999px;
+
+  /* Sombra em camadas no lugar de borda: anel fino + contato + difusa. Se ajusta a qualquer fundo. */
+  --sombra-1: 0 0 0 1px rgb(0 0 0 / 0.06), 0 1px 2px rgb(0 0 0 / 0.06);
+  --sombra-2: 0 0 0 1px rgb(0 0 0 / 0.06), 0 1px 2px rgb(0 0 0 / 0.06), 0 4px 12px -2px rgb(0 0 0 / 0.08);
+  --sombra-3: 0 0 0 1px rgb(0 0 0 / 0.06), 0 2px 4px rgb(0 0 0 / 0.06), 0 12px 32px -8px rgb(0 0 0 / 0.18);
+  /* Contorno sutil de imagem: borda consistente em qualquer foto */
+  --contorno-imagem: rgb(0 0 0 / 0.1);
+}
+
+/* Tema escuro: sombra quase nao aparece, o anel claro faz o papel da borda */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-tema="claro"]) {
+    --sombra-1: 0 0 0 1px rgb(255 255 255 / 0.08);
+    --sombra-2: 0 0 0 1px rgb(255 255 255 / 0.08), 0 4px 12px -2px rgb(0 0 0 / 0.5);
+    --sombra-3: 0 0 0 1px rgb(255 255 255 / 0.1), 0 12px 32px -8px rgb(0 0 0 / 0.6);
+    --contorno-imagem: rgb(255 255 255 / 0.1);
+  }
+}
+:root[data-tema="escuro"] {
+  --sombra-1: 0 0 0 1px rgb(255 255 255 / 0.08);
+  --sombra-2: 0 0 0 1px rgb(255 255 255 / 0.08), 0 4px 12px -2px rgb(0 0 0 / 0.5);
+  --sombra-3: 0 0 0 1px rgb(255 255 255 / 0.1), 0 12px 32px -8px rgb(0 0 0 / 0.6);
+  --contorno-imagem: rgb(255 255 255 / 0.1);
+}
+
+img, video, .imagem { outline: 1px solid var(--contorno-imagem); outline-offset: -1px; }
+
+/* Area de toque maior que o icone: o visual fica pequeno, o dedo acerta 44 (24 com mouse) */
+.alvo { position: relative; }
+.alvo::after { content: ""; position: absolute; inset: 50%; width: 44px; height: 44px; transform: translate(-50%, -50%); }
+@media (pointer: fine) { .alvo::after { width: 24px; height: 24px; } }

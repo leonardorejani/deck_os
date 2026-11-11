@@ -1,0 +1,46 @@
+/*
+ * Tipografia. Uma escala so, como o espaco.css: componente nunca escolhe tamanho na mao.
+ * Titulos crescem com a tela, texto de leitura fica em 15.
+ */
+:root {
+  --fonte: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Inter, system-ui, sans-serif;
+  --texto-xs: 12px;   /* selo, legenda */
+  --texto-sm: 13px;   /* apoio, metadado */
+  --texto-base: 15px; /* leitura */
+  --texto-md: 17px;   /* titulo de card e de secao */
+  --texto-lg: 20px;   /* titulo de bloco */
+  --texto-xl: 24px;   /* titulo de pagina no celular */
+  --texto-2xl: 28px;  /* titulo principal */
+  --altura-texto: 1.5;
+  --altura-titulo: 1.2;
+  --tracking-titulo: -0.02em;
+}
+
+@media (min-width: 640px) {
+  :root { --texto-xl: 26px; --texto-2xl: 32px; }
+}
+
+@media (min-width: 1024px) {
+  :root { --texto-lg: 22px; --texto-xl: 28px; --texto-2xl: 36px; }
+}
+
+/* Full HD fica igual ao desktop. QHD a 100% e 4K a 150%: um degrau acima */
+@media (min-width: 2200px) {
+  :root { --texto-xs: 13px; --texto-sm: 14px; --texto-base: 16px; --texto-md: 19px; --texto-lg: 24px; --texto-xl: 32px; --texto-2xl: 42px; }
+}
+
+/* 4K a 100% */
+@media (min-width: 3000px) {
+  :root { --texto-xs: 14px; --texto-sm: 16px; --texto-base: 18px; --texto-md: 22px; --texto-lg: 28px; --texto-xl: 36px; --texto-2xl: 48px; }
+}
+
+/* Texto mais nitido no macOS */
+html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+body { font-family: var(--fonte); font-size: var(--texto-base); line-height: var(--altura-texto); }
+
+/* Titulo quebra em linhas do mesmo tamanho; paragrafo nao deixa palavra sozinha na ultima linha */
+h1, h2, h3, h4, .titulo { text-wrap: balance; line-height: var(--altura-titulo); letter-spacing: var(--tracking-titulo); }
+p, li, .paragrafo { text-wrap: pretty; }
+
+/* Numero que muda ou fica em coluna: todo digito com a mesma largura, nada treme */
+.numero, time, td, [data-numero], input[type="number"] { font-variant-numeric: tabular-nums; }

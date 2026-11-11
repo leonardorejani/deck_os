@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Onde roda: push na main e PR de branch do próprio repositório usam o runner próprio (rótulo "leve").
+# PR vindo de fork, e qualquer evento que não seja push nem PR, usa o runner do GitHub (ubuntu-latest),
+# sem segredos e só depois da aprovação do dono. Para forçar o runner do GitHub em tudo, criar a
+# variável de repositório RUNNER_LEVE = ["ubuntu-latest"]. Ver .github/CONTRIBUTING.md.
+jobs:
+  # ─── Sintaxe do protótipo ──────────────────────────────────────────────
+  # O protótipo é HTML/CSS/JS puro: todo .js tem que passar no node --check.
+  sintaxe:
+    name: Sintaxe do protótipo
+    runs-on: ${{ fromJSON((github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) && (vars.RUNNER_LEVE || '["self-hosted","leve"]') || '["ubuntu-latest"]') }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: node --check em prototipo/*.js e painel/*.js
+        run: for f in prototipo/*.js painel/*.js painel/teste/*.mjs; do node --check "$f" || exit 1; done
+      - name: Scripts abrem o Deck pelo Finder, nunca por open
+        run: bash scripts/teste/abrir-deck.test.sh
+
+  # ─── Núcleo Swift ──────────────────────────────────────────────────────
+  # O runner é Linux: só o pacote sem tela (mac/Package.swift) roda aqui, dentro da
+  # imagem oficial do Swift. O build dos apps do Mac e do iPhone roda no Mac, pelo verificar.sh.
+  nucleo:
+    name: Núcleo Swift
+    runs-on: ${{ fromJSON((github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) && (vars.RUNNER_LEVE || '["self-hosted","leve"]') || '["ubuntu-latest"]') }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: swift test em mac/
+        # --user: o .build sai com o dono do runner, senão o próximo checkout não consegue limpar.
+        run: docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD/mac:/w" -w /w swift:6.2 swift test
+      - name: swift test em ios/Pacote (canal, ponte e pareamento do app do iPhone)
+        run: docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD/ios/Pacote:/w" -w /w swift:6.2 swift test
+
+  # ─── Validadores (keepwright) ──────────────────────────────────────────
+  validators:
+    name: Validators
+    runs-on: ${{ fromJSON((github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) && (vars.RUNNER_LEVE || '["self-hosted","leve"]') || '["ubuntu-latest"]') }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+      - name: Run validators
+        run: |
+          for v in scripts/validators/*.ts; do
+            [ -f "$v" ] && bun run "$v"
+          done

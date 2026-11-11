@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# setup-self-hosted-runner.sh — brings up a containerized self-hosted runner
+# to zero out GitHub Actions minute usage (a self-hosted runner doesn't count
+# against the minute limit, for any repo visibility).
+#
+# SECURITY: use ONLY on a PRIVATE repo with trusted collaborators. On a public
+# repo, a fork PR runs arbitrary code on your host. Don't break this.
+#
+# Pre: docker on the target host; gh authenticated with admin on the repo.
+#
+# usage: bash setup-self-hosted-runner.sh <owner/repo> <host-ssh> <label>
+#   e.g.: bash setup-self-hosted-runner.sh leonardorejani/deck_os root@1.2.3.4:22 node01
+
+set -euo pipefail
+
+REPO="${1:?owner/repo}"
+HOST="${2:?user@host[:port] of the node}"   # e.g. root@1.2.3.4 or root@1.2.3.4:5922
+LABEL="${3:?runner label}"                  # e.g. node01
+PORT="22"; case "$HOST" in *:*) PORT="${HOST##*:}"; HOST="${HOST%:*}";; esac
+
+NAME="gha-runner-$(echo "$REPO" | tr '/' '-')"
+
+echo "→ minting registration token (expires ~1h, not persisted)..."
+REG=$(gh api -X POST "repos/$REPO/actions/runners/registration-token" --jq '.token')
+[ -n "$REG" ] || { echo "token failed"; exit 1; }
+
+echo "→ bringing up container '$NAME' on $HOST:$PORT (label: self-hosted,linux,x64,$LABEL)..."
+ssh -o StrictHostKeyChecking=accept-new -p "$PORT" "$HOST" \
+  "docker rm -f '$NAME' 2>/dev/null; \
+   docker pull myoung34/github-runner:latest >/dev/null && \
+   docker run -d --restart unless-stopped --name '$NAME' \
+     -e REPO_URL='https://github.com/$REPO' \
+     -e RUNNER_NAME='$LABEL-$(echo "$REPO"|cut -d/ -f2)' \
+     -e RUNNER_TOKEN='$REG' \
+     -e RUNNER_SCOPE=repo \
+     -e LABELS='$LABEL' \
+     -e RUNNER_WORKDIR=/tmp/runner-work \
+     -e DISABLE_AUTO_UPDATE=true \
+     myoung34/github-runner:latest && sleep 15 && \
+   docker logs --tail 8 '$NAME'"
+
+echo "→ confirming on GitHub..."
+gh api "repos/$REPO/actions/runners" \
+  --jq '.runners[] | .name+" status="+.status+" labels="+([.labels[].name]|join(","))'
+
+cat <<'NOTE'
+
+OK. Now point the HEAVY jobs at it in the workflows:
+  runs-on: [self-hosted, linux, x64]
+Keep light/critical/rare jobs on ubuntu-latest (resilience if the node
+goes down: self-hosted jobs sit in the QUEUE, they don't fail).
+
+Re-register (if you recreate the container): run this script again.
+NOTE
