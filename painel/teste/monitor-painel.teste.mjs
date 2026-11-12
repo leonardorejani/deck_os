@@ -50,6 +50,29 @@ export default async function (h) {
   h.ok(await h.espera(p, () => !document.querySelector('#f-monitor').classList.contains('aberta')), 'o X fecha a folha');
   await p.context().close();
 
+  /* ---------- toque que não se perde quando o monitor muda no meio do toque ---------- */
+  // Num Mac de verdade o processador e a rede mudam quase a cada segundo. Se a tela repintasse tudo no meio do toque, o botão
+  // sumia antes de o dedo subir e o clique se perdia. Aqui o dedo desce, o Mac muda, a tela espera e o dedo sobe.
+  await h.reset(); await h.cenario({ comMonitorApp: true, blocos: { monitor: true } });
+  p = await h.pagina(); await pronta(h, p); await abrir(h, p);
+  const botaoPedir = p.locator('#mn-corpo .mn-secao >> nth=0 >> [data-pid="201"] [data-mn-pedir]');
+  await botaoPedir.scrollIntoViewIfNeeded();
+  const alvo = await botaoPedir.boundingBox();
+  await p.mouse.move(alvo.x + alvo.width / 2, alvo.y + alvo.height / 2); await p.mouse.down();
+  await h.cenario({ monitor: { cpu: 55, memoria: 70, bateria: 80, naTomada: false, baixa: 2000000, sobe: 50000 } });
+  h.ok(await h.espera(p, () => document.querySelector('#mn-corpo .mn-cartao .mn-num').textContent.startsWith('55'), undefined, 6000), 'com o dedo em cima, os cartões do monitor continuam andando');
+  await h.dormir(1600);
+  await p.mouse.up();
+  h.ok(await h.espera(p, () => /Encerrar Navegador\?/.test(document.querySelector('#mn-corpo .confirmando')?.textContent || '')), 'o dedo desceu, o monitor mudou e subiu: o toque em Encerrar chega e abre a pergunta');
+  await h.cenario({ monitor: { cpu: 20, memoria: 70, bateria: 80, naTomada: false, baixa: 2000000, sobe: 50000 } });
+  await p.locator('#mn-corpo [data-mn-sim]').scrollIntoViewIfNeeded();
+  const sim = await p.locator('#mn-corpo [data-mn-sim]').boundingBox();
+  await p.mouse.move(sim.x + sim.width / 2, sim.y + sim.height / 2); await p.mouse.down();
+  await h.cenario({ monitor: { cpu: 30, memoria: 70, bateria: 80, naTomada: false, baixa: 1, sobe: 1 } });
+  await h.dormir(1600); await p.mouse.up();
+  h.ok(await h.ate(async () => (await h.contadores()).processos.includes('encerrar 201 Navegador')), 'o mesmo vale para Encerrar da confirmação: o toque não se perde');
+  await p.context().close();
+
   /* ---------- só os itens escolhidos nos Ajustes do Mac ---------- */
   await h.reset(); await h.cenario({ comMonitorApp: true, blocos: { monitor: true }, monitorItens: { cpu: true, memoria: false, bateria: false, rede: true } });
   p = await h.pagina(); await pronta(h, p); await abrir(h, p);

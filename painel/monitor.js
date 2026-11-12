@@ -4,15 +4,16 @@
    sempre pede confirmação antes. Quem diz se um processo pode ser encerrado é o Mac (`podeEncerrar`).
    Usa as peças de deck.js (V, canal, avisar, abrirFolha, tratarErro, monitorItens, velocidade, nivel) e paineis.js (msgErro). */
 
-const mn = { dados: null, erro: '', seq: 0, confirmando: null, encerrando: null, chave: '' }; // confirmando e encerrando: { lista, pid }
+const mn = { dados: null, erro: '', seq: 0, confirmando: null, encerrando: null, chave: '', chaveM: '', chaveB: '', toque: false, soltou: 0 }; // confirmando e encerrando: { lista, pid }
 
 const decimal = (n, casas = 1) => n.toFixed(casas).replace('.', ',');
 const tamanhoMem = b => b >= 1073741824 ? decimal(b / 1073741824) + ' GB' : Math.round(b / 1048576) + ' MB';
 const pctProc = c => decimal(c) + '%';
 
 function abrirMonitor() {
-  mn.dados = null; mn.erro = ''; mn.confirmando = null; mn.encerrando = null; mn.chave = '';
-  pintarMonitor(); abrirFolha('#f-monitor'); lerProcessos();
+  mn.dados = null; mn.erro = ''; mn.confirmando = null; mn.encerrando = null; mn.chave = ''; mn.chaveM = ''; mn.chaveB = ''; mn.toque = false;
+  const c = $('#mn-corpo'); c.innerHTML = '<div id="mn-metricas"></div><div id="mn-baixo"></div>';
+  pintarMonitor(true); abrirFolha('#f-monitor'); lerProcessos();
 }
 async function lerProcessos() {
   const n = ++mn.seq;
@@ -70,19 +71,28 @@ const listaHTML = (titulo, lista) => `<section class="mn-secao" aria-label="${ti
   mn.dados[lista].length ? `<ul class="mn-lista">${mn.dados[lista].map(p => linhaProcesso(p, lista)).join('')}</ul>` : '<p class="mn-nada">Nenhum processo para mostrar.</p>'}</section>`;
 const esqueletoMn = () => '<div class="esq-lista" aria-hidden="true">' + '<div class="mn-proc esq"><i class="barra" style="width:45%"></i><i class="barra" style="width:56px"></i></div>'.repeat(5) + '</div>';
 
-function pintarMonitor() {
+/* O corpo tem duas partes que se repintam sozinhas: os cartões (mudam quase a cada segundo, não têm botão) e as listas (têm
+   Encerrar). Repintar a lista com o dedo em cima do botão destrói o botão e o clique se perde, então enquanto há toque em
+   andamento (e uns instantes depois) a lista espera. `forcar` é o clique da própria pessoa, que repinta na hora. */
+const tocando = () => mn.toque || Date.now() - mn.soltou < 400;
+function pintarMonitor(forcar) {
   const corpo = $('#mn-corpo'), metricas = metricasHTML();
   let baixo;
   if (!mn.dados) baixo = mn.erro ? `<div class="vazio-bloco mn-vazio"><strong>Não deu para ler</strong><span>${esc(mn.erro)}</span><button class="btn secundario pequeno" data-mn-tentar style="justify-self:start">Tentar de novo</button></div>` : esqueletoMn();
   else baixo = `<div class="mn-listas">${listaHTML('Mais usam o processador', 'cpu')}${listaHTML('Mais usam a memória', 'memoria')}</div>`;
-  const chave = metricas + baixo;
   corpo.setAttribute('aria-busy', String(!mn.dados && !mn.erro));
-  if (chave === mn.chave) return;
-  mn.chave = chave; manterRolagem(corpo, metricas + baixo);
+  const y = corpo.scrollTop;
+  if (metricas !== mn.chaveM) { mn.chaveM = metricas; $('#mn-metricas').innerHTML = metricas }
+  if (baixo !== mn.chaveB && (forcar || !tocando())) { mn.chaveB = baixo; $('#mn-baixo').innerHTML = baixo }
+  corpo.scrollTop = y;
 }
+$('#mn-corpo').addEventListener('pointerdown', () => { mn.toque = true });
+const soltarMn = () => { mn.toque = false; mn.soltou = Date.now() };
+$('#mn-corpo').addEventListener('pointerup', soltarMn);
+$('#mn-corpo').addEventListener('pointercancel', soltarMn);
 
 async function encerrarProcesso(pid, nome) {
-  mn.encerrando = { pid }; pintarMonitor();
+  mn.encerrando = { pid }; pintarMonitor(true);
   try {
     await canal.encerrarProcesso(pid, nome);
     mn.confirmando = null; mn.encerrando = null; avisar(`Pedi para o ${nome} fechar`);
@@ -95,14 +105,14 @@ async function encerrarProcesso(pid, nome) {
 
 $('#f-monitor').addEventListener('click', ev => {
   const pedir = ev.target.closest('[data-mn-pedir]');
-  if (pedir) { mn.confirmando = { lista: pedir.dataset.lista, pid: Number(pedir.dataset.pid) }; return pintarMonitor() }
-  if (ev.target.closest('[data-mn-cancelar]')) { mn.confirmando = null; return pintarMonitor() }
+  if (pedir) { mn.confirmando = { lista: pedir.dataset.lista, pid: Number(pedir.dataset.pid) }; return pintarMonitor(true) }
+  if (ev.target.closest('[data-mn-cancelar]')) { mn.confirmando = null; return pintarMonitor(true) }
   const sim = ev.target.closest('[data-mn-sim]');
   if (sim && !mn.encerrando) {
     const pid = Number(sim.dataset.pid), p = [...mn.dados.cpu, ...mn.dados.memoria].find(x => x.pid === pid); // o nome é o que a tela mostrava: o Mac confere
     return p && encerrarProcesso(pid, p.nome);
   }
-  if (ev.target.closest('[data-mn-tentar]')) { mn.erro = ''; mn.dados = null; pintarMonitor(); lerProcessos() }
+  if (ev.target.closest('[data-mn-tentar]')) { mn.erro = ''; mn.dados = null; pintarMonitor(true); lerProcessos() }
 });
 
 /* aberta, a tela repinta o monitor a cada segundo (V.monitor chega com o estado) e relê os processos a cada 3 s.
