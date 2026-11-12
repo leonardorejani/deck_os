@@ -19,6 +19,12 @@ public final class GerenteBluetooth: @unchecked Sendable {
     /// Quantas vezes seguidas o Mac já conhecido pode recusar este iPhone antes de o pareamento valer como acabado.
     /// Uma só poderia ser um instante da troca do código de acesso: a segunda, logo em seguida, confirma.
     static let recusasParaEsquecer = 2
+    /// Tempo para a conexão direta no Mac conhecido (pelo id guardado). O id vale para o endereço que o iPhone viu da
+    /// última vez: se o Mac trocou de endereço ou parou de anunciar, o connect do iOS não falha, só fica esperando. Passado
+    /// o prazo, o app larga o id e procura o serviço do Deck no ar.
+    static let prazoDaConexaoDireta: TimeInterval = 6
+    /// Quanto a procura pelo serviço espera algum Mac aparecer.
+    static let prazoDaProcura: TimeInterval = 8
 
     private struct Pendente {
         var pareando: EnlaceSeguro.Pareando
@@ -29,6 +35,8 @@ public final class GerenteBluetooth: @unchecked Sendable {
     private let cofre: Cofre
     private let nomeDoIphone: String
     private let esperaEntreTentativas: (TimeInterval) -> TimeInterval
+    private let prazoDireto: TimeInterval
+    private let prazoProcura: TimeInterval
     private let log: @Sendable (String) -> Void
     private let trava = NSLock()
     private var conexao: ConexaoCabo?
@@ -37,6 +45,8 @@ public final class GerenteBluetooth: @unchecked Sendable {
     private var pendente: Pendente?
     private var aoMudarBt: (@Sendable (MacEncontrado?) -> Void)?
     private var aoNaoReconhecidoBt: (@Sendable () -> Void)?
+    private var aoMudarSituacaoBt: (@Sendable (String?) -> Void)?
+    private var _situacao: String?
     /// Sobe a cada parar(): um laço antigo que ainda está terminando não mexe no novo.
     private var geracao = 0
 
@@ -47,7 +57,10 @@ public final class GerenteBluetooth: @unchecked Sendable {
     #endif
 
     init(radio: RadioBle, cofre: Cofre, nomeDoIphone: String, esperaEntreTentativas: @escaping (TimeInterval) -> TimeInterval = { $0 },
+         prazoDaConexaoDireta: TimeInterval = GerenteBluetooth.prazoDaConexaoDireta, prazoDaProcura: TimeInterval = GerenteBluetooth.prazoDaProcura,
          log: @escaping @Sendable (String) -> Void = { _ in }) {
+        self.prazoDireto = prazoDaConexaoDireta
+        self.prazoProcura = prazoDaProcura
         self.radio = radio
         self.cofre = cofre
         self.nomeDoIphone = nomeDoIphone
@@ -65,6 +78,23 @@ public final class GerenteBluetooth: @unchecked Sendable {
     }
 
     public var mac: MacEncontrado? { trava.withLock { macAtual } }
+
+    /// O que a tela de conexão mostra enquanto o Bluetooth não conecta ("Procurando o Mac... tentativa 3"), ou nil quando
+    /// não há o que dizer (conectado). Chamado a cada tentativa.
+    public func aoMudarSituacao(_ f: @escaping @Sendable (String?) -> Void) {
+        trava.withLock { aoMudarSituacaoBt = f }
+    }
+
+    public var situacao: String? { trava.withLock { _situacao } }
+
+    private func situar(_ texto: String?) {
+        let aviso: (@Sendable (String?) -> Void)? = trava.withLock {
+            guard _situacao != texto else { return nil }
+            _situacao = texto
+            return aoMudarSituacaoBt
+        }
+        aviso?(texto)
+    }
 
     /// Por que o Bluetooth não pode ser usado agora (desligado, sem permissão), ou nil.
     var indisponivel: String? { radio.indisponivel }
@@ -110,6 +140,7 @@ public final class GerenteBluetooth: @unchecked Sendable {
         /// Macs que já disseram não conhecer este iPhone nesta rodada de procura (quando o id ainda não foi guardado).
         var recusados = Set<String>()
         var recusasSeguidas = 0
+        var tentativa = 0
         defer { trava.withLock { if geracao == g { laco = nil } } }
         while !Task.isCancelled, trava.withLock({ geracao == g }) {
             guard let pareado = cofre.ler() else { break }
@@ -118,9 +149,13 @@ public final class GerenteBluetooth: @unchecked Sendable {
                 continue
             }
             var alvoAtual: String?
+            var viaProcura = false
+            tentativa += 1
+            if let motivo = radio.indisponivel { situar(motivo) } else { situar("Procurando o Mac pelo Bluetooth. Tentativa \(tentativa).") }
             do {
-                let (id, fluxo) = try await conectarNoMac(pareado, excluindo: recusados)
+                let (id, fluxo, achadoPelaProcura) = try await conectarNoMac(pareado, excluindo: recusados)
                 alvoAtual = id
+                viaProcura = achadoPelaProcura
                 let entrada: (fluxo: FluxoCifrado, nomeMac: String)
                 do {
                     entrada = try await Task.detached { try EnlaceSeguro.entrar(fluxo, codigoAcesso: pareado.codigoAcesso) }.value
@@ -131,14 +166,17 @@ public final class GerenteBluetooth: @unchecked Sendable {
                 recusados = []
                 recusasSeguidas = 0
                 cofre.guardarBluetooth(id)
-                log("bluetooth: Mac \"\(entrada.nomeMac)\" conectado (cifrado)")
+                tentativa = 0
+                situar(nil)
+                log("bluetooth: Mac \"\(entrada.nomeMac)\" conectado (cifrado)\(viaProcura ? ", achado pela procura" : "")")
                 ativar(ConexaoCabo(fluxo: entrada.fluxo, segredo: { nil }, confiavel: true, nomeDoCanal: "O Bluetooth"), id: id, nome: entrada.nomeMac)
                 espera = Self.esperaMinima
             } catch ErroEnlace.naoPareado {
                 // Os dois lados não concordam no código de acesso (o Mac refez o pareamento, por exemplo).
                 log("bluetooth: o Mac não reconhece este iPhone")
-                if pareado.idBluetooth == nil, let id = alvoAtual {
-                    // Pareou pelo cabo e ainda não sabe qual é o Mac: pode ser outro com o Deck por perto. Tenta o próximo já.
+                if let id = alvoAtual, pareado.idBluetooth == nil || (viaProcura && id != pareado.idBluetooth) {
+                    // Pareou pelo cabo e ainda não sabe qual é o Mac (ou o id guardado não respondeu e este veio da procura):
+                    // pode ser outro com o Deck por perto. Tenta o próximo já.
                     recusados.insert(id)
                     espera = Self.esperaMinima
                 } else {
@@ -153,6 +191,11 @@ public final class GerenteBluetooth: @unchecked Sendable {
                     }
                     espera = Self.esperaMinima
                 }
+            } catch ErroSemCandidato.todosRecusaram where pareado.idBluetooth != nil {
+                // O Mac conhecido não respondeu no id guardado e só há outros Macs por perto, que não conhecem este iPhone.
+                // Não é o Mac dele recusando: não conta para esquecer o pareamento.
+                recusados = []
+                espera = Self.esperaMinima
             } catch ErroSemCandidato.todosRecusaram {
                 // Pareado só pelo cabo (id do Bluetooth ainda desconhecido): cada Mac por perto já recusou este iPhone nesta
                 // rodada. Duas rodadas seguidas assim e o pareamento acabou, senão a tela fica presa em "Mac desconectado".
@@ -167,6 +210,9 @@ public final class GerenteBluetooth: @unchecked Sendable {
                 espera = Self.esperaSeNaoPareado
             } catch {
                 espera = min(espera * 2, Self.esperaMaxima)
+                if let motivo = radio.indisponivel { situar(motivo) } else if !(error is CancellationError) {
+                    situar("Não achei o Mac pelo Bluetooth. Tentando de novo. Tentativa \(tentativa).")
+                }
             }
             try? await Task.sleep(nanoseconds: UInt64(esperaEntreTentativas(espera) * 1_000_000_000))
         }
@@ -177,21 +223,43 @@ public final class GerenteBluetooth: @unchecked Sendable {
     /// Onde conectar: o Mac que já foi usado, ou um dos que o rádio achar com o Deck. O macOS não anuncia o nome
     /// do Deck (o iPhone lê o do sistema), então o nome só desempata e a ordem é o sinal, do mais forte ao mais fraco.
     /// `excluindo` são os que já recusaram este iPhone, para a reconexão chegar ao Mac certo quando há mais de um.
-    private func conectarNoMac(_ pareado: Pareado, excluindo recusados: Set<String>) async throws -> (String, FluxoBytes) {
-        if let id = pareado.idBluetooth { return (id, try await radio.conectar(id: id)) }
+    private func conectarNoMac(_ pareado: Pareado, excluindo recusados: Set<String>) async throws -> (String, FluxoBytes, Bool) {
+        if let id = pareado.idBluetooth {
+            do { return (id, try await conectarComPrazo(id), false) } catch {
+                // Sem o Mac no id guardado (endereço trocado, anúncio parado, fora de alcance): não fica esperando, procura o serviço.
+                if let motivo = radio.indisponivel { throw ErroPareamento.recusado(motivo) }
+                log("bluetooth: o Mac não respondeu no id guardado, procurando o serviço do Deck")
+            }
+        }
         let busca = Task { () -> [AnuncioBle] in
             for await lista in radio.procurar() where !lista.isEmpty { return lista }
             return []
         }
-        let prazo = Task { try? await Task.sleep(nanoseconds: 8_000_000_000); busca.cancel() }
+        let prazo = Task { try? await Task.sleep(nanoseconds: UInt64(prazoProcura * 1_000_000_000)); busca.cancel() }
         let achados = await busca.value
         prazo.cancel()
         guard !achados.isEmpty else { throw ErroPareamento.recusado("Nenhum Mac com o Deck por perto.") }
         let candidatos = achados.filter { !recusados.contains($0.id) }.sorted { $0.rssi > $1.rssi }
-        guard let alvo = candidatos.first(where: { $0.nome == pareado.nomeMac }) ?? candidatos.first else {
+        guard let alvo = candidatos.first(where: { $0.id == pareado.idBluetooth }) ?? candidatos.first(where: { $0.nome == pareado.nomeMac }) ?? candidatos.first else {
             throw ErroSemCandidato.todosRecusaram
         }
-        return (alvo.id, try await radio.conectar(id: alvo.id))
+        return (alvo.id, try await conectarComPrazo(alvo.id), true)
+    }
+
+    /// Conecta com tempo limite garantido aqui, mesmo que o rádio não cumpra o dele.
+    private func conectarComPrazo(_ id: String) async throws -> FluxoBytes {
+        let prazo = prazoDireto
+        let radio = radio
+        return try await withThrowingTaskGroup(of: FluxoBytes.self) { grupo in
+            grupo.addTask { try await radio.conectar(id: id, prazo: prazo) }
+            grupo.addTask {
+                try await Task.sleep(nanoseconds: UInt64((prazo + 0.5) * 1_000_000_000))
+                throw ErroPareamento.recusado("O Mac não respondeu.")
+            }
+            defer { grupo.cancelAll() }
+            guard let primeiro = try await grupo.next() else { throw ErroPareamento.recusado("O Mac não respondeu.") }
+            return primeiro
+        }
     }
 
     /// Põe a conexão em uso. O Mac só conta como conectado quando se apresenta (o "ola" dele).
@@ -225,6 +293,7 @@ public final class GerenteBluetooth: @unchecked Sendable {
         }
         guard let aviso else { return }
         log("bluetooth: conexão com o Mac caiu")
+        situar("Procurando o Mac pelo Bluetooth.")
         aviso?(nil)
     }
 

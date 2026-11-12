@@ -50,6 +50,10 @@ public final class Casca {
         bluetooth?.aoMudar { [weak self] _ in
             Task { @MainActor in self?.reavaliarCanal() }
         }
+        // A tela "Mac desconectado" diz o que o Bluetooth está fazendo a cada tentativa (procurando, motivo, tentativa N).
+        bluetooth?.aoMudarSituacao { [weak self] _ in
+            Task { @MainActor in self?.mostrarBusca() }
+        }
         // O cabo caiu no meio de uma leitura e o Bluetooth já está de pé (ou o contrário): a ponte repete a leitura no outro.
         canais.definirAlternativa { [cabo, bluetooth] tipo in
             switch tipo {
@@ -100,9 +104,17 @@ public final class Casca {
 
     public var vibrar: @Sendable () -> Void { ponte.vibrar }
 
+    /// Diz à página o que o Bluetooth está fazendo, mas só com a tela de "Mac desconectado" no ar (sem canal em uso): com o
+    /// cabo ou o Bluetooth servindo, a página não tem o que mostrar e não recebe nada.
+    private func mostrarBusca() {
+        guard canais.obter() == nil else { return }
+        executarJS("DeckNativo.busca(\(bluetooth?.situacao.map(Self.literal) ?? "null"))")
+    }
+
     /// O canal em uso mudou: a página mostra o aviso de 3 segundos ("Pelo cabo", "Pelo Bluetooth").
     public func usar(canal: (any Canal)?) {
         canais.definir(canal)
+        if canal == nil { mostrarBusca() }
         guard let tipo = canal?.tipo, tipo != tipoDoCanal else {
             if canal == nil { tipoDoCanal = nil }
             return
@@ -117,7 +129,7 @@ public final class Casca {
     /// Roda antes de a página carregar: entrega o código guardado e a etapa de agora, para a tela já
     /// nascer certa, sem piscar o painel antes do pareamento.
     public func scriptDeInicio() -> String {
-        let inicio = Inicio(codigo: cofre.ler()?.codigoAcesso, estado: fluxo.estado, canal: tipoDoCanal)
+        let inicio = Inicio(codigo: cofre.ler()?.codigoAcesso, estado: fluxo.estado, canal: tipoDoCanal, busca: bluetooth?.situacao)
         return "window.DECK_NATIVO_INICIO = \(Self.json(inicio) ?? "{}");"
     }
 
@@ -135,7 +147,7 @@ public final class Casca {
             // O código que está no Keychain agora: a página confere antes de esquecer o Mac num 401 (rodízio em andamento).
             return Self.json(["codigo": cofre.ler()?.codigoAcesso ?? ""]) ?? "{}"
         case "estado":
-            return Self.json(RespostaCasca(estado: fluxo.estado, canal: tipoDoCanal)) ?? "{}"
+            return Self.json(RespostaCasca(estado: fluxo.estado, canal: tipoDoCanal, busca: bluetooth?.situacao)) ?? "{}"
         case "acao":
             guard let acao = Self.acao(m) else { return Self.json(RespostaCasca(erro: "Essa ação não existe.")) ?? "{}" }
             let erro = await fluxo.tratar(acao)
@@ -171,20 +183,23 @@ public final class Casca {
         var codigo: String?
         var estado: EstadoPareamento
         var canal: TipoCanal?
+        var busca: String?
         // Codifica o nulo de verdade: a página distingue "sem código" de "campo ausente".
         func encode(to encoder: Encoder) throws {
             var c = encoder.container(keyedBy: Chave.self)
             try c.encode(codigo, forKey: .codigo)
             try c.encode(estado, forKey: .estado)
             try c.encodeIfPresent(canal, forKey: .canal)
+            try c.encodeIfPresent(busca, forKey: .busca)
         }
-        enum Chave: String, CodingKey { case codigo, estado, canal }
+        enum Chave: String, CodingKey { case codigo, estado, canal, busca }
     }
 
     struct RespostaCasca: Codable {
         var estado: EstadoPareamento?
         var erro: String?
         var canal: TipoCanal?
+        var busca: String?
     }
 
     static func json<T: Encodable>(_ valor: T) -> String? {

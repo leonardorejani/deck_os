@@ -103,4 +103,12 @@ public protocol ConexaoBluetooth: AnyObject, Sendable {
     func reavaliar()
     /// O Mac conhecido recusou este iPhone mais de uma vez seguida: o pareamento acabou (o Mac desconectou o aparelho).
     func aoNaoReconhecido(_ f: @escaping @Sendable () -> Void)
+    /// O que a tela de conexão diz sobre a busca (tentativa, motivo), ou nil quando conectou.
+    func aoMudarSituacao(_ f: @escaping @Sendable (String?) -> Void)
+    var situacao: String? { get }
+}
+
+extension ConexaoBluetooth {
+    public func aoMudarSituacao(_ f: @escaping @Sendable (String?) -> Void) {}
+    public var situacao: String? { nil }
 }

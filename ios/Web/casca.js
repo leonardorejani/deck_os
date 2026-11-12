@@ -17,7 +17,7 @@
 
   const inicio = window.DECK_NATIVO_INICIO || {};
   let estado = inicio.estado || { etapa: 'vazio', macs: [], codigo: '', nomeMac: '' };
-  let canalAtual = inicio.canal || null, dig = '', tChip = 0;
+  let canalAtual = inicio.canal || null, dig = '', tChip = 0, busca = inicio.busca || null;
 
   tela.insertAdjacentHTML('beforeend', `
     <div class="tela-offline pareio" id="pareio" role="status" aria-live="polite"><div></div></div>
@@ -64,7 +64,7 @@
     pareio.firstElementChild.innerHTML = telaPareio();
     // tela escura: no app nativo não tem Wi-Fi, o Deck procura pelo cabo e pelo Bluetooth
     const off = document.querySelector('.tela-offline:not(.pareio):not(.acesso) .dica-off');
-    if (off) off.textContent = 'Procurando pelo cabo e pelo Bluetooth. Confira se ele está ligado.';
+    if (off) off.textContent = busca || 'Procurando pelo cabo e pelo Bluetooth. Confira se ele está ligado.';
   }
   function aplicar(novo) {
     if (novo.etapa !== 'codigo') dig = '';
@@ -110,8 +110,9 @@
     acao(a.dataset.acao);
   });
 
-  /* O Swift chama estas duas: o estado do pareamento mudou, ou o canal em uso mudou. */
+  /* O Swift chama estas: o estado do pareamento mudou, o canal em uso mudou, ou o Bluetooth mudou o que diz da busca. */
   window.DeckNativo = {
+    busca: texto => { busca = texto || null; pintar() },
     estado: novo => aplicar(novo),
     canal: tipo => {
       const mudou = tipo !== canalAtual; canalAtual = tipo;
@@ -121,5 +122,5 @@
 
   pintar();
   // a página pode abrir depois do Swift ter mudado de etapa: pede o estado de agora, sem aviso de canal
-  falar({ op: 'estado' }).then(r => { if (r.canal) canalAtual = r.canal; if (r.estado) aplicar(r.estado) }).catch(() => {});
+  falar({ op: 'estado' }).then(r => { if (r.canal) canalAtual = r.canal; if (r.busca) busca = r.busca; if (r.estado) aplicar(r.estado) }).catch(() => {});
 })();
