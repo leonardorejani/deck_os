@@ -58,9 +58,21 @@ struct CapaAtual: Equatable, Sendable {
 protocol ProvedorPaineis: Sendable {
     func estado() -> Estado
     func whatsapp() -> [ConversaWhatsApp]
+    /// A foto de perfil de uma conversa do WhatsApp por QR (nil: sem foto).
+    func fotoWhatsApp(arquivo: String) -> MidiaBaixada?
+    /// A foto ou o áudio de uma mensagem do WhatsApp por QR, baixado agora (só leitura, com limite de tamanho).
+    func midiaWhatsApp(chat: String, id: String) -> ResultadoMidia
+    /// "Responder no Mac": abre a conversa no WhatsApp Web.
+    func abrirConversaWhatsApp(id: String) -> AberturaDeConversa
     func agenda(de: String, dias: Int) -> [Evento]
     func sessoes() -> [Sessao]
     func capa() -> CapaAtual?
+}
+
+extension ProvedorPaineis {
+    func fotoWhatsApp(arquivo: String) -> MidiaBaixada? { nil }
+    func midiaWhatsApp(chat: String, id: String) -> ResultadoMidia { .erro("Essa mídia não abre aqui.") }
+    func abrirConversaWhatsApp(id: String) -> AberturaDeConversa { .falhou("Não consegui abrir a conversa.") }
 }
 
 protocol ExecutorTeclas: Sendable {
@@ -217,6 +229,10 @@ struct Roteador: Sendable {
             return RespostaRota(status: 200, tipo: capa.tipo, corpo: capa.dados, extras: ["Cache-Control": "no-store"])
         case "/api/whatsapp":
             return somente(["GET"], r) ?? .codificar(200, paineis.whatsapp())
+        case "/api/whatsapp/midia":
+            return somente(["GET"], r) ?? midiaDoWhatsApp(r)
+        case "/api/whatsapp/abrir":
+            return somente(["POST"], r) ?? abrirConversaDoWhatsApp(r)
         case "/api/sessoes":
             return somente(["GET"], r) ?? .codificar(200, paineis.sessoes())
         case "/api/agenda":
@@ -227,6 +243,9 @@ struct Roteador: Sendable {
             return somente(["POST"], r) ?? abrirMensagem(r)
         default:
             break
+        }
+        if let arquivo = sufixo(r.caminho, "/api/whatsapp/foto/") {
+            return somente(["GET"], r) ?? fotoDoWhatsApp(arquivo)
         }
         if let id = sufixo(r.caminho, "/api/botao/") {
             return somente(["POST"], r) ?? botao(id, atual)
@@ -311,6 +330,42 @@ struct Roteador: Sendable {
             conta = c
         }
         return .codificar(200, mail.caixa(conta: conta))
+    }
+
+    /// GET /api/whatsapp/foto/<arquivo>: a foto de perfil, em base64 (a mesma forma serve ao Wi-Fi, ao cabo e ao Bluetooth).
+    private func fotoDoWhatsApp(_ arquivo: String) -> RespostaRota {
+        guard let f = paineis.fotoWhatsApp(arquivo: arquivo) else { return .erro(404, "Sem foto.") }
+        return Self.midia(f)
+    }
+
+    /// GET /api/whatsapp/midia?chat=<id>&id=<mensagem>: a foto ou o áudio, baixado agora.
+    private func midiaDoWhatsApp(_ r: HttpRequisicao) -> RespostaRota {
+        guard let chat = r.query["chat"], let id = r.query["id"], Self.textoSimples(chat, maximo: 200), Self.textoSimples(id, maximo: 200) else {
+            return .erro(400, "Informe a conversa e a mensagem, por exemplo ?chat=<id>&id=<mensagem>.")
+        }
+        switch paineis.midiaWhatsApp(chat: chat, id: id) {
+        case .pronta(let m): return Self.midia(m)
+        case .erro(let e): return .erro(422, e)
+        }
+    }
+
+    private static func midia(_ m: MidiaBaixada) -> RespostaRota {
+        .codificar(200, ["tipo": m.tipo, "dados": m.dados.base64EncodedString()])
+    }
+
+    /// POST /api/whatsapp/abrir, corpo {"id": "<conversa>"}: abre a conversa no WhatsApp Web do Mac. Não envia nem marca nada.
+    private func abrirConversaDoWhatsApp(_ r: HttpRequisicao) -> RespostaRota {
+        guard let obj = (try? JSONSerialization.jsonObject(with: r.corpo)) as? [String: Any], let id = obj["id"] as? String,
+              Self.textoSimples(id, maximo: 200) else {
+            return .erro(400, "Informe a conversa a abrir, por exemplo {\"id\": \"<conversa>\"}.")
+        }
+        switch paineis.abrirConversaWhatsApp(id: id) {
+        case .aberta(let aviso):
+            var corpo: [String: Any] = ["ok": true]
+            if let aviso { corpo["aviso"] = aviso }
+            return .json(200, (try? JSONSerialization.data(withJSONObject: corpo)) ?? Data("{\"ok\":true}".utf8))
+        case .falhou(let e): return .erro(422, e)
+        }
     }
 
     /// POST /api/mail/abrir, corpo {"id": "<Message-ID>"}: abre a mensagem no Mail do Mac. Não marca nada.

@@ -18,6 +18,9 @@
      config()                  -> Config sem o codigoAcesso
      gravarConfig(config)      -> Config
      whatsapp()                -> [ConversaWhatsApp]
+     whatsappFoto(arquivo)     -> {tipo, dados}    a foto de perfil de uma conversa (dados em base64, 404 sem foto)
+     whatsappMidia(chat, id)   -> {tipo, dados}    a foto ou o áudio de uma mensagem, baixado agora (só aparelho conectado, até 8 MB, nunca visualização única)
+     abrirConversa(id)         -> {ok, aviso?}     "Responder no Mac": abre a conversa no WhatsApp Web do Mac (404 em Mac antigo)
      agenda(de, dias)          -> [Evento]
      mail(conta?)              -> {estado, aviso?, contas, conta, mensagens}  as últimas da caixa de entrada (só leitura, 404 em Mac antigo)
      abrirMensagem(id)         -> {ok: true}       abre a mensagem no Mail do Mac
@@ -95,6 +98,9 @@ function criarCanalHttps() {
     config: () => pedir('GET', '/api/config'),
     gravarConfig: config => pedir('PUT', '/api/config', config),
     whatsapp: () => pedir('GET', '/api/whatsapp'),
+    whatsappFoto: arquivo => pedir('GET', '/api/whatsapp/foto/' + encodeURIComponent(arquivo)),
+    whatsappMidia: (chat, id) => pedir('GET', `/api/whatsapp/midia?chat=${encodeURIComponent(chat)}&id=${encodeURIComponent(id)}`, undefined, 45000), // o Mac baixa da internet antes de responder
+    abrirConversa: id => pedir('POST', '/api/whatsapp/abrir', { id }),
     agenda: (de, dias) => pedir('GET', `/api/agenda?de=${encodeURIComponent(de)}&dias=${encodeURIComponent(dias)}`),
     mail: conta => pedir('GET', '/api/mail' + (conta ? '?conta=' + encodeURIComponent(conta) : ''), undefined, 15000), // o Mac lê o Mail por AppleScript, até uns 10 s
     abrirMensagem: id => pedir('POST', '/api/mail/abrir', { id }),

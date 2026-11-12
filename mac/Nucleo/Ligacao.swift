@@ -9,9 +9,22 @@ struct PaineisReais: ProvedorPaineis {
     let armazem: ArmazemDeConfig
     let agregador: Agregador
     let agenda: FonteAgenda
+    var ponteQR: PonteWhatsAppQR? = nil
+    var abridorWhatsApp: AbridorWhatsApp? = nil
 
     func estado() -> Estado { agregador.estado(config: armazem.ler()) }
     func whatsapp() -> [ConversaWhatsApp] { agregador.conversasWhatsApp() }
+    func fotoWhatsApp(arquivo: String) -> MidiaBaixada? { ponteQR?.foto(arquivo: arquivo) }
+    func midiaWhatsApp(chat: String, id: String) -> ResultadoMidia {
+        guard let ponteQR else { return .erro("O WhatsApp por QR não está ligado.") }
+        return ponteQR.midia(chat: chat, id: id)
+    }
+    func abrirConversaWhatsApp(id: String) -> AberturaDeConversa {
+        guard let abridorWhatsApp else { return .falhou("Não consegui abrir a conversa.") }
+        // O id vem do iPhone, mas só vale o que está na lista de agora: o número sai da conversa, nunca do pedido.
+        guard let c = agregador.conversasWhatsApp().first(where: { $0.id == id }) else { return .falhou("Não achei essa conversa. Abra a lista de novo.") }
+        return abridorWhatsApp.abrirConversa(numero: c.numero, grupo: c.grupo)
+    }
     func sessoes() -> [Sessao] { agregador.sessoes() }
 
     func agenda(de: String, dias: Int) -> [Evento] {
@@ -217,7 +230,7 @@ enum Ligacao {
         let agregador = Agregador(fontes: fontesDoMac)
         let abridor = AbridorWhatsApp(origem: origemWhats, executor: executor)
         return Roteador(
-            paineis: PaineisReais(armazem: armazem, agregador: agregador, agenda: agenda),
+            paineis: PaineisReais(armazem: armazem, agregador: agregador, agenda: agenda, ponteQR: ponteQR, abridorWhatsApp: abridor),
             teclas: ExecutorAcoes(shell: executor, whatsappWeb: { abridor.abrir() }), spotify: SpotifyReal(executor: executor, conta: contaSpotify, complemento: complemento),
             config: armazem, pareamento: pareamento, pagina: pagina, rodizio: rodizio, certificadoCA: certificadoCA,
             reunioes: AbridorDeReuniao(shell: executor), criadorDeAgenda: criadorDeAgenda ?? Self.criadorPadrao(),

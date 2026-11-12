@@ -56,6 +56,46 @@ final class RotasTestes: XCTestCase {
         XCTAssertEqual((c.pedir("GET", "/api/sessoes").json as? [[String: Any]])?.first?["id"] as? String, "s1")
     }
 
+    // MARK: WhatsApp por QR: foto, mídia e Responder no Mac (12/11/2026)
+
+    func testFotoDePerfilVemEmBase64EOutroNomeDa404() throws {
+        let c = try Cenario()
+        let ok = c.pedir("GET", "/api/whatsapp/foto/0123456789abcdef.jpg")
+        XCTAssertEqual(ok.status, 200)
+        XCTAssertEqual((ok.json as? [String: Any])?["tipo"] as? String, "image/jpeg")
+        XCTAssertEqual((ok.json as? [String: Any])?["dados"] as? String, Data([1, 2, 3]).base64EncodedString())
+        XCTAssertEqual(c.pedir("GET", "/api/whatsapp/foto/nao-existe.jpg").status, 404)
+        XCTAssertEqual(c.pedir("POST", "/api/whatsapp/foto/0123456789abcdef.jpg").status, 405)
+        XCTAssertEqual(c.pedir("GET", "/api/whatsapp/foto/0123456789abcdef.jpg", codigo: nil).status, 401)
+    }
+
+    func testMidiaDoWhatsAppPedeAConversaEAMensagem() throws {
+        let c = try Cenario()
+        let ok = c.pedir("GET", "/api/whatsapp/midia?chat=5%40s.whatsapp.net&id=M1")
+        XCTAssertEqual(ok.status, 200)
+        XCTAssertEqual((ok.json as? [String: Any])?["tipo"] as? String, "audio/ogg")
+        XCTAssertEqual((ok.json as? [String: Any])?["dados"] as? String, Data("oi".utf8).base64EncodedString())
+        XCTAssertEqual(c.pedir("GET", "/api/whatsapp/midia?chat=a").status, 400)
+        let grande = c.pedir("GET", "/api/whatsapp/midia?chat=a&id=grande")
+        XCTAssertEqual(grande.status, 422)
+        XCTAssertEqual((grande.json as? [String: Any])?["erro"] as? String, "Arquivo grande demais para abrir aqui.")
+        XCTAssertEqual(c.pedir("POST", "/api/whatsapp/midia?chat=a&id=M1").status, 405)
+    }
+
+    func testResponderNoMacAbreAConversaESoPorPost() throws {
+        let c = try Cenario()
+        let ok = c.pedir("POST", "/api/whatsapp/abrir", corpo: #"{"id":"c1"}"#)
+        XCTAssertEqual(ok.status, 200)
+        XCTAssertEqual((ok.json as? [String: Any])?["ok"] as? Bool, true)
+        XCTAssertNil((ok.json as? [String: Any])?["aviso"])
+        let grupo = c.pedir("POST", "/api/whatsapp/abrir", corpo: #"{"id":"g1"}"#)
+        XCTAssertEqual((grupo.json as? [String: Any])?["aviso"] as? String, "Grupo não tem link direto.")
+        XCTAssertEqual(c.pedir("POST", "/api/whatsapp/abrir", corpo: #"{"id":"x"}"#).status, 422)
+        XCTAssertEqual(c.pedir("POST", "/api/whatsapp/abrir", corpo: "{}").status, 400)
+        XCTAssertEqual(c.pedir("GET", "/api/whatsapp/abrir").status, 405)
+        XCTAssertEqual(c.registro.todos.filter { $0.hasPrefix("abrir-conversa") }, ["abrir-conversa c1", "abrir-conversa g1", "abrir-conversa x"])
+    }
+
     func testApiNuncaEmCache() throws {
         let c = try Cenario()
         XCTAssertEqual(c.pedir("GET", "/api/estado").extras["Cache-Control"], "no-store")
