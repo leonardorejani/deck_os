@@ -46,6 +46,7 @@ const padrao = () => ({
   atrasoAcao: 0,             // ms de espera antes de o Mac fazer uma tecla (POST /api/botao) ou um comando do Spotify
   spotifyRecusa: '',         // todo comando do Spotify é recusado (422) com esse motivo
   album: 'Artista Exemplo (Deluxe)', repetir: false, aleatorio: false,
+  agendaCriar: 'normal',     // normal | antigo (Mac sem as rotas de criar: 404) | lembretes-pedir (Lembretes ainda sem acesso: o pedido abre no Mac) | recusa (o Mac recusa o compromisso, 409)
   reunioes: false,           // os eventos de Meet, Zoom e Teams chegam com o link da sala (Evento.link)
   reuniaoRecusa: '',         // POST /api/reuniao/entrar falha (422) com esse motivo
   sessaoAbre: 'terminal',    // o que "Abrir no Mac" de uma sessão fez: terminal (trouxe o app do terminal) | pasta (abriu o Terminal na pasta)
@@ -56,6 +57,12 @@ const padrao = () => ({
   aparelhosErro: '',         // GET /api/spotify/dispositivos falha (500) com esse motivo
   apps: 'antigo',            // antigo (Mac sem as rotas de apps: 404, o editor usa a lista curta) | normal | erro (a lista falha com 500) | muitos (140 apps)
   acoesAtraso: 0,            // ms de espera antes de o Mac responder o que um app oferece (ler as contas do Mail demora)
+  mail: 'normal',            // normal | uma-conta | fechado | sem-permissao | vazio | muitas (20 mensagens) | erro (a rota falha) | antigo (Mac sem a rota: 404)
+  mailTecla: false,          // uma tecla do app Mail (abre a lista no iPhone) e uma do Mail com acao (vai pro Mac)
+  mailAbreRecusa: '',        // POST /api/mail/abrir falha (422) com esse motivo
+  atrasoMail: 0,             // ms de espera antes de o Mac responder a lista do Mail
+  mailFalhaSemContas: false, // a leitura que falha vem sem a lista de contas (Mac antigo)
+  mailFalha: '',             // id da conta do Mail cuja leitura falha (estado erro, com a lista de contas como o Mac devolve)
   mailAviso: '',             // a lista de contas do Mail não pôde ser lida: o motivo vem no aviso da ação
   comControles: false,       // o perfil ganha a tecla Controles (abre a tela dos controles do Mac no iPhone)
   controles: 'tudo',         // tudo | sem-brilho (Mac sem tela interna nem luz no teclado) | nada (não oferece nada) | antigo (Mac sem a rota: 404) | erro (500) | recusa (os pedidos de escrita falham com 422)
@@ -64,13 +71,14 @@ const padrao = () => ({
 });
 let c = padrao();
 let T0 = Date.now(); // as sessões esperam desde um instante fixo (o Mac real manda sempre o mesmo `desde` até a sessão mudar)
-let cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, whatsapp: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], controles: [] };
+let cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, whatsapp: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], criados: [], destinosPedidos: 0, mail: [], mailAbertas: [], controles: [] };
 let posicaoBase = { s: 132, desde: Date.now() };
 let perfilAtivo = 'trabalho';
+let criadosAgenda = [], padraoAgenda = null, lembretesAcesso = null, liberarEm = 0; // o que o iPhone criou na agenda, o destino padrão e o acesso aos Lembretes
 let codigoAtual = CODIGO, codigoAnterior = null; // rodízio: o atual, e o anterior que ainda vale (a folga de 10 min)
 let parearGasto = false, parearErros = 0; // o código de 6 dígitos serve uma vez e aguenta 5 erros
 let gravada = null; // o que o iPhone gravou: perfis e blocos, como o Mac guardaria no config.json
-const zerar = () => { parearGasto = false; parearErros = 0; codigoAtual = CODIGO; codigoAnterior = null; T0 = Date.now(); gravada = null; c = padrao(); cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, whatsapp: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], controles: [] }; posicaoBase = { s: 132, desde: Date.now() }; perfilAtivo = 'trabalho' };
+const zerar = () => { parearGasto = false; parearErros = 0; codigoAtual = CODIGO; codigoAnterior = null; T0 = Date.now(); gravada = null; c = padrao(); cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, whatsapp: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], criados: [], destinosPedidos: 0, mail: [], mailAbertas: [], controles: [] }; posicaoBase = { s: 132, desde: Date.now() }; perfilAtivo = 'trabalho'; criadosAgenda = []; padraoAgenda = null; lembretesAcesso = null };
 
 // com xss ligado, todo texto que a página mostra chega como HTML que tenta executar código
 const X = t => c.xss ? `"><img src=x onerror="window.__xss=(window.__xss||0)+1">${t}` : t;
@@ -84,6 +92,7 @@ function perfisConfig() {
     T('apagar', 'Apagar tela', 'comando', 'pmset displaysleepnow', { icone: 'svg:tela' }),
   ];
   if (c.comControles) trabalho.push(T('controles', 'Controles', 'app', 'Controles', { icone: 'svg:controles' }));
+  if (c.mailTecla) trabalho.push(T('mail', 'Mail', 'app', 'Mail', { icone: 'Mail' }), T('mail-caixa', 'Caixa do trabalho', 'app', 'Mail', { icone: 'Mail', acao: { id: 'mail-caixa', valor: 'conta-2' } }));
   if (c.comAcao) trabalho.push(T('cal-dia', 'Natal', 'app', 'Calendar', { icone: 'Calendar', acao: { id: 'calendario-dia', valor: '2026-12-25' } }));
   if (c.teclas === 'muitas') for (const n of ['Safari', 'Notes', 'Terminal', 'Finder', 'Spotify', 'Vorssaint', 'WhatsApp', 'Calendar']) trabalho.push(T('x' + n, n === 'Notes' ? 'Notas' : n, 'app', n, { icone: n }));
   const ensaio = [T('e-spotify', 'Spotify', 'app', 'Spotify', { icone: 'Spotify' }), T('e-cifras', 'Cifras', 'app', 'Notes', { icone: 'Notes' }), T('e-agenda', 'Agenda', 'app', 'Calendar', { icone: 'Calendar' }), T('e-apagar', 'Apagar tela', 'comando', 'pmset displaysleepnow', { icone: 'svg:tela' }), T('e-terminal', 'Terminal', 'app', 'Terminal', { icone: 'Terminal' })];
@@ -133,6 +142,8 @@ function eventosDoDia(d) {
   if (dow === 0) { E(9, 0, 'Escola dominical', AMARELO, 'Igreja', 'Sala 2'); E(19, 0, 'Culto', AMARELO, 'Igreja', 'Templo') }
   const avulsos = { 3: [14, 0, 'Revisão do projeto', AZUL, 'Trabalho', c.reunioes ? 'https://us02web.zoom.us/j/81234567890?pwd=abc123' : '', false, 'https://us02web.zoom.us/j/81234567890?pwd=abc123'], 10: [16, 0, 'Dentista', ROSA, 'Pessoal'], 12: [12, 30, 'Almoço com Rafael', VERDE, 'Trabalho'], 15: [0, 0, 'Aniversário da Ana', ROSA, 'Pessoal', '', true], 21: [15, 0, 'Gravação do podcast', AZUL, 'Trabalho', '', false, 'https://teams.microsoft.com/l/meetup-join/19%3ameeting_abc'], 27: [18, 0, 'Entrega do cliente', AZUL, 'Trabalho'] };
   if (avulsos[dia]) E(...avulsos[dia]);
+  const chaveDia = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  for (const n of criadosAgenda) if (n.dia === chaveDia) { const [h, mi] = (n.inicio || '00:00').split(':').map(Number); E(h, mi, n.titulo, VERDE, n.calendario, '', !!n.diaTodo) }
   if (c.agenda === 'muitas' && mesmoDiaF(d, new Date(Date.now() + 86400000))) for (let i = 0; i < 14; i++) E(7 + i, 0, 'Compromisso ' + (i + 1), AZUL, 'Trabalho', 'Sala ' + (i + 1));
   return ev;
 }
@@ -148,6 +159,26 @@ const aparelhos = () => [
   { id: 'd-cel', nome: 'Celular', tipo: 'smartphone', ativo: c.aparelhoAtivo === 'd-cel', volume: null, restrito: false },
 ];
 const FILA = () => ({ atual: { faixa: X('Faixa de Exemplo'), artista: X('Artista Exemplo') }, proximas: c.filaVazia ? [] : Array.from({ length: 9 }, (_, i) => ({ faixa: X('Próxima música ' + (i + 1)), artista: i % 3 === 0 ? 'Artista Exemplo, Convidado' : 'Banda ' + (i + 1) })) });
+// Mail: as contas e a caixa de entrada de cada uma (dados inventados, o tempo é relativo a T0)
+const MAIL_CONTAS = () => c.mail === 'uma-conta' ? [{ id: 'conta-1', nome: 'iCloud', email: 'pessoa@exemplo.com' }]
+  : [{ id: 'conta-1', nome: 'iCloud', email: 'pessoa@exemplo.com' }, { id: 'conta-2', nome: X('Trabalho'), email: 'pessoa@trabalho.exemplo' }, { id: 'conta-3', nome: 'Gmail', email: 'pessoa@gmail.exemplo' }];
+const MAIL_MENSAGENS = conta => {
+  if (c.mail === 'vazio') return [];
+  const ha = min => new Date(T0 - min * 60000).toISOString();
+  const um = (n, rem, assunto, previa, min, lida) => ({ id: `${conta}-m${n}@exemplo.com`, remetente: X(rem), assunto: X(assunto), previa: X(previa), data: ha(min), lida });
+  const base = conta === 'conta-2' ? [
+    um(1, 'Financeiro', 'Nota fiscal de novembro', 'Segue em anexo a nota fiscal referente ao mês.', 25, false),
+    um(2, 'Rafael Lima', 'Re: Proposta', 'Fechado, pode seguir.', 600, true),
+  ] : [
+    um(1, 'Ana Souza', 'Reunião de terça', c.textoLongo ? 'https://exemplo.com/um/caminho/muito/longo/sem/espaco/que/nao/cabe/na/linha/da/previa/e/precisa/cortar' : 'Oi, segue o resumo da semana e a pauta do encontro.', 5, false),
+    um(2, 'Loja Exemplo', 'Seu pedido saiu para entrega', 'O pedido 1234 saiu hoje de manhã.', 90, false),
+    um(3, 'Bia', c.textoLongo ? 'Assunto enorme '.repeat(12) : 'Fotos do fim de semana', 'Mandei as fotos pelo link.', 60 * 26, true),
+    um(4, 'Banco Exemplo', 'Sua fatura fechou', 'O valor da fatura é de R$ 100,00.', 60 * 24 * 3, true),
+  ];
+  if (c.mail !== 'muitas') return base;
+  return [...base, ...Array.from({ length: 16 }, (_, i) => um(10 + i, 'Pessoa ' + (i + 5), 'Mensagem antiga ' + (i + 1), 'Texto da mensagem antiga ' + (i + 1), 60 * 24 * (4 + i), true))];
+};
+
 // os apps do Mac de quem usa (GET /api/apps) e o que cada um oferece (GET /api/apps/<id>/acoes), como o Apps.swift e o AcoesDeApp.swift
 const APPS_MAC = () => [
   ...[['Calculadora', 'Calculator', 'com.apple.calculator'], ['Calendário', 'Calendar', 'com.apple.iCal'], ['Finder', 'Finder', 'com.apple.finder'], ['Mail', 'Mail', 'com.apple.mail'], ['Notas', 'Notes', 'com.apple.Notes'], ['Terminal', 'Terminal', 'com.apple.Terminal'], ['WhatsApp', 'WhatsApp', 'net.whatsapp.WhatsApp'], ['Spotify', 'Spotify', 'com.spotify.client']]
@@ -321,6 +352,29 @@ async function api(req, res, url) {
     if (item === 'volume') c.ctVolume = v; else if (item === 'mudo') c.ctMudo = v === 1; else if (item === 'brilho') c.ctBrilho = v; else c.ctTeclado = v;
     return json(res, 200, { ok: true });
   }
+  if (rota === '/api/agenda/destinos' && m === 'GET') {
+    if (c.agendaCriar === 'antigo') return json(res, 404, { erro: 'Essa rota não existe.' });
+    if (lembretesAcesso === null) lembretesAcesso = c.agendaCriar === 'lembretes-pedir' ? 'pedir' : 'liberado';
+    // Como o Mac real: só a chamada com ?pedir=1 que abre a janela devolve "pedindo". Enquanto a janela está aberta as outras devolvem "pedir".
+    let devolve = lembretesAcesso;
+    if (url.searchParams.get('pedir') === '1') { cont.destinosPedidos++; if (lembretesAcesso === 'pedir') { lembretesAcesso = 'pedindo'; liberarEm = Date.now() + 4500; devolve = 'pedindo' } }
+    if (lembretesAcesso === 'pedindo' && Date.now() >= liberarEm) lembretesAcesso = devolve = 'liberado';
+    else if (devolve === 'pedindo' && url.searchParams.get('pedir') !== '1') devolve = 'pedir';
+    return json(res, 200, {
+      calendarios: [{ id: 'cal-trab', nome: X('Trabalho'), cor: AZUL, conta: 'iCloud' }, { id: 'cal-pes', nome: X('Pessoal'), cor: ROSA, conta: 'iCloud' }],
+      listas: devolve === 'liberado' ? [{ id: 'lis-compras', nome: X('Compras'), cor: VERDE }, { id: 'lis-tarefas', nome: X('Tarefas'), cor: AMARELO }] : [],
+      permissaoCalendario: 'liberado', permissaoLembretes: devolve, padrao: padraoAgenda });
+  }
+  if (rota === '/api/agenda/criar' && m === 'POST') {
+    if (c.agendaCriar === 'antigo') return json(res, 404, { erro: 'Essa rota não existe.' });
+    const n = await lerCorpo(req);
+    if (!n.titulo || !n.dia || !n.destino) return json(res, 400, { erro: 'Dê um título ao compromisso.' });
+    if (c.agendaCriar === 'recusa') return json(res, 409, { erro: 'O Deck está sem acesso ao Calendário. No Mac: Ajustes do Sistema > Privacidade.' });
+    cont.criados.push(n);
+    if (n.destino.tipo === 'calendario') criadosAgenda.push({ ...n, calendario: n.destino.id === 'cal-pes' ? 'Pessoal' : 'Trabalho' });
+    if (n.padrao) padraoAgenda = n.destino;
+    return json(res, 200, { ok: true, padraoSalvo: !!n.padrao });
+  }
   if (rota === '/api/reuniao/entrar' && m === 'POST') {
     const link = String((await lerCorpo(req)).link || '');
     if (!/^https:\/\/(meet\.google\.com|([a-z0-9-]+\.)?zoom\.us|teams\.microsoft\.com|teams\.live\.com)\//.test(link)) return json(res, 400, { erro: 'Esse link não é de uma reunião do Meet, do Zoom ou do Teams.' });
@@ -349,6 +403,26 @@ async function api(req, res, url) {
       return acoes ? json(res, 200, { bundle, acoes }) : json(res, 404, { erro: 'Esse app não está instalado neste Mac.' });
     }
     return json(res, 404, { erro: 'Essa rota não existe.' });
+  }
+  if (rota === '/api/mail' && m === 'GET') {
+    if (c.mail === 'antigo') return json(res, 404, { erro: 'Essa rota não existe.' });
+    const pedida = url.searchParams.get('conta') || '';
+    cont.mail.push(pedida); // conta o pedido que chegou, não só o que terminou: é o que prova que o iPhone não empilha
+    if (c.atrasoMail) await new Promise(r => setTimeout(r, c.atrasoMail));
+    if (c.mail === 'erro') return json(res, 500, { erro: 'O Mail não respondeu no Mac.' });
+    if (c.mail === 'fechado') return json(res, 200, { estado: 'fechado', aviso: 'Abra o Mail no Mac para ver as mensagens aqui.', contas: [], conta: '', mensagens: [] });
+    if (c.mail === 'sem-permissao') return json(res, 200, { estado: 'sem-permissao', aviso: 'O Deck não tem permissão para controlar o Mail. Libere em Ajustes do Sistema > Privacidade e Segurança > Automação.', contas: [], conta: '', mensagens: [] });
+    const contas = MAIL_CONTAS(), conta = (contas.find(x => x.id === pedida) || contas[0]).id; // conta que sumiu: o Mac devolve a primeira
+    if (c.mailFalha && conta === c.mailFalha) return json(res, 200, { estado: 'erro', aviso: 'O Mail demorou demais para responder. Tente de novo em instantes.', contas: c.mailFalhaSemContas ? [] : contas, conta: c.mailFalhaSemContas ? '' : conta, mensagens: [] });
+    return json(res, 200, { estado: 'ok', contas, conta, mensagens: MAIL_MENSAGENS(conta) });
+  }
+  if (rota === '/api/mail/abrir' && m === 'POST') {
+    if (c.mail === 'antigo') return json(res, 404, { erro: 'Essa rota não existe.' });
+    const id = String((await lerCorpo(req)).id || '');
+    if (!id) return json(res, 400, { erro: 'Informe a mensagem a abrir.' });
+    if (c.mailAbreRecusa) return json(res, 422, { erro: c.mailAbreRecusa });
+    cont.mailAbertas.push(id);
+    return json(res, 200, { ok: true });
   }
   if (rota === '/api/capa') { cont.capas++; res.writeHead(200, { 'Content-Type': 'image/png' }); return res.end(fs.readFileSync(path.join(RAIZ, 'icones/deck.png'))) }
   if (rota === '/api/sessoes') { cont.sessoes++; return json(res, 200, SESSOES().slice(0, c.sessoes)) }

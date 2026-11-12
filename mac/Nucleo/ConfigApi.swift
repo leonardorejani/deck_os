@@ -37,6 +37,8 @@ extension Config {
         // o padrão não pode apagar o que o usuário escolheu.
         var completa = recebida
         if json["whatsapp"] == nil { completa.whatsapp = atual.whatsapp }
+        // Idem para o lugar padrão da agenda: painel velho não manda a chave e não pode apagar a escolha.
+        if json["agendaPadrao"] == nil { completa.agendaPadrao = atual.agendaPadrao }
         return aplicar(recebida: completa, sobre: atual)
     }
 

@@ -1,4 +1,4 @@
-/* Painéis de tela inteira (SPEC, seção 5): WhatsApp, Agenda e Sessões. Mesmas folhas do protótipo,
+/* Painéis de tela inteira (SPEC, seção 5): WhatsApp, Agenda, Sessões e Mail. Mesmas folhas do protótipo,
    com a lista vindo do Mac pelo canal. Usa as peças de deck.js (V, canal, avisar, abrirFolha...). */
 
 const iniciais = n => String(n).split(' ').filter(Boolean).slice(0, 2).map(p => p[0]).join('').toUpperCase();
@@ -9,11 +9,11 @@ const dataIso = d => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getD
 const mesmoDia = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 const reduzido = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-/* A tecla do app que abriu o painel manda o Mac abrir o app (WhatsApp, Calendário). Se ela sumiu, procura outra igual */
+/* A tecla do app que abriu o painel manda o Mac abrir o app (WhatsApp, Calendário, Mail). Se ela sumiu, procura outra igual */
 const teclaDoPainel = {};
 function abrirPainel(qual, idTecla) {
   if (idTecla) teclaDoPainel[qual] = idTecla;
-  if (qual === 'whatsapp') abrirWhats(); else if (qual === 'calendario') abrirCal(); else if (qual === 'sessoes') abrirSessoes(); else if (qual === 'controles') abrirControles();
+  if (qual === 'whatsapp') abrirWhats(); else if (qual === 'calendario') abrirCal(); else if (qual === 'sessoes') abrirSessoes(); else if (qual === 'mail') abrirMail(); else if (qual === 'controles') abrirControles();
 }
 async function abrirNoMac(qual, texto) {
   const id = V.teclas.some(t => t.id === teclaDoPainel[qual]) ? teclaDoPainel[qual] : V.teclas.find(t => painelDe(t) === qual)?.id;
@@ -185,6 +185,73 @@ $('#se-rodape').addEventListener('click', e => {
   avisar('Dispensada até ela mudar de novo');
 });
 
+/* ---------- Mail ---------- */
+/* As últimas mensagens da caixa de entrada de uma conta do Mail do Mac, lidas e não lidas. Só leitura: o Deck não marca
+   como lida nem apaga. Tocar numa mensagem abre ela no Mail do Mac. A conta escolhida fica guardada no aparelho. */
+const CHAVE_CONTA_MAIL = 'deck-mail-conta-v1';
+const ma = { dados: null, json: '', conta: '', erro: '', seq: 0, abrindo: false, contas: [], lendo: null };
+const dadosMailVazios = { estado: 'ok', contas: [], conta: '', mensagens: [] };
+function horaMail(iso) { return horaConversa(iso) } // hoje HH:MM, "ontem", dia da semana ou dd/mm, como no WhatsApp
+function abrirMail() { ma.dados = null; ma.json = ''; ma.erro = ''; ma.conta = lerGuardado(CHAVE_CONTA_MAIL) || ''; pintarMail(); abrirFolha('#f-mail'); lerMail() }
+async function lerMail() {
+  if (ma.lendo === ma.conta) return; // o relógio de 4 s não empilha leitura: se a desta conta ainda não voltou, espera ela
+  const quem = ma.conta; ma.lendo = quem;
+  const n = ++ma.seq;
+  try {
+    const d = await canal.mail(ma.conta); if (n !== ma.seq) return;
+    const dados = d && typeof d === 'object' ? { ...dadosMailVazios, ...d } : dadosMailVazios, j = JSON.stringify(dados);
+    if (dados.conta && dados.conta !== ma.conta) { ma.conta = dados.conta; guardar(CHAVE_CONTA_MAIL, ma.conta) } // a conta guardada sumiu do Mail: o Mac devolveu a primeira
+    if (j !== ma.json || ma.erro) { ma.json = j; ma.dados = dados; ma.erro = ''; pintarMail() }
+  } catch (e) {
+    if (n !== ma.seq) return;
+    if (e.status === 401) return tratarErro(e);
+    const era = ma.erro;
+    // Mac antigo, sem a rota do Mail, diz isso em vez de "não deu para ler"
+    ma.erro = e.status === 404 ? 'Esta versão do Deck no Mac ainda não lê o Mail. Atualize o Deck no Mac.' : msgErro(e);
+    if (!ma.dados) pintarMail(); else if (!era) avisar(ma.erro, { erro: true });
+  } finally { if (ma.lendo === quem) ma.lendo = null }
+}
+const esqueletoMail = () => '<div class="esq-lista" aria-hidden="true">' + '<div class="conversa esq"><span class="avatar"></span><span><i class="barra" style="width:40%"></i><i class="barra" style="width:70%"></i><i class="barra" style="width:90%"></i></span><i class="barra" style="width:32px"></i></div>'.repeat(5) + '</div>';
+const linhaMail = m => `<button class="conversa mail${m.lida ? '' : ' nao-lida'}" data-mail="${esc(m.id)}" aria-label="${m.lida ? '' : 'Não lida. '}${esc(m.remetente)}, ${esc(m.assunto)}">
+  <span class="avatar">${esc(iniciais(m.remetente))}</span>
+  <span style="min-width:0"><div class="nome-c">${esc(m.remetente)}</div><div class="assunto-m">${esc(m.assunto)}</div><div class="previa">${esc(m.previa)}</div></span>
+  <span class="lado"><span>${esc(horaMail(m.data))}</span><span class="ponto-nl" ${m.lida ? 'hidden' : ''}></span></span></button>`;
+function pintarMail() {
+  const d = ma.dados, caixa = $('#ma-lista');
+  if (d?.contas?.length) ma.contas = d.contas;
+  const contas = ma.contas, atual = d ? d.conta : ma.conta; // com a leitura falha o seletor fica: é por ele que se volta para uma conta que funciona
+  $('#ma-lista').setAttribute('aria-busy', String(!d && !ma.erro));
+  // troca de conta no topo (só com mais de uma)
+  const seletor = $('#ma-contas'); seletor.hidden = contas.length < 2;
+  const htmlContas = contas.map(c => `<button data-conta="${esc(c.id)}" aria-pressed="${c.id === atual}" title="${esc(c.email || '')}">${esc(c.nome)}</button>`).join('');
+  if (seletor.dataset.html !== htmlContas) { seletor.dataset.html = htmlContas; seletor.innerHTML = htmlContas }
+  if (!d) { $('#ma-titulo').textContent = 'Mail'; if (ma.erro) caixa.innerHTML = erroLista(ma.erro); else if (!caixa.querySelector('.esq-lista')) caixa.innerHTML = esqueletoMail(); return }
+  const msgs = d.mensagens || [], nl = msgs.filter(m => !m.lida).length, conta = contas.find(c => c.id === d.conta);
+  $('#ma-titulo').innerHTML = d.estado === 'ok' && msgs.length ? `Mail <small>${nl ? `${nl} ${nl === 1 ? 'não lida' : 'não lidas'} nas últimas ${msgs.length}` : `${msgs.length} ${msgs.length === 1 ? 'mensagem' : 'mensagens'}, todas lidas`}${conta && contas.length < 2 ? `, ${esc(conta.nome)}` : ''}</small>` : 'Mail';
+  if (d.estado !== 'ok') {
+    const fechado = d.estado === 'fechado';
+    return manterRolagem(caixa, `<div class="vazio-bloco"><strong>${fechado ? 'Mail fechado' : d.estado === 'sem-permissao' ? 'Mail sem permissão' : 'Não deu para ler o Mail'}</strong><span>${esc(d.aviso || (fechado ? 'Abra o Mail no Mac para ver as mensagens aqui.' : 'Tente de novo em instantes.'))}</span>${fechado ? '<button class="btn secundario pequeno" data-ma-mac style="justify-self:start">Abrir o Mail no Mac</button>' : ''}</div>`);
+  }
+  if (!msgs.length) return manterRolagem(caixa, `<div class="vazio-bloco"><strong>${contas.length ? 'Caixa de entrada vazia' : 'Nenhuma conta no Mail'}</strong><span>${esc(d.aviso || 'Quando chegar uma mensagem, ela aparece aqui.')}</span></div>`);
+  manterRolagem(caixa, msgs.map(linhaMail).join(''));
+}
+$('#ma-contas').addEventListener('click', e => {
+  const b = e.target.closest('[data-conta]'); if (!b || b.dataset.conta === ma.dados?.conta) return;
+  ma.conta = b.dataset.conta; guardar(CHAVE_CONTA_MAIL, ma.conta);
+  ma.dados = null; ma.json = ''; ma.erro = ''; $('#ma-lista').scrollTop = 0; pintarMail(); lerMail(); // a lista da outra conta ainda não chegou: esqueleto, não a de antes
+});
+$('#ma-lista').addEventListener('click', e => {
+  if (e.target.closest('[data-tentar]')) { ma.erro = ''; pintarMail(); return lerMail() }
+  if (e.target.closest('[data-ma-mac]')) return abrirNoMac('mail', 'Abrindo o Mail no Mac');
+  const m = e.target.closest('[data-mail]'); if (m) abrirMensagemNoMac(m.dataset.mail);
+});
+$('#ma-abrir').onclick = () => abrirNoMac('mail', 'Abrindo o Mail no Mac');
+async function abrirMensagemNoMac(id) {
+  if (ma.abrindo) return; ma.abrindo = true;
+  avisar('Abrindo a mensagem no Mail do Mac');
+  try { await canal.abrirMensagem(id) } catch (e) { tratarErro(e) } finally { ma.abrindo = false }
+}
+
 /* ---------- Agenda ---------- */
 const ag = { mes: new Date(), dia: new Date(), mesEv: null, lista: null, aberto: null, erro: '', seqMes: 0, seqLista: 0 };
 // só repinta se a resposta é diferente da anterior (a leitura de 4 s não mexe na tela à toa)
@@ -210,6 +277,7 @@ function nomeDia(d) {
   return mesmoDia(d, hoje) ? 'Hoje, ' + longo.split(', ')[1] : mesmoDia(d, amanha) ? 'Amanhã, ' + longo.split(', ')[1] : longo[0].toUpperCase() + longo.slice(1);
 }
 function abrirCal() {
+  fecharFormNovo();
   const agora = new Date(V.ref); ag.mes = new Date(agora.getFullYear(), agora.getMonth(), 1); ag.dia = new Date(agora); ag.aberto = null; ag.mesEv = null; ag.lista = null; ag.erro = ''; vistoAg.mes = vistoAg.lista = '';
   pintarCal(); abrirFolha('#f-cal'); lerAgenda(true, true);
 }
@@ -283,7 +351,8 @@ function pintarListaCal() {
         + (aberto ? `<div class="ev-detalhe">${reuniao ? `<button class="btn primario" data-ev-reuniao="${esc(reuniao.url)}" aria-label="Entrar na reunião (${esc(reuniao.nome)}), abre no Mac">Entrar na reunião</button>` : ''}<button class="btn secundario pequeno" data-ev-mac>Abrir no Calendário do Mac</button></div>` : '');
     }).join('') + '</section>';
   }
-  manterRolagem(el, h || '<div class="vazio-bloco"><strong>Nada neste mês a partir deste dia</strong><span>Os eventos do Calendário do Mac aparecem aqui.</span></div>');
+  const novo = `<button class="btn secundario btn-novo" data-novo>Novo compromisso em ${esc(ag.dia.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' }))}</button>`;
+  manterRolagem(el, novo + (h || '<div class="vazio-bloco"><strong>Nada neste mês a partir deste dia</strong><span>Os eventos do Calendário do Mac aparecem aqui.</span></div>'));
 }
 /* Troca o mês: o atual sai para um lado, o novo entra pelo outro. Vindo de um arrasto, parte de onde o dedo soltou */
 function trocarMes(passo) {
@@ -310,6 +379,7 @@ $('#ca-grade').addEventListener('click', e => {
 });
 $('#ca-lista').addEventListener('click', e => {
   if (e.target.closest('[data-tentar]')) { ag.erro = ''; pintarListaCal(); return lerAgenda(true, true) }
+  if (e.target.closest('[data-novo]')) return abrirFormNovo();
   if (e.target.closest('[data-ev-mac]')) return abrirNoMac('calendario', 'Abrindo o Calendário no Mac');
   const reu = e.target.closest('[data-ev-reuniao]'); if (reu) return entrarNaReuniao(reu.dataset.evReuniao);
   const b = e.target.closest('[data-ev]'); if (b) { ag.aberto = ag.aberto === b.dataset.ev ? null : b.dataset.ev; pintarListaCal() }
@@ -339,9 +409,133 @@ arrastoCal().addEventListener('pointercancel', e => soltarMes(e, true));
 // o toque que terminou um arrasto não escolhe o dia nem aperta a seta que estava embaixo do dedo
 arrastoCal().addEventListener('click', e => { if (ag.arrastou) { e.stopPropagation(); e.preventDefault() } }, true);
 
+/* ---------- Novo compromisso: a parte da direita vira o formulário ---------- */
+const fo = { aberto: false, destinos: null, antigo: false, enviando: false, todo: false, querLista: false, espera: null, ate: 0 };
+const ALERTAS_HORA = [['', 'Sem alerta'], ['0', 'No horário'], ['5', '5 minutos antes'], ['15', '15 minutos antes'], ['30', '30 minutos antes'], ['60', '1 hora antes'], ['1440', '1 dia antes']];
+const ALERTAS_DIA = [['', 'Sem alerta'], ['0', 'No dia, às 9h'], ['1440', '1 dia antes, às 9h'], ['2880', '2 dias antes, às 9h'], ['10080', '1 semana antes, às 9h']];
+const chaveDestino = d => d.tipo + ':' + d.id;
+const destinoDe = v => { const i = v.indexOf(':'); return i < 0 ? null : { tipo: v.slice(0, i), id: v.slice(i + 1) } };
+function mensagemNovo(txt, erro) { const m = $('#nc-msg'); m.textContent = txt || ''; m.classList.toggle('erro', !!erro) }
+function pintarAlertas() {
+  const sel = $('#nc-alerta'), antes = sel.value, lista = fo.todo ? ALERTAS_DIA : ALERTAS_HORA;
+  sel.innerHTML = lista.map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
+  sel.value = lista.some(([v]) => v === antes) ? antes : '';
+}
+function pintarTipoNovo() {
+  $('#nc-todo').checked = fo.todo;
+  $('#nc-inicio').disabled = $('#nc-fim').disabled = fo.todo;
+  pintarAlertas();
+}
+function pintarPadrao() {
+  const v = $('#nc-destino').value, p = fo.destinos?.padrao, caixa = $('#nc-padrao'), ehPadrao = !!p && v === chaveDestino(p);
+  caixa.disabled = ehPadrao || !destinoDe(v); if (ehPadrao) caixa.checked = true; else if (caixa.dataset.era === '1') caixa.checked = false;
+  caixa.dataset.era = ehPadrao ? '1' : '0';
+  $('#nc-padrao-txt').textContent = ehPadrao ? 'É o lugar padrão' : 'Usar como padrão';
+}
+/* o select de "Onde salvar": calendários e listas do Mac. Lembretes ainda sem acesso aparecem como uma opção que pede o acesso no Mac */
+function pintarDestinos() {
+  const d = fo.destinos, sel = $('#nc-destino'); if (!d) return;
+  const opcao = (x, tipo) => `<option value="${esc(tipo + ':' + x.id)}">${esc(x.nome)}${x.conta ? ' (' + esc(x.conta) + ')' : ''}</option>`;
+  let h = '', aviso = '';
+  if (d.calendarios.length) h += `<optgroup label="Calendário">${d.calendarios.map(x => opcao(x, 'calendario')).join('')}</optgroup>`;
+  if (d.listas.length) h += `<optgroup label="Lembretes">${d.listas.map(x => opcao(x, 'lembretes')).join('')}</optgroup>`;
+  const esperando = esperandoLembretes(d);
+  if (d.permissaoLembretes === 'pedir' && !esperando) h += '<optgroup label="Lembretes"><option value="pedir">Liberar os Lembretes no Mac</option></optgroup>';
+  if (esperando) aviso = 'Aceite o pedido de acesso aos Lembretes na tela do Mac.';
+  if (d.permissaoCalendario !== 'liberado' && !d.calendarios.length) aviso = d.permissaoCalendario === 'recusado' ? 'O Deck está sem acesso ao Calendário. No Mac: Ajustes do Sistema > Privacidade.' : 'Aceite o pedido de acesso ao Calendário na tela do Mac.';
+  const antes = sel.value;
+  sel.innerHTML = h || '<option value="">Nenhum lugar disponível</option>';
+  const todos = [...sel.options].map(o => o.value);
+  const primeiraLista = fo.querLista && d.listas[0] ? 'lembretes:' + d.listas[0].id : '';
+  const escolha = [primeiraLista, antes, d.padrao ? chaveDestino(d.padrao) : '', d.calendarios[0] ? 'calendario:' + d.calendarios[0].id : ''].find(v => v && todos.includes(v));
+  if (primeiraLista && escolha === primeiraLista) fo.querLista = false;
+  sel.value = escolha ?? sel.options[0].value;
+  pintarPadrao();
+  if (aviso) mensagemNovo(aviso); else if (!$('#nc-msg').classList.contains('erro')) mensagemNovo('');
+  if (esperando || d.permissaoCalendario === 'pedindo') esperarAcesso();
+}
+/* o Mac só devolve "pedindo" na chamada que abriu a janela. Nas seguintes ele ainda diz "pedir" até a pessoa responder, então depois de pedir "pedir" também é "esperando" */
+function esperandoLembretes(d) { return d.permissaoLembretes === 'pedindo' || (d.permissaoLembretes === 'pedir' && Date.now() < fo.pediuAte) }
+/* depois de pedir o acesso, olha de 2 em 2 s até a pessoa responder no Mac (no máximo 1 minuto) */
+function esperarAcesso() {
+  if (fo.espera) return;
+  fo.ate = Date.now() + 60000;
+  fo.espera = setInterval(() => {
+    if (!fo.aberto || Date.now() > fo.ate) { clearInterval(fo.espera); fo.espera = null; if (fo.aberto) pintarDestinos(); return }
+    carregarDestinos(false);
+  }, 2000);
+}
+async function carregarDestinos(pedirAcesso) {
+  try {
+    const d = await canal.agendaDestinos(pedirAcesso);
+    if (!fo.aberto) return;
+    fo.antigo = false; fo.destinos = d;
+    if (fo.espera && !esperandoLembretes(d) && d.permissaoCalendario !== 'pedindo') { clearInterval(fo.espera); fo.espera = null }
+    pintarDestinos();
+  } catch (e) {
+    if (!fo.aberto) return;
+    if (e.status === 401) return tratarErro(e);
+    if (e.status === 404) { fo.antigo = true; mensagemNovo('Este Mac tem uma versão do Deck sem essa função. Atualize o Deck no Mac para criar compromissos.', true); return }
+    mensagemNovo(msgErro(e), true);
+  }
+}
+function abrirFormNovo() {
+  fo.aberto = true; fo.pediuAte = 0; fo.destinos = null; fo.antigo = false; fo.enviando = false; fo.todo = false; fo.querLista = false;
+  const hoje = mesmoDia(ag.dia, new Date(V.ref)), h = hoje ? Math.min(new Date(V.ref).getHours() + 1, 23) : 9;
+  $('#nc-titulo').value = ''; $('#nc-dia').value = dataIso(ag.dia);
+  $('#nc-inicio').value = pad2(h) + ':00'; $('#nc-fim').value = h < 23 ? pad2(h + 1) + ':00' : '23:59';
+  $('#nc-destino').innerHTML = '<option value="">Lendo o Mac...</option>';
+  $('#nc-padrao').checked = false; $('#nc-padrao').dataset.era = '0'; $('#nc-padrao').disabled = true;
+  $('#nc-salvar').disabled = false; $('#nc-salvar').textContent = 'Salvar'; mensagemNovo('');
+  pintarTipoNovo();
+  $('#ca-lista').hidden = true; $('#ca-form').hidden = false;
+  carregarDestinos(false);
+}
+function fecharFormNovo() {
+  fo.aberto = false; clearInterval(fo.espera); fo.espera = null;
+  if ($('#ca-form').contains(document.activeElement)) document.activeElement.blur();
+  $('#ca-form').hidden = true; $('#ca-lista').hidden = false;
+}
+async function salvarCompromisso() {
+  if (fo.enviando) return;
+  const titulo = $('#nc-titulo').value.trim(), dia = $('#nc-dia').value, inicio = $('#nc-inicio').value, fim = $('#nc-fim').value, destino = destinoDe($('#nc-destino').value);
+  if (fo.antigo) return mensagemNovo('Atualize o Deck no Mac para criar compromissos.', true);
+  if (!titulo) return mensagemNovo('Dê um título ao compromisso.', true);
+  if (!dia) return mensagemNovo('Escolha o dia.', true);
+  if (!fo.todo && !inicio) return mensagemNovo('Escolha a hora de início.', true);
+  if (!fo.todo && fim && fim <= inicio) return mensagemNovo('O fim precisa ser depois do início.', true);
+  if (!destino) return mensagemNovo($('#nc-destino').value === 'pedir' ? 'Libere os Lembretes antes de salvar neles.' : 'Escolha onde salvar.', true);
+  const corpo = { titulo, dia, diaTodo: fo.todo, destino, padrao: $('#nc-padrao').checked && !$('#nc-padrao').disabled };
+  if (!fo.todo) { corpo.inicio = inicio; if (fim) corpo.fim = fim }
+  if ($('#nc-alerta').value !== '') corpo.alertaMin = Number($('#nc-alerta').value);
+  fo.enviando = true; $('#nc-salvar').disabled = true; $('#nc-salvar').textContent = 'Salvando...'; mensagemNovo('');
+  try {
+    await canal.criarCompromisso(corpo);
+    const [a, m, di] = dia.split('-').map(Number), nome = $('#nc-destino').selectedOptions[0]?.textContent || '';
+    fecharFormNovo();
+    ag.dia = new Date(a, m - 1, di); ag.mes = new Date(a, m - 1, 1); ag.aberto = null; ag.mesEv = null; ag.lista = null; vistoAg.mes = vistoAg.lista = '';
+    pintarCal(); lerAgenda(true, true);
+    avisar(destino.tipo === 'lembretes' ? `Lembrete criado em ${nome}. Ele aparece no app Lembretes.` : 'Compromisso criado no Calendário do Mac');
+  } catch (e) {
+    if (e.status === 401) return tratarErro(e);
+    mensagemNovo(e.rede ? 'Sem conexão com o Mac. Confira o Wi-Fi e tente de novo.' : msgErro(e), true);
+    if (e.status === 409) carregarDestinos(false);
+  } finally { fo.enviando = false; $('#nc-salvar').disabled = false; $('#nc-salvar').textContent = 'Salvar' }
+}
+$('#ca-form').addEventListener('submit', e => { e.preventDefault(); salvarCompromisso() });
+$('#ca-form').addEventListener('click', e => {
+  if (e.target.closest('[data-nc-cancelar]')) return fecharFormNovo();
+});
+$('#nc-todo').addEventListener('change', e => { fo.todo = e.target.checked; pintarTipoNovo() });
+$('#nc-destino').addEventListener('change', e => {
+  mensagemNovo('');
+  if (e.target.value === 'pedir') { fo.querLista = true; fo.pediuAte = Date.now() + 60000; mensagemNovo('Aceite o pedido de acesso na tela do Mac.'); carregarDestinos(true); return }
+  pintarPadrao();
+});
+
 /* ---------- folha aberta: a lista acompanha o Mac a cada 4 s ---------- */
 setInterval(() => {
   if (document.hidden || !V || V.carregando || semAcesso || offline) return;
   const id = folhaAberta?.id;
-  if (id === 'f-whats') lerWhats(); else if (id === 'f-sessoes') lerSessoes(); else if (id === 'f-cal') lerAgenda(true, true, true);
+  if (id === 'f-whats') lerWhats(); else if (id === 'f-sessoes') lerSessoes(); else if (id === 'f-cal') lerAgenda(true, true, true); else if (id === 'f-mail') lerMail();
 }, 4000);

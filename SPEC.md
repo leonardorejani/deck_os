@@ -221,6 +221,43 @@ Meet e Teams no navegador padrão, Zoom no app do Zoom se ele estiver instalado 
 no `Evento` (`link`, opcional: Mac antigo não manda e o botão não aparece) e só aceita abrir `https` desses três serviços
 (`POST /api/reuniao/entrar`, corpo `{"link": "https://..."}`, senão 400).
 
+### Mail: as últimas mensagens que chegaram
+
+A tecla do app Mail (sem ação) abre uma tela de fábrica, como a do WhatsApp e a da Agenda. Título com as não lidas ("2 não lidas
+nas últimas 20"), "Abrir no Mac" e, no topo, a troca de conta: um botão por conta configurada no app Mail do Mac (sem login
+no Deck, ele "já puxa do PC"). Com uma conta só, o seletor some e o título diz qual é. A conta escolhida fica guardada no aparelho,
+e se ela sumir do Mail o Mac devolve a primeira. Uma linha por mensagem, as mais novas primeiro, lidas e não lidas: avatar com as
+iniciais, remetente, assunto, começo do texto em uma linha, hora (como no WhatsApp: HH:MM, "ontem", dia da semana ou dd/mm) e um
+ponto azul na não lida, que também fica em negrito. Tocar numa mensagem abre ela no Mail do Mac. **Só leitura**: o Deck nunca
+marca como lida, apaga ou move (o Mail pode marcar como lida ao mostrar a mensagem, como faria com qualquer clique seu).
+
+Estados: Mail fechado ("Mail fechado", "Abra o Mail no Mac para ver as mensagens aqui" e o botão "Abrir o Mail no Mac"), sem a
+permissão de Automação (diz onde liberar), caixa vazia, erro com "Tentar de novo", e Mac antigo sem a rota ("Atualize o Deck no
+Mac"). A folha acompanha o Mac a cada 4 s, e o Mac só relê o Mail a cada 20 s.
+
+O Mac lê por AppleScript do Mail (`mac/Nucleo/Fontes/Mail.swift`), os mesmos scripts fixos das ações de tecla: a conta e o limite
+vão como argumentos separados, com tempo limite de 10 s, 20 mensagens e cache de 20 s por conta. **Não abre o Mail**: ele fechado
+devolve o aviso, porque abrir escondido a cada leitura do iPhone faria o app subir sozinho. Rotas autenticadas:
+`GET /api/mail?conta=<id>` (devolve `estado` ("ok", "fechado", "sem-permissao" ou "erro"), `aviso`, `contas`, `conta` e
+`mensagens` com `id`, `remetente`, `assunto`, `previa`, `data` e `lida`) e `POST /api/mail/abrir` com `{"id": "<Message-ID>"}`,
+que abre `message://` no Mail. Tecla do Mail com ação (caixa de entrada de uma conta, novo e-mail) continua indo direto para o Mac.
+
+**Novo compromisso (12/11/2026).** Na lista, o dia tocado oferece "Novo compromisso em <dia>". Tocar troca a parte da
+direita inteira pelo formulário (o mês continua à esquerda): título, dia, início e fim, "Dia todo", "Onde salvar",
+alerta e "Usar como padrão", com Cancelar e Salvar no pé. Onde salvar é um calendário do Mac (só os que aceitam
+gravar) ou uma lista do app Lembretes. Alerta com hora: sem, no horário, 5, 15, 30 min, 1 h ou 1 dia antes. Dia todo: sem,
+no dia às 9h, 1 dia, 2 dias ou 1 semana antes (às 9h). Salvar vai ao Mac, que grava pelo EventKit (aparece no Calendário
+do Mac e do celular da mesma conta). Depois a agenda recarrega no dia criado e mostra o item. Lembrete não aparece na
+agenda (ela lê só eventos): o aviso diz "Lembrete criado em <lista>. Ele aparece no app Lembretes."
+Rotas (com o código de acesso): `GET /api/agenda/destinos` devolve `{calendarios, listas, permissaoCalendario,
+permissaoLembretes, padrao}` e `?pedir=1` abre no Mac o pedido de acesso aos Lembretes (a permissão só é pedida
+quando a pessoa escolhe Lembretes). `POST /api/agenda/criar` recebe `{titulo, dia: "AAAA-MM-DD", diaTodo, inicio, fim:
+"HH:MM", destino: {tipo: "calendario"|"lembretes", id}, alertaMin, padrao}`. O Mac valida tudo (título de 1 a 200 letras,
+dia real entre 2000 e 2100, hora de 24 h, fim depois do início, alerta da lista, destino existente que aceita gravar) e
+responde 400 (entrada), 409 (sem acesso no macOS) ou 422 (destino sumiu ou o EventKit recusou). Sem `destino`, vale o
+padrão da config (`agendaPadrao: {tipo, id}`, ajustável em Ajustes > Este Mac > Agenda). `padrao: true` guarda o
+destino escolhido como padrão. Mac antigo responde 404 e o formulário pede para atualizar o Deck.
+
 ### Sessões esperando
 
 Tela de sessões em cartões, um por sessão: nome, projeto, há quanto tempo e o começo da pergunta (3 linhas), a mais
@@ -292,12 +329,13 @@ contas que o dono adicionar em User Management (até 25): quem não estiver na l
 
 | Dado | Fonte | Observação |
 |---|---|---|
-| Agenda | EventKit (Calendário do Mac) | o macOS recusa para processo de terminal sem perguntar, por isso o Deck é um app |
+| Agenda | EventKit (Calendário do Mac, e Lembretes para criar) | o macOS recusa para processo de terminal sem perguntar, por isso o Deck é um app |
 | Spotify | AppleScript no Spotify | nome, artista, álbum, capa, posição, duração, `repeating` e `shuffling`, testado. Próxima da fila e repetir só a música não existem no AppleScript (precisam do login na API do Spotify) |
 | Spotify, volume | AppleScript (`sound volume` do player e `output volume` do Mac) | lido junto do estado, mudado por `POST /api/spotify/volume`. Testado em 11/11/2026 lendo e devolvendo o volume sem mexer na música |
 | Spotify, aparelhos, curtir, fila, repetir | API do Spotify (`api.spotify.com/v1`), com o login da pessoa | só com o Spotify conectado nos Ajustes (seção 5, "Spotify: volume...") |
 | Manter acordado | atalho de teclado do Vorssaint + `pmset -g assertions` | ligar e desligar testado |
 | WhatsApp | banco local do WhatsApp do Mac (`ChatStorage.sqlite`), só leitura | tem nome do contato ou grupo, não lidas, última mensagem e as mensagens. Hoje: 445 conversas, 53 com não lidas. Filtrar arquivadas e escondidas. Pode mudar com atualização do WhatsApp, então tem que falhar com aviso, nunca quebrar a tela. Origem web (11/11/2026): o total de não lidas vem do título da aba do WhatsApp Web ("(23) WhatsApp"), lido por AppleScript em Safari, Chrome, Arc, Brave ou Edge (só com a aba aberta, pede Automação na primeira vez), sem lista por conversa |
+| Mail | AppleScript do app Mail do Mac (`message` e `account` do dicionário dele), só leitura | as contas configuradas no Mail e as 20 últimas da caixa de entrada de cada uma (remetente, assunto, começo do texto, data, lida). Sem login no Deck. Pede Automação na primeira vez. Com o Mail fechado devolve o aviso e não abre o app. Cache de 20 s |
 | Uso do Claude | medição da troca de contas (`~/.config/claude-account`, perfis `leo` e `equipe`) | o arquivo de medição não existe agora. Quando faltar, o Deck mede por conta própria a cada 5 min com o login de cada perfil, sem gravar token em lugar nenhum |
 | Uso do Codex | `rate_limits` nos arquivos de sessão do Codex (`~/.codex/sessions`) | só a janela semanal (`window_minutes` 10080), percentual, plano e `resets_at` (quando renova). Só atualiza quando o Codex roda |
 | Renovação de cada conta | `reset_7d` da medição do Claude por perfil, `resets_at` do Codex | mostrado como dia e hora ("sex 14h") |
@@ -931,6 +969,17 @@ Ajustes de UX (11/11/2026, teste do Leonardo no iPhone):
       o Deck sai da frente e depois de 30 s. Sem Acessibilidade cai no monitor local, e a tela avisa que, se o atalho
       abrir outro app, é para montar escolhendo as teclas.
     - Ao usar a tecla, o Deck posta a tecla descendo e subindo no HID, com os modificadores nos dois eventos.
+35. Mail no iPhone (12/11/2026). Palavras dele, na revisão das telas de fábrica: "mail ok mostrando a lista das última que
+    chegaram, lidas e nao lidas podendo trocar de conta também, aí tem que logar ou já puxa do pc".
+    - A tecla do app Mail abre a lista das últimas mensagens (remetente, assunto, prévia, hora, marca de não lida), com troca de
+      conta no topo. As contas são as do app Mail do Mac, sem login: o Mac lê por AppleScript. Só leitura, e tocar numa mensagem
+      abre ela no Mail do Mac. Detalhes na seção 5, "Mail".
+    - Mail fechado: o Deck avisa "Abra o Mail no Mac" e não abre o app sozinho (decisão desta frente, ver seção 5).
+    - Conta que falha ou demora não prende a tela: a troca de conta continua no topo (o Mac devolve a lista de contas mesmo na falha)
+      e dá para voltar para outra. O Mac relê no máximo uma vez a cada 20 s, e uma leitura que falhou também vale por 10 s, para
+      o iPhone não empilhar leituras no Mail. O iPhone não pede de novo enquanto a leitura anterior não voltou.
+    - Na mesma conversa ele descartou outras telas (mensagens "acho que nao", navegadores, ajustes, música e IDE "nao") e disse que
+      lembretes "é feito na agenda". Captura de tela e controles do Mac (volume, brilho) são outras frentes.
 
 34. Spotify fechou e abriu de novo, o player volta (12/11/2026). Palavras dele: "Quando o spotify fechou no pc ele sumiu do
     app, mas quando foi reaberto nao apareceu de volta. mesmo dando play".
@@ -999,7 +1048,7 @@ Ajustes de UX (11/11/2026, teste do Leonardo no iPhone):
       Bluetooth, servidor e porta em PWA).
     - Nome deste Mac: o campo passou de 170 para 280 pt.
 
-35. Controles do Mac no iPhone (12/11/2026). Palavras dele: "controles seria interessante (volume do mac, brilho, teclado
+36. Controles do Mac no iPhone (12/11/2026). Palavras dele: "controles seria interessante (volume do mac, brilho, teclado
     brilho, etc)".
     - Tela "Controles do Mac" no iPhone, aberta pela tecla **Controles** (no editor de tecla ela é o botão "Controles do Mac" embaixo da lista de apps,
       e a tecla não manda nada ao Mac: abre a tela aqui). Três barras arrastáveis como a do volume do
@@ -1030,6 +1079,16 @@ ficam sem medição". Decisão: o Deck mede o uso pelo token de `claude setup-to
 o escopo `user:profile` e o token de setup-token só tem `user:inference` (403). Conta da troca de contas sem
 medição do autoswitch passa a ser medida pelo token do perfil (type oauth_token). A leitura fica em cache de 5 min.
 
+Criar compromisso pela agenda do iPhone (12/11/2026, frente agenda-criar): "Tem que aparecer no app do calendário do Mac e
+celular tudo correto." e "deixa o usuário decidir pra onde vai, definir como padrão". Decisão: tocar num dia dá a opção
+de criar, o formulário ocupa a parte da direita inteira, e a pessoa escolhe entre um calendário e uma lista do app
+Lembretes, podendo marcar um padrão guardado na config (também ajustável no Mac). Isso muda o invariante 3: a agenda
+deixa de ser só leitura, e o Deck passa a gravar nela, só pela rota autenticada de criar e só o que a pessoa pediu
+(nunca altera nem apaga evento existente). O Deck passa a pedir acesso aos Lembretes (full access), na hora em que a
+pessoa escolhe Lembretes pela primeira vez.
+Correções (12/11/2026): o alerta do evento é gravado como alarme relativo ao início ("15 minutos antes", que acompanha o
+evento se o horário mudar), e só o lembrete usa data fixa. O acompanhamento do pedido de acesso aos Lembretes continua
+até a pessoa responder, porque o Mac só devolve "pedindo" na chamada que abriu a janela.
 Teste do Deck 1.0 (12/11/2026, frente iphone-bugs), dito pelo Leonardo:
 - "Mesmo com conta de IA configurada no Mac, no app não aparece nenhum dado. Uso e renovação não aparecem." Causa: o
   Mac mede por token só na tela Uso das IAs, e o estado que vai ao iPhone lia apenas o `measure.json` do autoswitch.
