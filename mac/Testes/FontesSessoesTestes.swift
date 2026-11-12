@@ -121,6 +121,11 @@ final class FontesSessoesTestes: XCTestCase {
         XCTAssertEqual(Mascara.segredos("export API_TOKEN=abc123def456 e segue", limite: 500), "export API_TOKEN=[oculto] e segue")
         XCTAssertEqual(Mascara.segredos("Authorization: Bearer abcdefghijklmnop1234567", limite: 500), "Authorization: Bearer [oculto]")
         XCTAssertEqual(Mascara.segredos("git clone https://leo:minhasenha@github.com/x/y", limite: 500), "git clone https://leo:[oculto]@github.com/x/y")
+        // URL de banco (qualquer esquema), JSON com aspas e chave com underscore também são mascarados
+        XCTAssertEqual(Mascara.segredos("postgres://user:hunter2pass@host/db", limite: 500), "postgres://user:[oculto]@host/db")
+        XCTAssertEqual(Mascara.segredos("{\"password\": \"hunter2hunter2\"}", limite: 500), "{\"password\": \"[oculto]\"}")
+        let stripe = fake("s" + "k_live_", "abcdefghijklmnopqrstuvwx")
+        XCTAssertFalse(Mascara.segredos("stripe \(stripe)", limite: 500).contains(stripe))
         // o que não é segredo passa intacto: commit, caminho, branch, texto comum
         let normal = "commit 66b5d06a1b2c3d4e5f60718293a4b5c6d7e8f901 em feat/sessoes-contexto, arquivo mac/Nucleo/Fontes/Sessoes.swift"
         XCTAssertEqual(Mascara.segredos(normal, limite: 500), normal)

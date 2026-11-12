@@ -103,15 +103,15 @@ enum Mascara {
     private static let padroes: [(NSRegularExpression, String)] = {
         let lista: [(String, String)] = [
             (#"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(-----END [A-Z ]*PRIVATE KEY-----|$)"#, oculto),
-            (#"\b(sk|pk|rk)-[A-Za-z0-9_\-]{16,}"#, oculto),
+            (#"\b(sk|pk|rk)[-_][A-Za-z0-9_\-]{16,}"#, oculto),
             (#"\bgh[pousr]_[A-Za-z0-9]{20,}"#, oculto),
             (#"\bgithub_pat_[A-Za-z0-9_]{20,}"#, oculto),
             (#"\bxox[abprs]-[A-Za-z0-9\-]{10,}"#, oculto),
             (#"\bAKIA[0-9A-Z]{16}\b"#, oculto),
             (#"\beyJ[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}\.[A-Za-z0-9_\-]{8,}"#, oculto),
             (#"(?i)\b(bearer|basic)\s+[A-Za-z0-9._~+/\-]{16,}=*"#, "$1 " + oculto),
-            (#"(?i)(\b[A-Za-z0-9_\-]*(token|secret|senha|password|passwd|api[_-]?key)[A-Za-z0-9_\-]*\s*[:=]\s*)([\"'`]?)[^\s\"'`]{4,}"#, "$1$3" + oculto),
-            (#"(?i)(https?://[^\s/:@]+:)[^\s/@]+@"#, "$1" + oculto + "@"),
+            (#"(?i)(\b[A-Za-z0-9_\-]*(token|secret|senha|password|passwd|api[_-]?key)[A-Za-z0-9_\-]*[\"']?\s*[:=]\s*)([\"'`]?)[^\s\"'`]{4,}"#, "$1$3" + oculto),
+            (#"(?i)(\b[a-z][a-z0-9+.\-]*://[^\s/:@]+:)[^\s/@]+@"#, "$1" + oculto + "@"),
             // sequência longa com maiúscula, minúscula e número juntas: chave gerada, não palavra nem commit
             (#"\b(?=[A-Za-z0-9_\-]*\d)(?=[A-Za-z0-9_\-]*[a-z])(?=[A-Za-z0-9_\-]*[A-Z])[A-Za-z0-9_\-]{32,}\b"#, oculto),
         ]

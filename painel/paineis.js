@@ -132,10 +132,16 @@ async function lerSessoes() {
 const cartaoSessao = s => `<button class="cartao-sessao ${haQuanto(s.desde, V.ref).velha ? 'velha' : ''}" data-sessao="${esc(s.id)}"><b>${esc(s.nome)}</b><small>${esc(s.projeto)}, há ${haQuanto(s.desde, V.ref).texto}</small><p>${esc(s.pergunta)}</p></button>`;
 /* O contexto vem como a sessão escreveu (markdown solto). Aqui vira texto de leitura: sem #, ** e crases, tabela em linhas, parágrafos */
 function limparContexto(t) {
-  return String(t || '').replace(/\r/g, '').split('\n')
-    .filter(l => !/^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/.test(l))
-    .map(l => /^\s*\|.*\|\s*$/.test(l) ? l.trim().slice(1, -1).split('|').map(c => c.trim()).filter(Boolean).join(' · ') : l)
-    .join('\n').replace(/^#{1,6}\s+/gm, '').replace(/\*\*([^*\n]+)\*\*/g, '$1').replace(/`([^`\n]+)`/g, '$1').replace(/\n{3,}/g, '\n\n').trim();
+  let dentro = false;
+  const linhas = String(t || '').replace(/\r/g, '').split('\n').flatMap(l => {
+    if (/^\s*(```|~~~)/.test(l)) { dentro = !dentro; return [] } // a cerca some, o comando fica como está
+    if (dentro) return [l];
+    if (/^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/.test(l)) return [];
+    return [(/^\s*\|.*\|\s*$/.test(l) ? l.trim().slice(1, -1).split('|').map(c => c.trim()).filter(Boolean).join(' · ') : l)
+      .replace(/^#{1,6}\s+/, '').replace(/^\s*>\s?/, '').replace(/!?\[([^\]\n]+)\]\([^)\s]+\)/g, '$1')
+      .replace(/\*\*([^*\n]+)\*\*/g, '$1').replace(/__([^_\n]+)__/g, '$1').replace(/(^|[\s(])\*([^*\s][^*\n]*)\*/g, '$1$2').replace(/`([^`\n]+)`/g, '$1')];
+  });
+  return linhas.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 const paragrafos = t => limparContexto(t).split(/\n\s*\n/).filter(Boolean).map(p => `<p>${esc(p.trim())}</p>`).join('');
 /* A sessão aberta, de cima para baixo: o que ela pede (em destaque), a resposta que ela mesma sugere, Abrir no Mac, e o contexto. */

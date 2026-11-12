@@ -115,6 +115,9 @@ export default async function (h) {
   await p.click('#wa-lista [data-wa="w1"]'); await h.dormir(700);
   h.ok(await p.evaluate(() => !window.__xss && document.querySelectorAll('#wa-lista img').length === 0), 'texto do WhatsApp com HTML aparece como texto e não executa');
   await p.context().close(); await h.cenario({ xss: false });
+  // marcação que sobrava: cerca de código, link, itálico, __forte__ e citação
+  const lim = await p.evaluate(() => limparContexto('Veja:\n```bash\nls -la | grep x\n# comentario do shell\n```\n\n- item *italico* e [link](https://x.com) e __forte__\n\n> citacao'));
+  h.ok(lim === 'Veja:\nls -la | grep x\n# comentario do shell\n\n- item italico e link e forte\n\ncitacao', `contexto sem cerca de código, link, itálico nem citação, e o comando dentro da cerca fica intacto (${JSON.stringify(lim)})`);
 
   /* ---------- Agenda ---------- */
   await h.reset();
