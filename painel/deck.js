@@ -692,6 +692,9 @@ tela.addEventListener('touchmove', e => {
   const t = e.touches[0], dx = t.clientX - puxar.x, dy = t.clientY - puxar.y, f = puxar.f;
   if (!puxar.seguindo) {
     if (Math.abs(dx) > 10 && Math.abs(dx) >= Math.abs(dy) || dy < -10) { puxar = null; return } // para o lado ou para cima: não é fechar
+    // No iPhone a rolagem nativa começa nos primeiros pixels e, depois dela, o touchmove não é mais cancelável: o gesto é cancelado
+    // já no primeiro movimento para baixo (a lista está no topo, então não há o que rolar para esse lado)
+    if (dy > 0 && dy > Math.abs(dx) && e.cancelable) e.preventDefault();
     if (dy < 10 || dy < Math.abs(dx) * 1.5) return;
     puxar.seguindo = true; f.style.transition = 'none';
   }

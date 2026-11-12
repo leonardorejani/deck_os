@@ -114,6 +114,9 @@ private struct CartaoConta: View {
             }
             .padding(.top, Tema.Espaco.item)
             .accessibilityElement(children: .combine)
+            if uso?.semana == nil, let m = painel.motivos[conta.id] {
+                Text(m).tatile(Tema.Texto.xs, .regular, Tema.Cor.texto2).fixedSize(horizontal: false, vertical: true)
+            }
             Trilho(percentual: uso?.semana ?? 0, cor: barra)
             HStack {
                 if let r = UsoLogica.textoRenova(uso?.renova, agora: painel.agora()) {

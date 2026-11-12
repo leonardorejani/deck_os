@@ -60,6 +60,8 @@ final class PainelUso: ObservableObject {
     static var atual = PainelUso()
 
     @Published var usos: [String: UsoConta] = [:]
+    /// Por que uma conta ficou sem número (token ausente neste app, recusado, sem rede...). Só entra conta sem medição.
+    @Published var motivos: [String: String] = [:]
     @Published var aviso: AvisoUso?
     @Published var conta: EstadoConta?
     @Published var achadas: [ContaEncontrada] = []
@@ -88,21 +90,40 @@ final class PainelUso: ObservableObject {
     /// Lê o uso de todas as contas (as escondidas do iPhone também aparecem no Mac).
     func atualizar(_ contas: [ContaIA]) async {
         let casa = casa, cofre = cofre, leitor = leitorToken, agora = agora()
-        let lido = await Self.lerUso(contas: contas, casa: casa, cofre: cofre, leitor: leitor, agora: agora)
-        if lido != usos { usos = lido }
+        let lido = await Self.lerUsoComMotivos(contas: contas, casa: casa, cofre: cofre, leitor: leitor, agora: agora)
+        if lido.usos != usos { usos = lido.usos }
+        if lido.motivos != motivos { motivos = lido.motivos }
     }
 
     nonisolated static func lerUso(contas: [ContaIA], casa: URL, cofre: CofreDeToken, leitor: LeitorDeUsoPorToken, agora: Date,
                                  tokenDoPerfil: @Sendable (String, URL) -> String? = TokenDoPerfil.ler) async -> [String: UsoConta] {
+        await lerUsoComMotivos(contas: contas, casa: casa, cofre: cofre, leitor: leitor, agora: agora, tokenDoPerfil: tokenDoPerfil).usos
+    }
+
+    /// O texto que explica uma conta sem número. O token nunca entra aqui.
+    nonisolated static func motivo(_ r: ResultadoDoToken) -> String? {
+        switch r {
+        case .ok: return nil
+        case .recusado: return "O Claude recusou o token. Gere outro com claude setup-token e adicione a conta de novo."
+        case .semRede: return "Sem conexão com o Claude para medir. Confira a internet do Mac."
+        case .inesperado: return "O Claude respondeu sem o uso da semana para este token."
+        }
+    }
+    static let motivoSemToken = "O token desta conta não está guardado neste app. Remova a conta e adicione de novo."
+
+    nonisolated static func lerUsoComMotivos(contas: [ContaIA], casa: URL, cofre: CofreDeToken, leitor: LeitorDeUsoPorToken, agora: Date,
+                                 tokenDoPerfil: @Sendable (String, URL) -> String? = TokenDoPerfil.ler) async -> (usos: [String: UsoConta], motivos: [String: String]) {
         var saida: [String: UsoConta] = [:]
+        var motivos: [String: String] = [:]
         var comuns: [ContaIA] = []
         for c in contas {
             if c.nome == "Claude", c.perfil == nil, let token = cofre.ler(conta: c.id) {
                 var u = UsoConta(id: c.id, nome: c.nome, conta: c.conta, semana: nil, renova: nil)
-                if case .ok(let uso) = await leitor.ler(token: token) {
+                let r = await leitor.ler(token: token)
+                if case .ok(let uso) = r {
                     u.semana = uso.semana
                     u.renova = uso.renova.flatMap { $0 > agora ? Datas.iso($0, fuso: TimeZone(identifier: "UTC")!) : nil }
-                }
+                } else { motivos[c.id] = motivo(r) }
                 saida[c.id] = u
             } else {
                 var visivel = c
@@ -115,12 +136,14 @@ final class PainelUso: ObservableObject {
         for u in l.valor { saida[u.id] = u }
         // Conta da troca de contas sem medição do autoswitch (ou velha): se ela tem token de setup-token, o Deck mede sozinho.
         for c in comuns where c.nome == "Claude" && saida[c.id]?.semana == nil {
-            guard let perfil = c.perfil, let token = tokenDoPerfil(perfil, casa),
-                  case .ok(let uso) = await leitor.ler(token: token) else { continue }
+            guard let perfil = c.perfil else { if cofre.ler(conta: c.id) == nil { motivos[c.id] = motivoSemToken }; continue }
+            guard let token = tokenDoPerfil(perfil, casa) else { continue }
+            let r = await leitor.ler(token: token)
+            guard case .ok(let uso) = r else { motivos[c.id] = motivo(r); continue }
             saida[c.id] = UsoConta(id: c.id, nome: c.nome, conta: c.conta, semana: uso.semana,
                                    renova: uso.renova.flatMap { $0 > agora ? Datas.iso($0, fuso: TimeZone(identifier: "UTC")!) : nil })
         }
-        return saida
+        return (saida, motivos)
     }
 
     // MARK: Aviso e Desfazer

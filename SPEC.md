@@ -226,13 +226,19 @@ Meet e Teams no navegador padrão, Zoom no app do Zoom se ele estiver instalado 
 no `Evento` (`link`, opcional: Mac antigo não manda e o botão não aparece) e só aceita abrir `https` desses três serviços
 (`POST /api/reuniao/entrar`, corpo `{"link": "https://..."}`, senão 400).
 
-**Novo compromisso (12/11/2026).** Na lista, o dia tocado oferece "Novo compromisso em <dia>". Tocar troca a parte da
-direita inteira pelo formulário (o mês continua à esquerda): título, dia, início e fim, "Dia todo", "Onde salvar",
+**Novo compromisso (12/11/2026).** Na lista, deslizar para a esquerda (ou tocar no puxador da borda) abre o formulário. Ele troca a parte da
+direita inteira (o mês continua à esquerda): título, dia, início e fim, "Dia todo", "Onde salvar",
 alerta e "Usar como padrão", com Cancelar e Salvar no pé. Onde salvar é um calendário do Mac (só os que aceitam
 gravar) ou uma lista do app Lembretes. Alerta com hora: sem, no horário, 5, 15, 30 min, 1 h ou 1 dia antes. Dia todo: sem,
 no dia às 9h, 1 dia, 2 dias ou 1 semana antes (às 9h). Salvar vai ao Mac, que grava pelo EventKit (aparece no Calendário
-do Mac e do celular da mesma conta). Depois a agenda recarrega no dia criado e mostra o item. Lembrete não aparece na
-agenda (ela lê só eventos): o aviso diz "Lembrete criado em <lista>. Ele aparece no app Lembretes."
+do Mac e do celular da mesma conta). Depois a agenda recarrega no dia criado e mostra o item. O aviso do
+lembrete diz "Lembrete criado em <lista>. Ele aparece no app Lembretes."
+Novo compromisso por gesto e lembretes na agenda (12/11/2026). Palavras dele: "o botão Novo compromisso atrapalha, deixa por cima da lista" e "compromissos e lembretes criados pelo Deck têm que aparecer, hoje só aparecem feriados". O botão grande saiu: deslizar a lista do dia para a esquerda revela o formulário (a lista segue o dedo e volta se soltar cedo), e um puxador discreto na borda faz o mesmo com um toque. `GET /api/agenda` passou a devolver também os lembretes ainda não feitos com prazo no intervalo (EKReminder), com o nome da lista no lugar do calendário, no dia do prazo e com a hora quando tem.
+
+Fechar puxando de cima para baixo (12/11/2026). Palavras dele: "fechar puxando de cima para baixo não funcionou em nenhum lugar". O gesto vale em todas as telas abertas e é cancelado já no primeiro movimento para baixo, porque no iPhone a rolagem nativa começa nos primeiros pixels e depois dela o movimento não pode mais ser cancelado.
+
+Uso das IAs sem número (12/11/2026). Palavras dele: a conta iacall aparece "Sem medição" no Mac e "-" no iPhone. O cartão da conta agora diz o motivo (token que não está guardado neste app, token recusado, sem conexão ou resposta sem o uso da semana). O token de uma conta adicionada no Deck mora no Chaveiro do app que a adicionou: o Deck Bancada não enxerga o do Deck.
+
 Rotas (com o código de acesso): `GET /api/agenda/destinos` devolve `{calendarios, listas, permissaoCalendario,
 permissaoLembretes, padrao}` e `?pedir=1` abre no Mac o pedido de acesso aos Lembretes (a permissão só é pedida
 quando a pessoa escolhe Lembretes). `POST /api/agenda/criar` recebe `{titulo, dia: "AAAA-MM-DD", diaTodo, inicio, fim:
