@@ -213,7 +213,8 @@ enum Ligacao {
             config: armazem, pareamento: pareamento, pagina: pagina, rodizio: rodizio, certificadoCA: certificadoCA,
             reunioes: AbridorDeReuniao(shell: executor),
             abridorDeSessao: AbridorDeSessaoNoMac(raiz: URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".claude/jobs"), shell: executor),
-            apps: apps ?? AppsDoMac(pastaDeCache: AppsDoMac.pastaDeCachePadrao(), executor: executor))
+            apps: apps ?? AppsDoMac(pastaDeCache: AppsDoMac.pastaDeCachePadrao(), executor: executor),
+            controles: ControlesReais(executor: executor))
     }
 
     /// Nome do Mac para a config padrão ("MacBook do Leo"), ou "Mac" se o sistema não responde.

@@ -670,3 +670,21 @@ button.item-lista:disabled { opacity: .5; cursor: default }
 .item-lista .tag { flex: none; font-size: var(--texto-xs); color: var(--sucesso); background: var(--sucesso-suave); border-radius: var(--raio-pilula); padding: var(--micro-gap) var(--icone) }
 .volume-aparelho { padding: 0 0 var(--item) }
 .vertical .pc-corpo { padding-top: calc(var(--seguro-cima) + var(--alvo-sm)) }
+
+/* ---------- Controles do Mac (controles.js): uma linha por controle, barra arrastável como a do volume do player ---------- */
+.ctl-linha { display: flex; align-items: center; gap: var(--item); padding: var(--pad) 0; color: var(--texto-2); font-size: var(--texto-sm); font-variant-numeric: tabular-nums }
+.ctl-linha + .ctl-linha { border-top: 1px solid var(--superficie-2) }
+.ctl-ic { flex: none; display: grid; place-items: center; width: var(--alvo); height: var(--alvo) }
+.ctl-ic svg { width: 24px; height: 24px }
+.ctl-meio { flex: 1; min-width: 0; display: grid; gap: var(--item) }
+.ctl-topo { display: flex; align-items: center; justify-content: space-between; gap: var(--item); min-height: var(--alvo) }
+.ctl-nome { color: var(--texto) }
+.ctl-linha .trilho { position: relative; height: 6px; border-radius: var(--raio-pilula); background: var(--superficie-2); touch-action: none; cursor: pointer }
+.ctl-linha .trilho::before { content: ""; position: absolute; left: 0; right: 0; top: calc(-1 * (var(--pad) + var(--item))); bottom: calc(-1 * (var(--pad) + var(--item))) } /* área de toque de 54 pt de altura */
+.ctl-linha .trilho i { position: relative; display: block; height: 100%; width: 0; border-radius: inherit; background: var(--texto) }
+.ctl-linha.arrastando .trilho { height: 8px }
+.ctl-linha.arrastando .trilho i::after { content: ""; position: absolute; right: calc(-1 * var(--item) + 1px); top: 50%; width: 14px; height: 14px; translate: 0 -50%; border-radius: 50%; background: var(--texto); box-shadow: var(--sombra-2) }
+.ctl-linha.mudo .trilho i { background: var(--texto-2) }
+.ctl-num { flex: none; min-width: 3ch; text-align: right }
+.ctl-linha .btn[aria-pressed="true"] { background: var(--destaque-suave); color: var(--texto) }
+.ctl-linha.esq .barra { display: block; height: 10px }

@@ -5,6 +5,8 @@
      estado()                  -> Estado
      botao(id)                 -> {ok: true}
      spotify(acao, valor?)     -> {ok: true}     acao: tocar, pausar, anterior, proxima, posicao (segundos), repetir e aleatorio (true liga, false desliga)
+     controles()               -> {volume?, mudo?, brilho?, teclado?}  o que o Mac oferece (0 a 100), campo que falta = não oferece
+     controle(item, v)         -> {ok: true}     item: volume, mudo (v 0 ou 1), brilho ou teclado
      spotifyVolume(v, alvo)    -> {ok: true}     v de 0 a 100, alvo: spotify, mac ou aparelho
      aparelhos()               -> [Aparelho]     só com o Spotify conectado (senão 409)
      transferir(id)            -> {ok: true}     passa a música para o aparelho (só conectado)
@@ -91,6 +93,8 @@ function criarCanalHttps() {
     sessoes: () => pedir('GET', '/api/sessoes'),
     abrirSessao: id => pedir('POST', '/api/sessoes/' + encodeURIComponent(id) + '/abrir'),
     entrarNaReuniao: link => pedir('POST', '/api/reuniao/entrar', { link }),
+    controles: () => pedir('GET', '/api/controles'),
+    controle: (item, v) => pedir('POST', `/api/controles/${encodeURIComponent(item)}?v=${encodeURIComponent(v)}`),
     apps: () => pedir('GET', '/api/apps'),
     acoesDoApp: bundle => pedir('GET', `/api/apps/${encodeURIComponent(bundle)}/acoes`, undefined, 15000), // o Mac lê a lista de dentro do app, e o macOS pode pedir permissão no meio
     appIconeUrl: bundle => `/api/apps/${encodeURIComponent(bundle)}/icone?codigo=${encodeURIComponent(codigo || '')}`,

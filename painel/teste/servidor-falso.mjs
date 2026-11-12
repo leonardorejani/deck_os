@@ -57,17 +57,20 @@ const padrao = () => ({
   apps: 'antigo',            // antigo (Mac sem as rotas de apps: 404, o editor usa a lista curta) | normal | erro (a lista falha com 500) | muitos (140 apps)
   acoesAtraso: 0,            // ms de espera antes de o Mac responder o que um app oferece (ler as contas do Mail demora)
   mailAviso: '',             // a lista de contas do Mail não pôde ser lida: o motivo vem no aviso da ação
+  comControles: false,       // o perfil ganha a tecla Controles (abre a tela dos controles do Mac no iPhone)
+  controles: 'tudo',         // tudo | sem-brilho (Mac sem tela interna nem luz no teclado) | nada (não oferece nada) | antigo (Mac sem a rota: 404) | erro (500) | recusa (os pedidos de escrita falham com 422)
+  ctVolume: 30, ctMudo: false, ctBrilho: 60, ctTeclado: 20, ctAtraso: 0,
   spotifyModos: 'sim',       // sim | sem (Mac antigo: o estado não traz álbum, repetir nem aleatório)
 });
 let c = padrao();
 let T0 = Date.now(); // as sessões esperam desde um instante fixo (o Mac real manda sempre o mesmo `desde` até a sessão mudar)
-let cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, whatsapp: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [] };
+let cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, whatsapp: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], controles: [] };
 let posicaoBase = { s: 132, desde: Date.now() };
 let perfilAtivo = 'trabalho';
 let codigoAtual = CODIGO, codigoAnterior = null; // rodízio: o atual, e o anterior que ainda vale (a folga de 10 min)
 let parearGasto = false, parearErros = 0; // o código de 6 dígitos serve uma vez e aguenta 5 erros
 let gravada = null; // o que o iPhone gravou: perfis e blocos, como o Mac guardaria no config.json
-const zerar = () => { parearGasto = false; parearErros = 0; codigoAtual = CODIGO; codigoAnterior = null; T0 = Date.now(); gravada = null; c = padrao(); cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, whatsapp: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [] }; posicaoBase = { s: 132, desde: Date.now() }; perfilAtivo = 'trabalho' };
+const zerar = () => { parearGasto = false; parearErros = 0; codigoAtual = CODIGO; codigoAnterior = null; T0 = Date.now(); gravada = null; c = padrao(); cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, whatsapp: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], controles: [] }; posicaoBase = { s: 132, desde: Date.now() }; perfilAtivo = 'trabalho' };
 
 // com xss ligado, todo texto que a página mostra chega como HTML que tenta executar código
 const X = t => c.xss ? `"><img src=x onerror="window.__xss=(window.__xss||0)+1">${t}` : t;
@@ -80,6 +83,7 @@ function perfisConfig() {
     T('calendario', 'Agenda', 'app', 'Calendar', { icone: 'Calendar' }),
     T('apagar', 'Apagar tela', 'comando', 'pmset displaysleepnow', { icone: 'svg:tela' }),
   ];
+  if (c.comControles) trabalho.push(T('controles', 'Controles', 'app', 'Controles', { icone: 'svg:controles' }));
   if (c.comAcao) trabalho.push(T('cal-dia', 'Natal', 'app', 'Calendar', { icone: 'Calendar', acao: { id: 'calendario-dia', valor: '2026-12-25' } }));
   if (c.teclas === 'muitas') for (const n of ['Safari', 'Notes', 'Terminal', 'Finder', 'Spotify', 'Vorssaint', 'WhatsApp', 'Calendar']) trabalho.push(T('x' + n, n === 'Notes' ? 'Notas' : n, 'app', n, { icone: n }));
   const ensaio = [T('e-spotify', 'Spotify', 'app', 'Spotify', { icone: 'Spotify' }), T('e-cifras', 'Cifras', 'app', 'Notes', { icone: 'Notes' }), T('e-agenda', 'Agenda', 'app', 'Calendar', { icone: 'Calendar' }), T('e-apagar', 'Apagar tela', 'comando', 'pmset displaysleepnow', { icone: 'svg:tela' }), T('e-terminal', 'Terminal', 'app', 'Terminal', { icone: 'Terminal' })];
@@ -297,6 +301,24 @@ async function api(req, res, url) {
     if (acao === 'tocar') { c.spotify = 'tocando'; posicaoBase = { s: agora, desde: Date.now() } }
     if (acao === 'pausar') { c.spotify = 'pausado'; posicaoBase = { s: agora, desde: Date.now() } }
     if (acao === 'posicao') posicaoBase = { s: +url.searchParams.get('s'), desde: Date.now() };
+    return json(res, 200, { ok: true });
+  }
+  if (rota === '/api/controles' || rota.startsWith('/api/controles/')) {
+    if (c.controles === 'antigo') return json(res, 404, { erro: 'Essa rota não existe.' });
+    if (c.controles === 'erro') return json(res, 500, { erro: 'O Mac não conseguiu ler os controles.' });
+    if (rota === '/api/controles') {
+      if (m !== 'GET') return json(res, 405, { erro: 'Esse pedido não é aceito nessa rota.' });
+      cont.controles.push('ler');
+      const nada = c.controles === 'nada', semBrilho = c.controles === 'sem-brilho';
+      return json(res, 200, { ...(nada ? {} : { volume: c.ctVolume, mudo: c.ctMudo }), ...(nada || semBrilho ? {} : { brilho: c.ctBrilho, teclado: c.ctTeclado }) });
+    }
+    if (m !== 'POST') return json(res, 405, { erro: 'Esse pedido não é aceito nessa rota.' });
+    const item = rota.slice('/api/controles/'.length), v = Number(url.searchParams.get('v'));
+    if (!['volume', 'mudo', 'brilho', 'teclado'].includes(item) || !Number.isInteger(v)) return json(res, 400, { erro: 'Pedido de controle inválido.' });
+    if (c.controles === 'recusa') return json(res, 422, { erro: 'Não consegui mudar o brilho da tela.' });
+    if (c.ctAtraso) await new Promise(r => setTimeout(r, c.ctAtraso));
+    cont.controles.push(`${item}=${v}`);
+    if (item === 'volume') c.ctVolume = v; else if (item === 'mudo') c.ctMudo = v === 1; else if (item === 'brilho') c.ctBrilho = v; else c.ctTeclado = v;
     return json(res, 200, { ok: true });
   }
   if (rota === '/api/reuniao/entrar' && m === 'POST') {

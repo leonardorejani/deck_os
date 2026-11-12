@@ -78,6 +78,8 @@
     sessoes: () => pedir('GET', '/api/sessoes'),
     abrirSessao: id => pedir('POST', '/api/sessoes/' + encodeURIComponent(id) + '/abrir'),
     entrarNaReuniao: link => pedir('POST', '/api/reuniao/entrar', undefined, { link }),
+    controles: () => pedir('GET', '/api/controles'),
+    controle: (item, v) => pedir('POST', '/api/controles/' + encodeURIComponent(item), { v: String(v) }),
     apps: () => pedir('GET', '/api/apps'),
     acoesDoApp: bundle => pedir('GET', '/api/apps/' + encodeURIComponent(bundle) + '/acoes', undefined, undefined, 15000), // ler as contas do Mail pode levar uns 8 s
     // o ícone de um app do Mac (editor de tecla): também numa <img>, pelo mesmo esquema. O app do iPhone guarda por um dia

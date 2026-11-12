@@ -74,6 +74,11 @@
         <footer id="se-rodape" hidden><button class="btn secundario" data-dispensar>Dispensar</button><span class="espaco"></span><button class="btn primario" data-voltar>Voltar</button></footer>
       </section>
 
+      <section class="folha cheia" id="f-controles" role="dialog" aria-modal="true" aria-labelledby="ct-titulo">
+        <header><h2 id="ct-titulo">Controles do Mac</h2><button class="fechar" data-fechar aria-label="Fechar"></button></header>
+        <div class="corpo" id="ct-corpo" aria-live="polite"></div>
+      </section>
+
       <section class="folha cheia player-cheio" id="f-player" role="dialog" aria-modal="true" aria-label="Tocando agora">
         <button class="fechar fechar-cal" data-fechar aria-label="Fechar"></button>
         <div class="pc-corpo" id="pc-corpo"></div>
@@ -102,6 +107,7 @@
 <script src="canal.js"></script>
 <script src="paineis.js"></script>
 <script src="player.js"></script>
+<script src="controles.js"></script>
 <script src="apps.js"></script>
 <script src="deck.js"></script>
 <script src="pwa.js"></script>

@@ -13,7 +13,7 @@ const reduzido = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 const teclaDoPainel = {};
 function abrirPainel(qual, idTecla) {
   if (idTecla) teclaDoPainel[qual] = idTecla;
-  if (qual === 'whatsapp') abrirWhats(); else if (qual === 'calendario') abrirCal(); else if (qual === 'sessoes') abrirSessoes();
+  if (qual === 'whatsapp') abrirWhats(); else if (qual === 'calendario') abrirCal(); else if (qual === 'sessoes') abrirSessoes(); else if (qual === 'controles') abrirControles();
 }
 async function abrirNoMac(qual, texto) {
   const id = V.teclas.some(t => t.id === teclaDoPainel[qual]) ? teclaDoPainel[qual] : V.teclas.find(t => painelDe(t) === qual)?.id;
