@@ -64,6 +64,23 @@ struct ConfigWhatsApp: Codable, Equatable, Sendable {
     /// Navegador do WhatsApp Web: "Safari", "Google Chrome", "Arc", "Brave Browser" ou "Microsoft Edge".
     /// nil: o Deck acha a aba aberta e, sem aba, abre o WhatsApp Web no navegador padrão do Mac.
     var navegador: String?
+    /// A origem que valia antes de ligar o "Conectar pelo QR": desligar a chave volta para ela, em vez de cair em "auto".
+    var origemAntes: String?
+
+    /// Liga o QR. Sem o ajudante no app (build sem Go) não liga: a origem "qr" sem ponte tiraria a leitura que já funcionava.
+    @discardableResult
+    mutating func ligarQR(disponivel: Bool) -> Bool {
+        guard disponivel else { return false }
+        if origem != "qr" { origemAntes = origem }
+        origem = "qr"
+        return true
+    }
+
+    /// Desliga o QR e devolve a origem de antes (ou "auto", se não havia).
+    mutating func desligarQR() {
+        origem = origemAntes.flatMap { $0 == "qr" ? nil : $0 } ?? "auto"
+        origemAntes = nil
+    }
 }
 
 struct Config: Codable, Equatable, Sendable {
@@ -170,6 +187,9 @@ struct ResumoWhatsApp: Codable, Equatable, Sendable {
     var navegador: String?
     /// Só nas origens "web" e "qr": false quando não há aba aberta (web) ou a conexão por QR está caída (o total 0 não é medição).
     var aberto: Bool?
+    /// Só na origem "qr": true quando a conexão está subindo ou voltando sozinha (rede que caiu um instante). O painel
+    /// não manda ler o QR de novo nesse caso: não precisa.
+    var reconectando: Bool?
 }
 
 struct Evento: Codable, Equatable, Sendable {

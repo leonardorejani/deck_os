@@ -1136,6 +1136,15 @@ Teste do Deck 1.0 (12/11/2026, frente iphone-bugs), dito pelo Leonardo:
       envia. Ocupa uma das 4 conexões. Para sair, apague o aparelho em Aparelhos conectados."
     - Prova: `scripts/whatsapp-qr-prova.sh` mostra o QR no terminal, guarda a sessão na pasta da bancada e, com
       `--ligar-bancada`, põe a origem QR na config da bancada.
+    - Correções da verificação (12/11/2026): (a) sair pelo celular (LoggedOut) apaga o `conversas.json` e zera o estado, e
+      o `conversas.json` só guarda as conversas com não lidas, nunca o texto de conversa já lida. (b) "Apagar este
+      aparelho" sobe o ajudante só para o logout quando ele está parado e NÃO apaga a pasta se não conseguiu sair (sem
+      rede): a tela mostra "Não consegui sair do aparelho" e a pessoa tenta de novo. (c) Com sessão guardada, rede fora
+      na subida não derruba o ajudante: ele avisa "desconectado" e tenta de novo (2 s, 5 s, 10 s, depois 30 s em 30 s).
+      (d) Subindo ou reconectando, o painel diz "Reconectando ao WhatsApp, volta sozinho" (`Estado.whatsapp.reconectando`)
+      e mantém a lista de antes, em vez de mandar ler o QR, que só vale em aguardando QR, QR vencido e erro.
+      (e) Desligar a chave "Conectar pelo QR" volta para a origem de antes (`whatsapp.origemAntes`), não para "auto".
+      (f) Sem o ajudante no app a chave não liga e a origem não muda.
 
 ## 14. Melhorias (10/11/2026)
 

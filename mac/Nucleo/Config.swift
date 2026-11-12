@@ -36,8 +36,10 @@ extension ConfigWhatsApp {
         let c = try decoder.container(keyedBy: ChavesConfig.self)
         let origem = (try? c.decodeIfPresent(String.self, forKey: ChavesConfig("origem"))) ?? nil
         let navegador = (try? c.decodeIfPresent(String.self, forKey: ChavesConfig("navegador"))) ?? nil
+        let antes = (try? c.decodeIfPresent(String.self, forKey: ChavesConfig("origemAntes"))) ?? nil
         self.init(origem: origem.flatMap { Self.origens.contains($0) ? $0 : nil } ?? "auto",
-                  navegador: navegador.flatMap { n in NavegadorWeb.todos.contains { $0.nome == n } ? n : nil })
+                  navegador: navegador.flatMap { n in NavegadorWeb.todos.contains { $0.nome == n } ? n : nil },
+                  origemAntes: antes.flatMap { Self.origens.contains($0) && $0 != "qr" ? $0 : nil })
     }
 }
 

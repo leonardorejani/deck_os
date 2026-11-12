@@ -18,6 +18,9 @@ struct EstadoQR: Equatable, Sendable {
     var qr: String?
     var conversas: [ConversaWhatsApp] = []
 
+    /// Subindo ou caiu um instante: a whatsmeow volta sozinha, não é caso de ler QR.
+    var reconectando: Bool { fase == .iniciando || fase == .desconectado }
+
     /// A tela do Mac e o aviso do iPhone usam o mesmo texto.
     var aviso: String? {
         switch fase {
@@ -33,6 +36,8 @@ struct EstadoQR: Equatable, Sendable {
 enum TextosWhatsAppQR {
     /// O aviso que acompanha a opção, sempre à vista, antes e depois de ligar.
     static let aviso = "Não é oficial e viola os termos do WhatsApp. Só lê, não envia. Ocupa uma das 4 conexões. Para sair, apague o aparelho em Aparelhos conectados."
+    static let semAjudante = "Esta versão do Deck veio sem o WhatsApp por QR. O Deck segue lendo pela origem que você escolheu."
+    static let naoSaiu = "Não consegui sair do aparelho. Confira a internet e tente apagar de novo."
     static let passos = "No celular, abra o WhatsApp, vá em Aparelhos conectados e toque em Conectar um aparelho. Depois aponte a câmera para o QR."
 
     static func situacao(_ e: EstadoQR) -> String {
@@ -85,6 +90,9 @@ final class PonteWhatsAppQR: @unchecked Sendable {
     private var entrada: FileHandle?
     private var geracao = 0
     private var encerrada = false
+    /// Durante o "apagar": o erro que o ajudante mandar é a saída que falhou.
+    private var apagando = false
+    private var apagouComErro = false
     /// Avisa a tela do Mac quando algo muda (QR novo, conectou, caiu). Chamado fora da trava.
     var aoMudar: (@Sendable (EstadoQR) -> Void)?
 
@@ -143,19 +151,46 @@ final class PonteWhatsAppQR: @unchecked Sendable {
         notificar()
     }
 
-    /// Sai do aparelho no WhatsApp e apaga a sessão guardada.
-    func apagarSessao() {
+    /// Sai do aparelho no WhatsApp e apaga a sessão guardada. Devolve false se não conseguiu sair (sem rede, por
+    /// exemplo): aí a sessão fica, o estado vira erro com o motivo e a pessoa tenta de novo. Apagar só a pasta
+    /// deixaria o aparelho ocupando uma das 4 conexões sem aviso.
+    @discardableResult
+    func apagarSessao() -> Bool {
+        trava.lock()
+        let tinha = processo != nil
+        trava.unlock()
+        // Ajudante parado mas com sessão guardada: sobe só para o logout.
+        if !tinha, temSessao { iniciar() }
         trava.lock()
         let p = processo, e = entrada
+        if p != nil { apagando = true; apagouComErro = false }
         trava.unlock()
         if let p, let e {
             try? e.write(contentsOf: Data("{\"c\":\"apagar\"}\n".utf8))
-            let limite = Date().addingTimeInterval(8)
-            while p.isRunning, Date() < limite { Thread.sleep(forTimeInterval: 0.1) }
+            let limite = Date().addingTimeInterval(25)
+            while p.isRunning, Date() < limite {
+                trava.lock(); let falhou = apagouComErro; trava.unlock()
+                if falhou { break }
+                Thread.sleep(forTimeInterval: 0.1)
+            }
+            trava.lock()
+            let naoSaiu = apagouComErro || p.isRunning
+            apagando = false
+            trava.unlock()
+            if naoSaiu { return falhouAoApagar() }
+        } else if temSessao {
+            return falhouAoApagar()
         }
         parar(zerar: true)
         try? FileManager.default.removeItem(at: pasta)
         notificar()
+        return true
+    }
+
+    private func falhouAoApagar() -> Bool {
+        parar(zerar: false)
+        mudar { $0 = EstadoQR(fase: .erro, detalhe: TextosWhatsAppQR.naoSaiu) }
+        return false
     }
 
     /// Tem um aparelho conectado guardado neste Mac (já pareou antes). É o arquivo "pareado" que o ajudante deixa:
@@ -230,6 +265,7 @@ final class PonteWhatsAppQR: @unchecked Sendable {
         case .fase(let f, let d):
             estado.fase = f
             estado.detalhe = d
+            if apagando, f == .erro { apagouComErro = true }
             if f != .aguardandoQR { estado.qr = nil }
         case .qr(let c):
             estado.fase = .aguardandoQR
@@ -273,9 +309,11 @@ final class PonteWhatsAppQR: @unchecked Sendable {
         let e = atual
         let conectado = e.fase == .conectado
         let total = e.conversas.reduce(0) { $0 + $1.naoLidas }
-        let resumo = ResumoWhatsApp(total: total, conversas: e.conversas.count, origem: "qr", navegador: nil, aberto: conectado)
+        // Reconectando (queda curta): a lista de antes continua à vista, o total volta a ser medição quando conectar.
+        let resumo = ResumoWhatsApp(total: total, conversas: e.conversas.count, origem: "qr", navegador: nil, aberto: conectado,
+                                    reconectando: e.reconectando ? true : nil)
         let aviso = e.aviso.map { Aviso(fonte: "whatsapp", texto: $0) }
-        return Leitura(valor: WhatsAppDados(resumo: resumo, conversas: conectado ? e.conversas : []), aviso: aviso)
+        return Leitura(valor: WhatsAppDados(resumo: resumo, conversas: conectado || e.reconectando ? e.conversas : []), aviso: aviso)
     }
 }
 

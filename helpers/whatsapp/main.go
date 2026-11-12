@@ -17,6 +17,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -147,6 +148,9 @@ func (a *ajudante) tratar(ctx context.Context, ev any) {
 		marcarPareado(a.pasta, true)
 	case *events.LoggedOut:
 		marcarPareado(a.pasta, false)
+		// Sem a sessão, as conversas guardadas viram lixo de outra conta: somem do disco e da memória.
+		a.estado.Limpar()
+		a.marcarSujo()
 		fase("erro", "O aparelho foi desconectado pelo WhatsApp. Gere um QR novo.")
 	case *events.StreamReplaced:
 		fase("erro", "Outro programa tomou o lugar do Deck nesta conexão.")
@@ -255,6 +259,66 @@ func (a *ajudante) mensagensDoHistorico(ctx context.Context, chat types.JID, lis
 	return saida
 }
 
+// apagarSessao sai do aparelho e só então apaga a pasta. Se a saída falhar (sem rede, por exemplo), a pasta fica:
+// apagar a sessão local sem sair deixaria o aparelho ocupando uma das 4 conexões, sem a pessoa saber.
+func apagarSessao(sair func() error, pasta string) error {
+	if err := sair(); err != nil {
+		return err
+	}
+	return os.RemoveAll(pasta)
+}
+
+// sairDoAparelho faz o Logout. Sem conexão de pé, tenta conectar antes (o Logout precisa dela).
+func sairDoAparelho(cli *whatsmeow.Client) error {
+	if cli.Store.ID == nil {
+		return nil // nunca pareou: não há aparelho para sair
+	}
+	if !cli.IsConnected() {
+		if err := cli.Connect(); err != nil && !errors.Is(err, whatsmeow.ErrAlreadyConnected) {
+			return err
+		}
+	}
+	ctx, cancelar := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancelar()
+	if err := cli.Logout(ctx); err != nil && !errors.Is(err, whatsmeow.ErrNotLoggedIn) {
+		return err
+	}
+	return nil
+}
+
+// esperaDaTentativa: 2 s, 5 s, 10 s e depois de 30 em 30 s.
+func esperaDaTentativa(n int) time.Duration {
+	passos := []time.Duration{2 * time.Second, 5 * time.Second, 10 * time.Second}
+	if n < len(passos) {
+		return passos[n]
+	}
+	return 30 * time.Second
+}
+
+// conectarComTentativas conecta com sessão já guardada. Rede ainda fora na subida (o Deck abre com o Mac) não
+// derruba o ajudante: ele avisa "desconectado" e tenta de novo até conectar ou o Deck fechar. A reconexão
+// automática da whatsmeow só vale depois da primeira conexão, por isso a primeira é por nossa conta.
+func conectarComTentativas(ctx context.Context, conectar func() error, espera func(int) time.Duration, aoFalhar func()) bool {
+	for n := 0; ; n++ {
+		if ctx.Err() != nil {
+			return false
+		}
+		err := conectar()
+		if err == nil || errors.Is(err, whatsmeow.ErrAlreadyConnected) {
+			return true
+		}
+		if ctx.Err() != nil {
+			return false
+		}
+		aoFalhar()
+		select {
+		case <-ctx.Done():
+			return false
+		case <-time.After(espera(n)):
+		}
+	}
+}
+
 func main() {
 	pasta := flag.String("pasta", "", "pasta da sessão (criada com permissão 0700)")
 	flag.BoolVar(&prova, "prova", false, "escreve para uma pessoa no terminal (QR desenhado, só quantidades), em vez de JSON")
@@ -297,7 +361,7 @@ func main() {
 	a.marcarSujo()
 
 	// Comandos do núcleo. Fim do stdin: o Deck fechou, então este ajudante também.
-	apagar := make(chan struct{})
+	apagar := make(chan struct{}, 1)
 	go func() {
 		sc := bufio.NewScanner(os.Stdin)
 		for sc.Scan() {
@@ -305,8 +369,10 @@ func main() {
 				C string `json:"c"`
 			}
 			if json.Unmarshal([]byte(strings.TrimSpace(sc.Text())), &c) == nil && c.C == "apagar" {
-				close(apagar)
-				return
+				select {
+				case apagar <- struct{}{}:
+				default:
+				}
 			}
 		}
 		parar()
@@ -341,20 +407,24 @@ func main() {
 		}()
 	} else {
 		marcarPareado(*pasta, true)
-		if err := cli.Connect(); err != nil {
-			fase("erro", "Sem conexão com o WhatsApp.")
-			os.Exit(1)
-		}
+		go conectarComTentativas(ctx, cli.Connect, esperaDaTentativa, func() { fase("desconectado", "Sem conexão com o WhatsApp.") })
 	}
 
-	select {
-	case <-ctx.Done():
-	case <-apagar:
-		_ = cli.Logout(context.Background())
-		cli.Disconnect()
-		_ = os.RemoveAll(*pasta)
-		fase("desconectado", "Sessão apagada.")
-		return
+espera:
+	for {
+		select {
+		case <-ctx.Done():
+			break espera
+		case <-apagar:
+			if err := apagarSessao(func() error { return sairDoAparelho(cli) }, *pasta); err != nil {
+				// A pasta fica: a pessoa tenta de novo quando a rede voltar.
+				fase("erro", "Não consegui sair do aparelho. Confira a internet e tente apagar de novo.")
+				continue
+			}
+			cli.Disconnect()
+			fase("desconectado", "Sessão apagada.")
+			return
+		}
 	}
 	cli.Disconnect()
 	_ = a.estado.Salvar()

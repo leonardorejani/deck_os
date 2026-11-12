@@ -16,16 +16,21 @@ struct GrupoWhatsAppQR: View {
 
     var body: some View {
         Group {
-            LinhaDeAjuste(titulo: "Conectar pelo QR (aparelho conectado)", apoio: TextosWhatsAppQR.aviso) {
+            LinhaDeAjuste(titulo: "Conectar pelo QR (aparelho conectado)",
+                          apoio: qr.disponivel ? TextosWhatsAppQR.aviso : TextosWhatsAppQR.semAjudante) {
                 ChaveDeAjuste(rotulo: "Conectar pelo QR", ligada: ligado) { ligar in
                     if ligar {
-                        modelo.gravar { $0.whatsapp.origem = "qr" }
+                        // Sem o ajudante no app a chave não liga: a origem "qr" tiraria a leitura que já funciona.
+                        guard qr.disponivel else { return }
+                        modelo.gravar { $0.whatsapp.ligarQR(disponivel: true) }
                         qr.ligar()
                     } else {
-                        modelo.gravar { $0.whatsapp.origem = "auto" }
+                        // Volta para a origem de antes (App, Web ou Automático), não para "auto" sempre.
+                        modelo.gravar { $0.whatsapp.desligarQR() }
                         qr.desligar()
                     }
                 }
+                .opacity(qr.disponivel || ligado ? 1 : 0.4)
             }
             if ligado { corpo }
         }
@@ -59,7 +64,7 @@ struct GrupoWhatsAppQR: View {
                         BotaoDeAjuste(texto: "Apagar", estilo: .perigo) { confirmandoApagar = false; qr.apagarSessao() }
                     }
                 } else {
-                    BotaoDeAjuste(texto: "Apagar", estilo: .perigo) { confirmandoApagar = true }
+                    BotaoDeAjuste(texto: qr.apagando ? "Apagando..." : "Apagar", estilo: .perigo, desligado: qr.apagando) { confirmandoApagar = true }
                 }
             }
         }

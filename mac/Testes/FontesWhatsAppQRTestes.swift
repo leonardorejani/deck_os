@@ -232,6 +232,101 @@ final class FontesWhatsAppQRTestes: XCTestCase {
         XCTAssertNil(l.valor)
         XCTAssertNotNil(l.aviso)
     }
+
+    // MARK: Correções da verificação (12/11/2026)
+
+    private func pareada(_ sessao: URL) throws {
+        try FileManager.default.createDirectory(at: sessao, withIntermediateDirectories: true)
+        try Data().write(to: sessao.appendingPathComponent("pareado"))
+    }
+
+    /// Ajudante parado com sessão guardada: o Apagar sobe o ajudante só para sair do aparelho no WhatsApp.
+    func testApagarComAjudanteParadoSobeOAjudanteParaSair() throws {
+        let recebido = pasta.appendingPathComponent("recebido")
+        let sessao = pasta.appendingPathComponent("sessao", isDirectory: true)
+        try pareada(sessao)
+        let p = try ponte("read l; echo \"$l\" > '\(recebido.path)'")
+        XCTAssertFalse(p.ligada)
+        XCTAssertTrue(p.apagarSessao())
+        XCTAssertEqual((try? String(contentsOf: recebido))?.trimmingCharacters(in: .whitespacesAndNewlines), #"{"c":"apagar"}"#,
+                       "sem processo vivo o comando de sair do aparelho nem era enviado")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: sessao.path))
+    }
+
+    /// O ajudante não conseguiu sair (sem rede): a sessão fica, o motivo aparece e dá para tentar de novo.
+    func testApagarQueNaoSaiDoAparelhoMantemASessaoEAvisa() throws {
+        let sessao = pasta.appendingPathComponent("sessao", isDirectory: true)
+        try pareada(sessao)
+        let p = try ponte("echo '{\"t\":\"fase\",\"fase\":\"conectado\",\"detalhe\":\"\"}'; read l; echo '{\"t\":\"fase\",\"fase\":\"erro\",\"detalhe\":\"sem rede\"}'; cat >/dev/null")
+        p.garantirLigada()
+        esperar("conectou") { p.atual.fase == .conectado }
+        XCTAssertFalse(p.apagarSessao())
+        XCTAssertTrue(FileManager.default.fileExists(atPath: sessao.path), "sem sair do aparelho a sessão não pode ser apagada")
+        XCTAssertTrue(p.temSessao)
+        XCTAssertEqual(p.atual.fase, .erro)
+        XCTAssertEqual(p.atual.detalhe, TextosWhatsAppQR.naoSaiu)
+    }
+
+    func testApagarSemSessaoGuardadaSoLimpaAPasta() throws {
+        let sessao = pasta.appendingPathComponent("sessao", isDirectory: true)
+        try FileManager.default.createDirectory(at: sessao, withIntermediateDirectories: true)
+        try Data("x".utf8).write(to: sessao.appendingPathComponent("sessao.db"))
+        let p = try ponte("exit 1")
+        XCTAssertTrue(p.apagarSessao())
+        XCTAssertFalse(FileManager.default.fileExists(atPath: sessao.path))
+    }
+
+    /// Subindo ou reconectando não manda ler o QR: não há QR a ler.
+    func testSubindoOuReconectandoNaoMandaLerOQr() throws {
+        for f in [FaseQR.iniciando, .desconectado] {
+            XCTAssertNil(EstadoQR(fase: f).aviso, "\(f) é transitória")
+            XCTAssertTrue(EstadoQR(fase: f).reconectando)
+        }
+        for f in [FaseQR.aguardandoQR, .qrExpirou, .erro, .conectado] { XCTAssertFalse(EstadoQR(fase: f).reconectando) }
+        let p = try ponte("echo '{\"t\":\"fase\",\"fase\":\"conectado\",\"detalhe\":\"\"}'; echo '\(Self.conversas)'; echo '{\"t\":\"fase\",\"fase\":\"desconectado\",\"detalhe\":\"\"}'; cat >/dev/null")
+        defer { p.desligar() }
+        p.garantirLigada()
+        esperar("caiu") { p.atual.fase == .desconectado && p.atual.conversas.count == 2 }
+        let l = p.ler()
+        XCTAssertNil(l.aviso)
+        XCTAssertEqual(l.valor?.resumo.aberto, false)
+        XCTAssertEqual(l.valor?.resumo.reconectando, true)
+        XCTAssertEqual(l.valor?.conversas.count, 2, "a lista de antes continua à vista durante a queda curta")
+    }
+
+    // MARK: Chave "Conectar pelo QR"
+
+    func testDesligarOQrVoltaParaAOrigemDeAntes() {
+        var c = ConfigWhatsApp(origem: "app", navegador: nil)
+        XCTAssertTrue(c.ligarQR(disponivel: true))
+        XCTAssertEqual(c.origem, "qr")
+        c.desligarQR()
+        XCTAssertEqual(c.origem, "app")
+        XCTAssertNil(c.origemAntes)
+        var web = ConfigWhatsApp(origem: "web", navegador: "Arc")
+        web.ligarQR(disponivel: true); web.ligarQR(disponivel: true)
+        web.desligarQR()
+        XCTAssertEqual(web.origem, "web", "ligar duas vezes não pode perder a origem de antes")
+        var auto = ConfigWhatsApp(origem: "qr", navegador: nil)
+        auto.desligarQR()
+        XCTAssertEqual(auto.origem, "auto", "sem origem de antes (config antiga), volta para auto")
+    }
+
+    func testSemAjudanteALigarNaoMudaAOrigem() {
+        var c = ConfigWhatsApp(origem: "app", navegador: nil)
+        XCTAssertFalse(c.ligarQR(disponivel: false))
+        XCTAssertEqual(c.origem, "app", "o Deck sem o ajudante perderia a leitura pelo app")
+        XCTAssertNil(c.origemAntes)
+    }
+
+    func testOrigemAntesSobreviveAoDiscoELeituraTolerante() throws {
+        var c = ConfigWhatsApp(origem: "app", navegador: nil)
+        c.ligarQR(disponivel: true)
+        let volta = try JSONDecoder().decode(ConfigWhatsApp.self, from: try JSONEncoder().encode(c))
+        XCTAssertEqual(volta.origemAntes, "app")
+        let ruim = try JSONDecoder().decode(ConfigWhatsApp.self, from: Data(#"{"origem":"qr","origemAntes":"zap"}"#.utf8))
+        XCTAssertNil(ruim.origemAntes)
+    }
 }
 
 private final class Lista: @unchecked Sendable {

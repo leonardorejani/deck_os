@@ -115,6 +115,17 @@ func (e *Estado) Nome(id, nome string) {
 	}
 }
 
+// Limpar esquece tudo, na memória e no disco. É o que acontece quando o aparelho é desconectado pelo celular:
+// as conversas daquela sessão não podem sobrar para a próxima.
+func (e *Estado) Limpar() {
+	e.mu.Lock()
+	e.conversas = map[string]*Conversa{}
+	e.mu.Unlock()
+	if e.arquivo != "" {
+		_ = os.Remove(e.arquivo)
+	}
+}
+
 func (e *Estado) Remover(id string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -143,6 +154,17 @@ func aparar(m []Msg) []Msg {
 	return m
 }
 
+// soNaoLidas devolve a conversa só com as mensagens ainda não lidas (as últimas, da mais antiga para a mais nova).
+func soNaoLidas(c *Conversa) Conversa {
+	cp := *c
+	n := c.NaoLidas
+	if n > len(c.Mensagens) {
+		n = len(c.Mensagens)
+	}
+	cp.Mensagens = append([]Msg{}, c.Mensagens[len(c.Mensagens)-n:]...)
+	return cp
+}
+
 // Lista é o que o Deck mostra: só as conversas com não lidas, da mais nova para a mais velha, cada uma
 // com as mensagens não lidas (as últimas, da mais antiga para a mais nova).
 func (e *Estado) Lista() []Conversa {
@@ -153,13 +175,7 @@ func (e *Estado) Lista() []Conversa {
 		if c.NaoLidas <= 0 {
 			continue
 		}
-		cp := *c
-		n := c.NaoLidas
-		if n > len(c.Mensagens) {
-			n = len(c.Mensagens)
-		}
-		cp.Mensagens = append([]Msg{}, c.Mensagens[len(c.Mensagens)-n:]...)
-		saida = append(saida, cp)
+		saida = append(saida, soNaoLidas(c))
 	}
 	sort.Slice(saida, func(i, j int) bool { return saida[i].Ultima > saida[j].Ultima })
 	return saida
@@ -171,9 +187,12 @@ func (e *Estado) Salvar() error {
 		return nil
 	}
 	e.mu.Lock()
-	lista := make([]*Conversa, 0, len(e.conversas))
+	// Só vai para o disco o que o Deck usa (as não lidas): texto de conversa já lida não fica guardado.
+	lista := make([]Conversa, 0, len(e.conversas))
 	for _, c := range e.conversas {
-		lista = append(lista, c)
+		if c.NaoLidas > 0 {
+			lista = append(lista, soNaoLidas(c))
+		}
 	}
 	b, err := json.Marshal(lista)
 	e.mu.Unlock()

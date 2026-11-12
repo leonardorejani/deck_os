@@ -6,6 +6,8 @@ import Foundation
 final class ModeloWhatsAppQR: ObservableObject {
     let ponte: PonteWhatsAppQR
     @Published private(set) var estado: EstadoQR
+    /// Saindo do aparelho no WhatsApp: a tela mostra "Apagando..." e segura o botão.
+    @Published private(set) var apagando = false
 
     init(ponte: PonteWhatsAppQR) {
         self.ponte = ponte
@@ -36,9 +38,15 @@ final class ModeloWhatsAppQR: ObservableObject {
 
     func desligar() { ponte.desligar(); estado = ponte.atual }
 
-    /// Sai do aparelho e apaga a sessão guardada. Demora até uns 8 s, então roda fora da tela.
+    /// Sai do aparelho e apaga a sessão guardada. Demora até uns 25 s, então roda fora da tela. Sem conseguir sair
+    /// (sem rede), a sessão fica e o estado mostra o motivo.
     func apagarSessao() {
+        guard !apagando else { return }
+        apagando = true
         let p = ponte
-        Task.detached { p.apagarSessao() }
+        Task.detached { [weak self] in
+            p.apagarSessao()
+            await MainActor.run { self?.apagando = false; self?.estado = p.atual }
+        }
     }
 }

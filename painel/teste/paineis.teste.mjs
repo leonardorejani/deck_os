@@ -94,6 +94,22 @@ export default async function (h) {
   const qrTxt = await texto(p, '#wa-lista .vazio-bloco');
   h.ok(qrTxt.startsWith('WhatsApp por QR sem conexão') && qrTxt.includes('Ajustes do Deck no Mac') && await texto(p, '#wa-titulo') === 'WhatsApp', `QR caído diz que está sem conexão e não "0 não lidas" (${qrTxt})`);
   await p.context().close();
+  // Subindo ou queda curta: o Mac reconecta sozinho, então a folha NÃO manda ler o QR de novo
+  await h.cenario({ whatsappOrigem: 'qr-reconectando' });
+  p = await h.pagina(); await pronta(h, p);
+  await p.click('.tecla[data-id="whatsapp"]');
+  h.ok(await h.espera(p, () => !!document.querySelector('#wa-lista .vazio-bloco')), 'WhatsApp por QR reconectando: a folha abre');
+  const reTxt = await texto(p, '#wa-lista .vazio-bloco');
+  h.ok(reTxt.startsWith('Reconectando ao WhatsApp') && !reTxt.includes('Ajustes'), `reconectando diz que volta sozinho (${reTxt})`);
+  h.ok(reTxt.includes('Não precisa ler o QR'), 'reconectando diz que não precisa ler o QR');
+  await p.context().close();
+  await h.cenario({ whatsappOrigem: 'qr-reconectando-lista' });
+  p = await h.pagina(); await pronta(h, p);
+  await p.click('.tecla[data-id="whatsapp"]');
+  h.ok(await h.espera(p, () => document.querySelectorAll('#wa-lista .conversa').length === 5), 'queda curta: a lista de antes continua à vista');
+  h.ok(await p.evaluate(() => !document.querySelector('#wa-filtro').hidden), 'queda curta: o filtro de grupos fica');
+  h.ok((await texto(p, '#wa-lista')).includes('Reconectando ao WhatsApp'), 'queda curta: a nota de reconexão aparece');
+  await p.context().close();
   await h.cenario({ whatsappOrigem: 'app' });
 
   /* lista maior que a folha rola sem barra, e a leitura de 4 s não puxa para o topo */
