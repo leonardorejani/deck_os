@@ -400,17 +400,20 @@ private struct LinhaDeAtalho: View {
 
 private struct Chip: View {
     var texto: String
+    var escolhido = false
     var acao: () -> Void
 
     var body: some View {
         Button(action: acao) {
-            Text(texto).font(.system(size: Tema.Texto.xs)).foregroundColor(Tema.Cor.texto2)
+            Text(texto).font(.system(size: Tema.Texto.xs)).foregroundColor(escolhido ? Tema.Cor.texto : Tema.Cor.texto2)
                 .padding(.horizontal, Tema.Espaco.icone)
                 .frame(minHeight: Tema.Medida.chipAlt)
-                .background(Tema.Cor.superficie2, in: Capsule())
+                .background(escolhido ? Tema.Cor.sucessoSuave : Tema.Cor.superficie2, in: Capsule())
+                .overlay { if escolhido { Capsule().strokeBorder(Tema.Cor.led, lineWidth: Tema.Traco.fino) } }
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(escolhido ? .isSelected : [])
     }
 }
 
@@ -419,6 +422,8 @@ private struct PassoTeclado: View {
     var tecla: Tecla
 
     static let exemplos: [(String, String)] = [("ctrl+opt+cmd+k", "Manter acordado no Vorssaint"), ("cmd+shift+4", "Captura de parte da tela"), ("ctrl+cmd+q", "Bloquear o Mac")]
+    static let modificadores: [(Modificadores, String)] = [(.controle, "⌃ control"), (.opcao, "⌥ option"), (.comando, "⌘ command"), (.shift, "⇧ shift"), (.fn, "fn")]
+    @State private var grupo = Teclas.grupos[0].id
 
     var body: some View {
         let forma = RoundedRectangle(cornerRadius: Tema.Raio.normal, style: .continuous)
@@ -445,11 +450,37 @@ private struct PassoTeclado: View {
                 .contentShape(forma)
             }
             .buttonStyle(.plain)
+            if tela.ouvindo && !tela.capturaGlobal {
+                ajuda("Se o atalho abrir outro app em vez de gravar, use \"Montar escolhendo as teclas\" aqui embaixo.")
+            }
             ajuda("Serve para atalho de qualquer app, mesmo em segundo plano. Exemplos:")
             Quebra(espaco: Tema.Espaco.item) {
                 ForEach(Self.exemplos, id: \.0) { v, d in Chip(texto: d) { tela.escolherCombinacao(v) } }
             }
             .padding(.top, Tema.Espaco.item)
+            montagem
+        }
+    }
+
+    /// Montar escolhendo os modificadores e a tecla na tela, para o atalho que outro app (CleanShot, Raycast) já usa
+    /// e que o gravador não consegue pegar.
+    private var montagem: some View {
+        let m = tela.montagem(de: tecla)
+        let teclas = Teclas.grupos.first { $0.id == grupo }?.teclas ?? []
+        return VStack(alignment: .leading, spacing: Tema.Espaco.icone) {
+            Text("Montar escolhendo as teclas").tatile(Tema.Texto.xs, .semibold, Tema.Cor.texto2).padding(.top, Tema.Espaco.item)
+            Quebra(espaco: Tema.Espaco.item) {
+                ForEach(Self.modificadores, id: \.1) { mod, nome in
+                    Chip(texto: nome, escolhido: m.modificadores.contains(mod)) { tela.alternarModificador(mod) }
+                }
+            }
+            Quebra(espaco: Tema.Espaco.item) {
+                ForEach(Teclas.grupos) { g in Chip(texto: g.nome, escolhido: g.id == grupo) { grupo = g.id } }
+            }
+            Quebra(espaco: Tema.Espaco.micro) {
+                ForEach(teclas) { t in Chip(texto: t.rotulo, escolhido: m.tecla == t.nome) { tela.escolherTeclaDaMontagem(t.nome) } }
+            }
+            ajuda(m.faltaDizer ?? "Pronto, a combinação já está gravada na tecla.")
         }
     }
 }

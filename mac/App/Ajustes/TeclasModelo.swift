@@ -39,6 +39,11 @@ final class ModeloTeclas: ObservableObject {
     private var desfazer: (() -> Void)?
     private var relogioDoAviso: Task<Void, Never>?
     private var monitor: Any?
+    private var captura: CapturaDeTecla?
+    /// true quando a escuta pega a tecla antes dos atalhos de outros apps (a tela esconde o aviso de "se o atalho abrir outro app").
+    @Published private(set) var capturaGlobal = false
+    /// Combinações incompletas sendo montadas na tela, por id de tecla.
+    @Published private var montagens: [String: MontagemDeCombinacao] = [:]
     private let pedirAcessibilidade: () -> Void
     private let executar: (Tecla) -> String?
     /// true enquanto o botão do mouse está apertado (trocado nos testes).
@@ -249,6 +254,7 @@ final class ModeloTeclas: ObservableObject {
     func escolherTipo(_ tipo: TipoDeTecla) {
         guard let t = tecla else { return }
         if t.tipo != tipo.rawValue {
+            montagens[t.id] = nil
             mudarTecla { $0.tipo = tipo.rawValue; $0.valor = "" }
             if tipo == .tecla { pedirAcessibilidade() }
         }
@@ -271,7 +277,10 @@ final class ModeloTeclas: ObservableObject {
         mudarTecla { $0.nome = LogicaTeclas.nomeAposEscolher(atual: $0.nome, escolhido: nome); $0.valor = nome }
     }
 
-    func escolherCombinacao(_ valor: String) { mudarTecla { $0.valor = valor } }
+    func escolherCombinacao(_ valor: String) {
+        if let id = sel { montagens[id] = nil }
+        mudarTecla { $0.valor = valor }
+    }
 
     /// Comando vazio vira rascunho: a tecla fica sem ação até a pessoa escrever um.
     func escolherComando(_ valor: String, nome: String? = nil) {
@@ -356,26 +365,77 @@ final class ModeloTeclas: ObservableObject {
 
     func alternarGravacao() { ouvindo ? parar() : comecar() }
 
+    /// Liga a escuta. Com Acessibilidade, captura antes dos atalhos de outros apps (CapturaDeTecla). Sem ela, ou se o
+    /// sistema recusar, cai no monitor local, que só vê a tecla que chegou ao Deck.
     private func comecar() {
         ouvindo = true
+        capturaGlobal = false
+        if let c = CapturaDeTecla.iniciar(aoApertar: { [weak self] t in self?.receber(t.codigo, t.controle, t.opcao, t.comando, t.shift) },
+                                          aoAcabar: { [weak self] in self?.terminouCaptura() }) {
+            captura = c
+            capturaGlobal = true
+            return
+        }
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] e in
             guard let self, self.ouvindo else { return e }
             let f = e.modifierFlags
-            let r = CombinacaoEmTexto.interpretar(codigo: e.keyCode, controle: f.contains(.control), opcao: f.contains(.option),
-                                                  comando: f.contains(.command), shift: f.contains(.shift))
-            switch r {
-            case .cancelou: self.parar()
-            case .ignorar: break
-            case .faltaControle: self.avisar("Use pelo menos uma tecla de controle (⌘, ⌥, ⌃ ou ⇧)")
-            case .gravou(let v): self.parar(); self.escolherCombinacao(v); self.avisar("Combinação gravada")
-            }
+            self.receber(e.keyCode, f.contains(.control), f.contains(.option), f.contains(.command), f.contains(.shift))
             return nil
         }
     }
 
+    private func receber(_ codigo: UInt16, _ controle: Bool, _ opcao: Bool, _ comando: Bool, _ shift: Bool) {
+        guard ouvindo else { return }
+        switch CombinacaoEmTexto.interpretar(codigo: codigo, controle: controle, opcao: opcao, comando: comando, shift: shift) {
+        case .cancelou: parar()
+        case .ignorar: break
+        case .faltaControle: avisar("Use pelo menos uma tecla de controle (⌘, ⌥, ⌃ ou ⇧)")
+        case .gravou(let v): parar(); escolherCombinacao(v); avisar("Combinação gravada")
+        }
+    }
+
+    /// A captura se desligou sozinha (o Deck saiu da frente ou o tempo acabou).
+    private func terminouCaptura() {
+        captura = nil
+        if ouvindo { parar(); avisar("Gravação cancelada. Se o atalho abrir outro app, monte a combinação escolhendo as teclas") }
+    }
+
     func parar() {
         ouvindo = false
+        capturaGlobal = false
+        captura?.parar(); captura = nil
         if let m = monitor { NSEvent.removeMonitor(m); monitor = nil }
+    }
+
+    // MARK: Montar combinação sem apertar
+
+    /// A montagem da tecla escolhida: o que a pessoa está ligando na tela, ou a combinação já gravada.
+    func montagem(de t: Tecla) -> MontagemDeCombinacao { montagens[t.id] ?? MontagemDeCombinacao(valor: t.valor) }
+
+    func alternarModificador(_ m: Modificadores) {
+        guard let t = tecla else { return }
+        var mont = montagem(de: t)
+        mont.alternar(m)
+        aplicar(mont, em: t)
+    }
+
+    func escolherTeclaDaMontagem(_ nome: String) {
+        guard let t = tecla else { return }
+        var mont = montagem(de: t)
+        mont.tecla = nome
+        aplicar(mont, em: t)
+    }
+
+    /// Só grava na config quando a montagem está completa. Incompleta, ela vive na tela e a combinação que
+    /// já estava gravada continua valendo no iPhone.
+    private func aplicar(_ mont: MontagemDeCombinacao, em t: Tecla) {
+        parar()
+        if let v = mont.valor {
+            montagens[t.id] = nil
+            if v != t.valor { escolherCombinacao(v) }
+        } else {
+            montagens[t.id] = mont
+        }
     }
 
     // MARK: Testar comando

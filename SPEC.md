@@ -513,6 +513,8 @@ uma linha e "Excluir tecla" (⌘Z desfaz). Embaixo, dois passos numerados:
    - Atalho: busca na lista do app Atalhos.
    - Teclado: "Clique aqui e aperte as teclas", que grava do teclado de verdade (Esc cancela, exige
      uma tecla de controle), com exemplos prontos.
+     Embaixo, "Montar escolhendo as teclas": modificadores e a tecla em botões, para o atalho que outro
+     app (CleanShot, Raycast) já usa e que o gravador não consegue pegar (decisão 32 da seção 13).
    - Comando: caixa em fonte de código, "Testar agora" e comandos prontos (apagar tela, abrir
      Downloads, silenciar, esvaziar Lixeira).
 
@@ -897,6 +899,20 @@ Ajustes de UX (11/11/2026, teste do Leonardo no iPhone):
       para travar), e a saída do perfil (banner) só aparece se o comando falhar, pela última linha como antes.
     - Comando que não existe de verdade (status 127) avisa "Comando não encontrado: <nome>". Só a tecla de comando muda:
       os comandos internos do Deck (osascript, open, shortcuts) seguem no zsh puro, de propósito.
+32. Gravar atalho de teclado que outro app já usa (12/11/2026). Palavras dele: "uso o CleanShot com os mesmos comandos do
+    Mac, tentei configurar as teclas com as combinações mas ele sempre ativava o atalho ao invés de salvar o atalho."
+    - Causa: o atalho global do outro app dispara antes de a tecla chegar ao Deck, então o gravador (monitor local do
+      AppKit) nunca via a combinação.
+    - Na tecla do tipo Teclado, além de "Clique aqui e aperte as teclas", existe "Montar escolhendo as teclas":
+      modificadores (⌃ ⌥ ⌘ ⇧ e fn) ligados e desligados em botões, e a tecla escolhida numa lista por grupo (Letras,
+      Números, F1 a F12, Setas, Outras). Não aperta nada. A combinação só vai para a tecla quando está completa
+      (pelo menos um modificador e uma tecla). Incompleta, a que já estava gravada continua valendo no iPhone e a tela
+      diz o que falta.
+    - Gravando, o Deck captura a tecla antes dos atalhos de outros apps (CGEventTap de sessão), só enquanto grava e só
+      com a Acessibilidade liberada. O tap engole o teclado do sistema inteiro, então desliga sozinho ao parar, quando
+      o Deck sai da frente e depois de 30 s. Sem Acessibilidade cai no monitor local, e a tela avisa que, se o atalho
+      abrir outro app, é para montar escolhendo as teclas.
+    - Ao usar a tecla, o Deck posta a tecla descendo e subindo no HID, com os modificadores nos dois eventos.
 
 Nada em aberto que trave a fase 1. Falta só confirmar, na construção, o link que abre uma sessão
 específica no app do Claude do iPhone (se não existir, cai no "mostra a pergunta").
