@@ -129,8 +129,21 @@ async function lerSessoes() {
     if (JSON.stringify(nova) !== JSON.stringify(se.lista) || temposSessoes(nova) !== se.tempos) { se.lista = nova; pintarSessoes() }
   } catch (e) { if (n === se.seq && e.status === 401) tratarErro(e) } // sem a lista completa, fica a do estado
 }
-const cartaoSessao = s => `<button class="cartao-sessao" data-sessao="${esc(s.id)}"><b>${esc(s.nome)}</b><small>${esc(s.projeto)}, há ${haQuanto(s.desde, V.ref).texto}</small><p>${esc(s.pergunta)}</p></button>`;
-const detalheSessao = s => `<article class="detalhe-sessao"><p class="pergunta">${esc(s.pergunta)}</p><button class="btn primario" data-sessao-mac>Abrir no Mac</button><p class="nota-sessao">Responda direto na sessão, no Claude.</p></article>`;
+const cartaoSessao = s => `<button class="cartao-sessao ${haQuanto(s.desde, V.ref).velha ? 'velha' : ''}" data-sessao="${esc(s.id)}"><b>${esc(s.nome)}</b><small>${esc(s.projeto)}, há ${haQuanto(s.desde, V.ref).texto}</small><p>${esc(s.pergunta)}</p></button>`;
+/* O contexto vem como a sessão escreveu (markdown solto). Aqui vira texto de leitura: sem #, ** e crases, tabela em linhas, parágrafos */
+function limparContexto(t) {
+  return String(t || '').replace(/\r/g, '').split('\n')
+    .filter(l => !/^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/.test(l))
+    .map(l => /^\s*\|.*\|\s*$/.test(l) ? l.trim().slice(1, -1).split('|').map(c => c.trim()).filter(Boolean).join(' · ') : l)
+    .join('\n').replace(/^#{1,6}\s+/gm, '').replace(/\*\*([^*\n]+)\*\*/g, '$1').replace(/`([^`\n]+)`/g, '$1').replace(/\n{3,}/g, '\n\n').trim();
+}
+const paragrafos = t => limparContexto(t).split(/\n\s*\n/).filter(Boolean).map(p => `<p>${esc(p.trim())}</p>`).join('');
+/* A sessão aberta, de cima para baixo: o que ela pede (em destaque), a resposta que ela mesma sugere, Abrir no Mac, e o contexto. */
+const detalheSessao = s => `<article class="detalhe-sessao">
+  <section class="pede"><span class="rotulo">Pede a sua resposta</span><p class="pergunta">${esc(s.pedido || s.pergunta)}</p>${s.sugestao ? `<div class="sugestao"><span class="rotulo">Resposta sugerida pela sessão</span><p>${esc(s.sugestao)}</p></div>` : ''}</section>
+  <button class="btn primario" data-sessao-mac>Abrir no Mac</button>
+  ${s.contexto ? `<section class="contexto"><span class="rotulo">Contexto</span><div class="texto-contexto">${paragrafos(s.contexto)}</div></section>` : ''}
+  <p class="nota-sessao">Responda direto na sessão, no Claude.</p></article>`;
 function pintarSessoes() {
   se.tempos = temposSessoes(se.lista);
   const s0 = se.aberta && se.lista.find(x => x.id === se.aberta);
