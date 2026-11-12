@@ -200,12 +200,12 @@ enum Ligacao {
                          executor: any Executor = ExecutorShell(), fontes: Fontes? = nil,
                          agenda: FonteAgenda = .viva(), rodizio: Rodizio = Rodizio(),
                          certificadoCA: URL? = nil, contaSpotify: ContaSpotify? = nil,
-                         apps: (any ProvedorDeApps)? = nil) -> Roteador {
+                         apps: (any ProvedorDeApps)? = nil, ponteQR: PonteWhatsAppQR? = nil) -> Roteador {
         // A mesma decisão de origem do WhatsApp serve a leitura (estado) e a abertura (tecla e "Abrir no Mac").
         let origemWhats = OrigemWhatsApp(executor: executor, banco: FonteWhatsApp.caminhoPadrao(casa: NSHomeDirectory()),
                                          config: { armazem.ler().whatsapp })
         let complemento = contaSpotify.map { ComplementoSpotify(conta: $0) }
-        let agregador = Agregador(fontes: fontes ?? .vivas(executor: executor, origemWhatsApp: origemWhats, complementoSpotify: complemento))
+        let agregador = Agregador(fontes: fontes ?? .vivas(executor: executor, origemWhatsApp: origemWhats, ponteQR: ponteQR, complementoSpotify: complemento))
         let abridor = AbridorWhatsApp(origem: origemWhats, executor: executor)
         return Roteador(
             paineis: PaineisReais(armazem: armazem, agregador: agregador, agenda: agenda),

@@ -58,7 +58,8 @@ struct Blocos: Codable, Equatable, Sendable {
 
 /// De onde o Deck lê as não lidas do WhatsApp.
 struct ConfigWhatsApp: Codable, Equatable, Sendable {
-    /// "auto" (o Deck descobre), "app" (banco do WhatsApp do Mac) ou "web" (aba do WhatsApp Web).
+    /// "auto" (o Deck descobre), "app" (banco do WhatsApp do Mac), "web" (aba do WhatsApp Web) ou "qr"
+    /// (aparelho conectado por QR, só quando a pessoa liga: não é oficial). O "auto" nunca escolhe "qr".
     var origem = "auto"
     /// Navegador do WhatsApp Web: "Safari", "Google Chrome", "Arc", "Brave Browser" ou "Microsoft Edge".
     /// nil: o Deck acha a aba aberta e, sem aba, abre o WhatsApp Web no navegador padrão do Mac.
@@ -159,12 +160,12 @@ struct Sessao: Codable, Equatable, Sendable {
 struct ResumoWhatsApp: Codable, Equatable, Sendable {
     var total: Int
     var conversas: Int
-    /// De onde o total veio: "app" (banco do WhatsApp do Mac) ou "web" (título da aba do WhatsApp Web).
+    /// De onde o total veio: "app" (banco do WhatsApp do Mac), "web" (título da aba do WhatsApp Web) ou "qr" (aparelho conectado).
     /// Ausente em Mac antigo: o painel trata como "app". Em "web" não há lista por conversa.
     var origem: String?
     /// Navegador da aba do WhatsApp Web, quando a origem é "web" e há aba.
     var navegador: String?
-    /// Só na origem "web": false quando não há aba do WhatsApp Web aberta (o total 0 não é medição).
+    /// Só nas origens "web" e "qr": false quando não há aba aberta (web) ou a conexão por QR está caída (o total 0 não é medição).
     var aberto: Bool?
 }
 
