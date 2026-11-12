@@ -980,15 +980,23 @@ Ajustes de UX (11/11/2026, teste do Leonardo no iPhone):
       de origem de sempre e o espaço reservado "Conectar pelo QR", sem ação até a frente do QR existir.
     - Um código por tela: o pedido de Bluetooth mostra o código de confirmação (igual nas duas telas), e o cartão "Código do
       cabo" só aparece quando não há pedido na tela. O código do cabo é o mesmo do PWA por construção (o iPhone prova ao Mac
-      que o conhece, `ProvaCabo.modoCodigo`), então ele só existe com o método aberto e nunca ao lado de outro código.
+      que o conhece, `ProvaCabo.modoCodigo`). PENDENTE DE DECISÃO DELA: ele reclamou de "às vezes era o mesmo do PWA", e
+      sem pedido de Bluetooth os dois métodos ainda mostram o mesmo número. Foi só reposicionado (nunca dois códigos na mesma
+      tela). Para ser outro código teria de existir um segundo segredo no núcleo, o que muda a prova do cabo. Perguntar.
     - Fonte única de "tem iPhone": `ModeloApp.iphoneAtivo` (cabo ou Bluetooth primeiro, depois Wi-Fi), usada pelo cabeçalho,
       pelo menu, por Conexões e pela configuração inicial. "Falando agora" é o `visto` (última resposta boa da API, pelo Wi-Fi,
-      cabo ou Bluetooth) dentro de 30 s, senão o texto diz "fora de alcance". Resposta boa pelo Wi-Fi sem registro cria o
+      cabo ou Bluetooth) dentro de 30 s, senão o texto diz "fora de alcance". A tela de Conexões e a configuração inicial
+      releem isso no mesmo relógio de 5 s do cabeçalho (o iPhone lembrado de uma abertura anterior, que ainda não falou,
+      não é "conectado"), e "Último canal" só diz "agora" dentro dos mesmos 30 s. Resposta boa pelo Wi-Fi sem registro cria o
       iPhone (o Mac reabriu): estar falando é estar conectado.
     - Sobre: sem o título "Sobre o Deck" em cima e sem as linhas Mac, iPhone e Licença (a licença fica só no texto do grupo).
     - Teclas: a lista de apps carrega ao abrir o Deck e o ícone observa a lista (antes só aparecia ao trocar de perfil).
-    - Permissões: terminado o pedido, o Deck volta para a frente. Se foi preciso abrir os Ajustes do Sistema, o Deck olha a
-      permissão a cada segundo (até 3 minutos) e volta quando ela muda.
+    - Permissões: terminado o pedido, o Deck volta para a frente. Se foi preciso abrir os Ajustes do Sistema (inclusive pelo
+      diálogo de Acessibilidade), o Deck não volta antes: olha a permissão a cada segundo (até 3 minutos) e volta quando ela
+      muda. Rede Local e Automação com o app alvo fechado o macOS não deixa reler, então não há espera: o Deck só volta
+      quando a pessoa clicar nele.
+    - Os avisos do menu e o selo da barra lateral abrem Conexões já no método onde o cartão aparece (renovação em Cabo e
+      Bluetooth, servidor e porta em PWA).
     - Nome deste Mac: o campo passou de 170 para 280 pt.
 
 Nada em aberto que trave a fase 1. Falta só confirmar, na construção, o link que abre uma sessão

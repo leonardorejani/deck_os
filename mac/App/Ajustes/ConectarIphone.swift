@@ -42,14 +42,19 @@ struct ConectarIphone: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Tema.Espaco.secao) {
-            SeletorDeMetodo(escolhido: modelo.metodoDeConexao, aoVivo: aoVivoPorMetodo) { modelo.metodoDeConexao = $0 }
-            switch modelo.metodoDeConexao {
-            case .cabo: MetodoCaboEBluetooth(modelo: modelo, codigo: ParearIphone.codigoEmGrupos(codigo.codigo))
-            case .whatsapp: MetodoWhatsApp(modelo: modelo)
-            case .pwa: metodoPwa
+        // O relógio da tela, o mesmo de 5 s do cabeçalho e do menu: sem ele, o ponto verde e a linha do aparelho
+        // ficavam parados em "ao vivo" depois de o iPhone parar de falar, contradizendo o cabeçalho.
+        TimelineView(.periodic(from: .now, by: 5)) { contexto in
+            let agora = modelo.relogio?() ?? contexto.date
+            VStack(alignment: .leading, spacing: Tema.Espaco.secao) {
+                SeletorDeMetodo(escolhido: modelo.metodoDeConexao, aoVivo: aoVivoPorMetodo(agora)) { modelo.metodoDeConexao = $0 }
+                switch modelo.metodoDeConexao {
+                case .cabo: MetodoCaboEBluetooth(modelo: modelo, codigo: ParearIphone.codigoEmGrupos(codigo.codigo), agora: agora)
+                case .whatsapp: MetodoWhatsApp(modelo: modelo)
+                case .pwa: metodoPwa(agora)
+                }
+                GrupoSpotify(spotify: modelo.spotify)
             }
-            GrupoSpotify(spotify: modelo.spotify)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .onAppear { acertarCodigo() }
@@ -78,19 +83,18 @@ struct ConectarIphone: View {
     }
 
     /// O ponto verde de cada método: só quando há aparelho daquele método falando agora (mesma fonte do cabeçalho).
-    private var aoVivoPorMetodo: Set<MetodoDeConexao> {
-        let agora = modelo.agora
+    private func aoVivoPorMetodo(_ agora: Date) -> Set<MetodoDeConexao> {
         var r = Set<MetodoDeConexao>()
         if let n = modelo.nativo, IphonePareado(nome: n.nome, canal: n.canal, visto: n.visto).aoVivo(agora: agora) { r.insert(.cabo) }
         if let i = modelo.iphone, i.aoVivo(agora: agora) { r.insert(.pwa) }
         return r
     }
 
-    @ViewBuilder private var metodoPwa: some View {
+    @ViewBuilder private func metodoPwa(_ agora: Date) -> some View {
         if let iphone = modelo.iphone {
             GrupoDeAjuste(titulo: "Aparelho", nota: nil) {
                 LinhasDeAjuste {
-                    LinhaDeAjuste(titulo: iphone.nome, apoio: TextosDeAjuste.conexao(iphone, agora: modelo.agora)) {
+                    LinhaDeAjuste(titulo: iphone.nome, apoio: TextosDeAjuste.conexao(iphone, agora: agora)) {
                         BotaoDeAjuste(texto: "Desconectar", estilo: .secundario) { modelo.desconectarIphone() }
                     }
                 }

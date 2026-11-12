@@ -67,6 +67,38 @@ final class ConexoesTestes: XCTestCase {
         XCTAssertEqual(voltas, 5)
     }
 
+    @MainActor func testPedidoSoTrazODeckSeNenhumaVigiaFoiLigada() {
+        var trouxe = 0
+        PrimeiroPlano.aoTerminarPedido(vigiaLigada: true) { trouxe += 1 }
+        XCTAssertEqual(trouxe, 0, "com os Ajustes abertos pelo pedido, quem traz o Deck é a mudança da permissão")
+        PrimeiroPlano.aoTerminarPedido(vigiaLigada: false) { trouxe += 1 }
+        XCTAssertEqual(trouxe, 1)
+    }
+
+    func testSoVigiaOQueDaParaReler() {
+        XCTAssertFalse(PrimeiroPlano.deveVigiar(inicial: String?.none) { _ in true })
+        XCTAssertFalse(PrimeiroPlano.deveVigiar(inicial: "semComoSaber") { $0 != "semComoSaber" })
+        XCTAssertTrue(PrimeiroPlano.deveVigiar(inicial: "recusado") { $0 != "semComoSaber" })
+    }
+
+    // MARK: Aviso que leva a Conexões abre o método dele
+
+    func testCadaAvisoAbreOMetodoOndeOCartaoAparece() {
+        XCTAssertEqual(AvisoDeConexao.renovacao.metodo, .cabo)
+        XCTAssertEqual(AvisoDeConexao.servidor.metodo, .pwa)
+    }
+
+    // MARK: Lista de apps relida
+
+    func testListaDeAppsRelidaQuandoVelhaEnquantoNaoEstaLendo() {
+        let t = Date(timeIntervalSince1970: 1_000_000)
+        XCTAssertTrue(RecargaDoCatalogo.precisa(ultimaLeitura: nil, agora: t, carregando: false))
+        XCTAssertFalse(RecargaDoCatalogo.precisa(ultimaLeitura: nil, agora: t, carregando: true))
+        XCTAssertFalse(RecargaDoCatalogo.precisa(ultimaLeitura: t, agora: t.addingTimeInterval(10), carregando: false))
+        XCTAssertTrue(RecargaDoCatalogo.precisa(ultimaLeitura: t, agora: t.addingTimeInterval(31), carregando: false), "app instalado depois de o Deck abrir")
+        XCTAssertFalse(RecargaDoCatalogo.precisa(ultimaLeitura: t, agora: t.addingTimeInterval(300), carregando: true))
+    }
+
     // MARK: Ícone da tecla sem esperar a lista de apps
 
     func testIconeDaTeclaAchaOAppSemOCatalogoCarregado() {

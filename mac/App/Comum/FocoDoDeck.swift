@@ -6,6 +6,10 @@ import AppKit
 @MainActor
 enum FocoDoDeck {
     private static var espera: Task<Void, Never>?
+    /// Ligou alguma vigia desde que `comecarPedido()` rodou. O pedido, ao terminar, só traz o Deck se ela não ligou.
+    private(set) static var vigiaLigada = false
+
+    static func comecarPedido() { vigiaLigada = false }
 
     /// O Deck na frente, com as janelas dele (Ajustes, configuração inicial) acima das do sistema.
     static func trazer() {
@@ -20,6 +24,9 @@ enum FocoDoDeck {
     static func vigiar(situacao ler: @escaping @MainActor () -> SituacaoDoAcesso?) {
         espera?.cancel()
         let inicial = ler()
+        let legivel = PrimeiroPlano.deveVigiar(inicial: inicial) { if case .semComoSaber = $0 { return false } else { return true } }
+        guard legivel else { return }
+        vigiaLigada = true
         espera = Task {
             _ = await PrimeiroPlano.trazerQuandoMudar(inicial: inicial, ler: ler, trazer: { trazer() })
         }

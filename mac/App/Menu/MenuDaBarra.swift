@@ -31,16 +31,16 @@ struct MenuDaBarra: View {
                 BlocoPerfil(perfis: modelo.config.perfis, ativo: modelo.config.perfilAtivo, escolher: modelo.usarPerfil)
             }
             if modelo.renovacaoApertando, case .apertando(let vence) = modelo.estadoDaRenovacao {
-                AlertaDoMenu(texto: TextosDoNativo.venceEm(vence, agora: modelo.agora)) { modelo.secao = .iphone; acoes.abrirAjustes() }
+                AlertaDoMenu(texto: TextosDoNativo.venceEm(vence, agora: modelo.agora)) { modelo.metodoDeConexao = AvisoDeConexao.renovacao.metodo; modelo.secao = .iphone; acoes.abrirAjustes() }
             }
             if !modelo.acessosRecusados.isEmpty {
                 AlertaDoMenu(texto: TextosDoMenu.acessosRecusados(modelo.acessosRecusados.count)) { modelo.secao = .permissoes; acoes.abrirAjustes() }
             }
             if case .falhou = modelo.servidor {
-                AlertaDoMenu(texto: TextosDoMenu.servidorFalhou) { modelo.secao = .iphone; acoes.abrirAjustes() }
+                AlertaDoMenu(texto: TextosDoMenu.servidorFalhou) { modelo.metodoDeConexao = AvisoDeConexao.servidor.metodo; modelo.secao = .iphone; acoes.abrirAjustes() }
             }
             if let aviso = modelo.avisoDePorta {
-                AlertaDoMenu(texto: aviso) { modelo.secao = .iphone; acoes.abrirAjustes() }
+                AlertaDoMenu(texto: aviso) { modelo.metodoDeConexao = AvisoDeConexao.servidor.metodo; modelo.secao = .iphone; acoes.abrirAjustes() }
             }
             Separador()
             ItemDoMenu(titulo: "Ajustes...", atalho: "⌘,") { acoes.abrirAjustes() }

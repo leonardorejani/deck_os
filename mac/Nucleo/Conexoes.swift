@@ -76,6 +76,22 @@ enum MetodoDeConexao: String, CaseIterable, Identifiable {
     }
 }
 
+/// Os avisos do menu e da barra lateral que levam a Conexões. Cada um mora em um método só, então quem leva para lá também
+/// escolhe o método: sem isso o aviso abria uma tela onde ele não aparece.
+enum AvisoDeConexao {
+    /// "O app vence em N dias": o cartão da renovação é do app nativo (Cabo e Bluetooth).
+    case renovacao
+    /// O servidor não subiu ou subiu em outra porta: o cartão de erro e o endereço são do PWA (Wi-Fi).
+    case servidor
+
+    var metodo: MetodoDeConexao {
+        switch self {
+        case .renovacao: return .cabo
+        case .servidor: return .pwa
+        }
+    }
+}
+
 /// O Deck some da frente quando o macOS abre outra janela por ele (Ajustes do Sistema) ou quando um pedido
 /// de acesso termina. Aqui está a espera que traz o Deck de volta.
 enum PrimeiroPlano {
@@ -93,6 +109,20 @@ enum PrimeiroPlano {
         }
         return false
     }
+
+    /// Quem pediu o acesso só traz o Deck de volta no fim do pedido se nenhuma vigia foi ligada: com a vigia, quem traz é a
+    /// mudança da permissão. Trazer antes cobre os Ajustes do Sistema que o próprio pedido acabou de abrir.
+    @MainActor
+    static func aoTerminarPedido(vigiaLigada: Bool, trazer: () -> Void) {
+        if !vigiaLigada { trazer() }
+    }
+
+    /// Só vale vigiar o que o Deck consegue reler. Sem leitura (nil), ou com uma situação que não muda sozinha (Rede Local,
+    /// Automação com o app fechado), a espera de 3 min seria à toa: o Deck não voltaria nunca.
+    static func deveVigiar<T>(inicial: T?, legivel: (T) -> Bool) -> Bool {
+        guard let inicial else { return false }
+        return legivel(inicial)
+    }
 }
 
 /// O ícone de uma tecla de app não pode esperar a lista de apps carregar: sem ela, acha o .app direto nas pastas.
@@ -101,5 +131,18 @@ enum IconeDeApp {
         if let doCatalogo { return doCatalogo }
         guard !valor.isEmpty else { return nil }
         return pastas.map { $0 + "/" + valor + ".app" }.first(where: existe)
+    }
+}
+
+/// Quando a lista de apps do Mac (o seletor de "Abrir app" e os ícones das teclas) precisa ser lida de novo. Ela carrega ao
+/// abrir o Deck, mas app instalado depois não pode esperar o Deck reiniciar: cada vez que Suas teclas abre e a leitura
+/// passou de `idadeMaxima`, lê outra vez (sem apagar a lista antiga, para o ícone não piscar).
+enum RecargaDoCatalogo {
+    static let idadeMaxima: TimeInterval = 30
+
+    static func precisa(ultimaLeitura: Date?, agora: Date, carregando: Bool) -> Bool {
+        if carregando { return false }
+        guard let ultimaLeitura else { return true }
+        return agora.timeIntervalSince(ultimaLeitura) > idadeMaxima
     }
 }

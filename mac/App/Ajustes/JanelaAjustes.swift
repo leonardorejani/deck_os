@@ -134,7 +134,11 @@ private struct Navegacao: View {
                 ForEach(grupo) { secao in
                     ItemDaNavegacao(secao: secao, atual: modelo.secao == secao,
                                     selo: secao == .permissoes ? modelo.acessosRecusados.count : secao == .iphone && modelo.renovacaoApertando ? 1 : 0,
-                                    descricaoDoSelo: secao == .iphone ? "aviso" : "faltando") { modelo.secao = secao }
+                                    descricaoDoSelo: secao == .iphone ? "aviso" : "faltando") {
+                        // O selo de Conexões é o da renovação: vindo de outra seção, abre no método onde o cartão aparece.
+                        if secao == .iphone, modelo.secao != .iphone, modelo.renovacaoApertando { modelo.metodoDeConexao = AvisoDeConexao.renovacao.metodo }
+                        modelo.secao = secao
+                    }
                 }
             }
         }

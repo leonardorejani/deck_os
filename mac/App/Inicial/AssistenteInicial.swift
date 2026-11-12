@@ -82,8 +82,13 @@ final class AssistenteInicial: ObservableObject {
 
     // MARK: Iphone
 
-    var iphone: IphonePareado? { modelo.iphoneAtivo }
-    var iphoneConectado: Bool { modelo.iphoneAtivo != nil }
+    /// O iPhone que está falando agora (a regra do cabeçalho: 30 s sem resposta é fora de alcance). O iPhone lembrado de
+    /// uma abertura anterior, que ainda não falou, não conta como conectado.
+    var iphone: IphonePareado? { modelo.iphoneAtivo.flatMap { $0.aoVivo(agora: modelo.agora) ? $0 : nil } }
+    var iphoneConectado: Bool { iphone != nil }
+    /// O relógio do passo do iPhone: publicar de novo faz a tela reler `iphone` sem ninguém mexer.
+    @Published private(set) var relogio = Date()
+    func tique() { relogio = modelo.agora }
     var codigoEmGrupos: String { EnderecoDoMac.codigoEmGrupos(codigo) }
 
     /// O que o QR leva: endereço, código de pareamento e link do certificado.

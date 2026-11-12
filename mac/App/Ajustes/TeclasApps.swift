@@ -90,7 +90,10 @@ final class CatalogoDeApps: ObservableObject {
     @Published private(set) var maisUsados: [AppDoMac] = []
     /// nil enquanto procura.
     @Published private(set) var atalhos: [String]?
-    private var carregou = false
+    /// Lista pronta de fora (as fotos): nunca relê.
+    private var fixo = false
+    private var carregando = false
+    private var ultimaLeitura: Date?
 
     /// O catálogo do app: carrega ao abrir o Deck e é o que os Ajustes usam, para os ícones das teclas já estarem prontos.
     static let compartilhado = CatalogoDeApps()
@@ -102,12 +105,13 @@ final class CatalogoDeApps: ObservableObject {
         self.apps = apps
         self.maisUsados = maisUsados
         self.atalhos = atalhos
-        carregou = true
+        fixo = true
     }
 
-    func carregarSeFaltar() {
-        guard !carregou else { return }
-        carregou = true
+    /// Lê a lista na primeira vez e de novo quando ela já está velha (app instalado depois de o Deck abrir).
+    func carregarSeFaltar(agora: Date = Date()) {
+        guard !fixo, RecargaDoCatalogo.precisa(ultimaLeitura: ultimaLeitura, agora: agora, carregando: carregando) else { return }
+        carregando = true
         Task.detached(priority: .userInitiated) { [weak self] in
             let todos = LeitorDeApps.ler()
             // A lista sai antes dos "mais usados" (o Spotlight demora): os ícones das teclas só precisam dela.
@@ -116,9 +120,11 @@ final class CatalogoDeApps: ObservableObject {
             await self?.recebeuMaisUsados(mais)
             let r = ExecutorShell().rodar("shortcuts list")
             await self?.recebeuAtalhos(r.status == 0 ? LeitorDeApps.atalhos(daSaida: r.saida) : [])
+            await self?.terminou()
         }
     }
 
+    private func terminou() { carregando = false; ultimaLeitura = Date() }
     private func recebeuTodos(_ todos: [AppDoMac]) { apps = todos }
     private func recebeuMaisUsados(_ mais: [AppDoMac]) { maisUsados = mais }
     private func recebeuAtalhos(_ l: [String]) { atalhos = l }

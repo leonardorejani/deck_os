@@ -96,8 +96,9 @@ enum TextosDoNativo {
     static func ultimoCanal(_ n: AppNativo, agora: Date = Date()) -> String {
         let nome = n.canal == .bluetooth ? "Bluetooth" : "Cabo"
         let seg = agora.timeIntervalSince(n.visto)
-        if seg < 60 { return "\(nome), agora" }
-        if seg < 3600 { return "\(nome), há \(Int(seg / 60)) min" }
+        // "agora" tem a mesma janela do cabeçalho (30 s): passou disso, o iPhone não está falando.
+        if seg <= IphonePareado.janelaAoVivo { return "\(nome), agora" }
+        if seg < 3600 { return "\(nome), há \(max(1, Int(seg / 60))) min" }
         return "\(nome), às \(formato("HH:mm").string(from: n.visto))"
     }
 
