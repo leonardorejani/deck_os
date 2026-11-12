@@ -75,9 +75,13 @@
     gravarConfig: config => pedir('PUT', '/api/config', undefined, config),
     whatsapp: () => pedir('GET', '/api/whatsapp'),
     agenda: (de, dias) => pedir('GET', '/api/agenda', { de: String(de), dias: String(dias) }),
+    mail: conta => pedir('GET', '/api/mail', conta ? { conta: String(conta) } : undefined, undefined, 15000), // o Mac lê o Mail por AppleScript, até uns 10 s
+    abrirMensagem: id => pedir('POST', '/api/mail/abrir', undefined, { id }),
     sessoes: () => pedir('GET', '/api/sessoes'),
     abrirSessao: id => pedir('POST', '/api/sessoes/' + encodeURIComponent(id) + '/abrir'),
     entrarNaReuniao: link => pedir('POST', '/api/reuniao/entrar', undefined, { link }),
+    controles: () => pedir('GET', '/api/controles'),
+    controle: (item, v) => pedir('POST', '/api/controles/' + encodeURIComponent(item), { v: String(v) }),
     agendaDestinos: pedirAcesso => pedir('GET', '/api/agenda/destinos', pedirAcesso ? { pedir: '1' } : undefined),
     criarCompromisso: dados => pedir('POST', '/api/agenda/criar', undefined, dados, 15000),
     apps: () => pedir('GET', '/api/apps'),
