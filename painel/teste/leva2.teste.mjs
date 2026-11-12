@@ -245,7 +245,7 @@ export default async function (h) {
   h.ok((await spot()).at(-1) === 'dispositivo:d-sala', 'o Mac recebeu dispositivo:d-sala');
   await p.click('#pc-lista-corpo [data-aparelho="d-tv"]', { force: true }).catch(() => {}); await h.dormir(300);
   h.ok((await spot()).at(-1) === 'dispositivo:d-sala', 'o aparelho que o Spotify não deixa controlar não manda nada');
-  await p.click('#pc-lista [data-pc-voltar]'); await h.dormir(300);
+  await p.click('#pc-lista [data-pc-voltar]'); await h.dormir(500);
   h.ok(await p.evaluate(() => document.querySelector('#pc-lista').hidden) && await p.evaluate(() => !!document.querySelector('#f-player .capa-grande')), 'Voltar fecha a lista e mostra o player');
   await p.context().close();
 
@@ -261,8 +261,8 @@ export default async function (h) {
   for (const [w, alt, nome] of [[932, 430, 'deitado'], [430, 932, 'em pé']]) {
     p = await abrirPlayer({ spotifyExtras: 'login' }, { w, h: alt });
     await p.click('#f-player [data-fila]'); await h.dormir(600);
-    const fl = await p.evaluate(() => ({ titulo: document.querySelector('#pc-lista-titulo').textContent, grupos: [...document.querySelectorAll('#pc-lista-corpo h3')].map(x => x.textContent), itens: document.querySelectorAll('#pc-lista-corpo .item-lista').length, primeira: document.querySelector('#pc-lista-corpo .item-lista b').textContent }));
-    h.ok(fl.titulo === 'Na fila' && fl.grupos.join() === 'Tocando agora,Próximas' && fl.itens === 10 && fl.primeira === 'Faixa de Exemplo', `${nome}: a fila mostra o que toca agora e as 9 próximas (${fl.itens} itens)`);
+    const fl = await p.evaluate(() => ({ titulo: document.querySelector('#pc-lista-titulo').textContent, grupos: [...document.querySelectorAll('#pc-lista-corpo h3')].map(x => x.textContent), itens: document.querySelectorAll('#pc-lista-corpo .item-lista').length, primeira: document.querySelector('#pc-lista-corpo .item-lista b').textContent, agora: document.querySelector('#pc-lista-topo b')?.textContent }));
+    h.ok(fl.titulo === 'Na fila' && fl.grupos.join() === 'Próximas' && fl.itens === 9 && fl.primeira === 'Próxima música 1' && fl.agora === 'Faixa de Exemplo', `${nome}: a fila mostra o que toca agora no alto, fixo, e as 9 próximas embaixo (${fl.itens} itens)`);
     if (nome === 'deitado') {
       const rolagem = await p.evaluate(() => { const e = document.querySelector('#pc-lista-corpo'); return { passa: e.scrollHeight > e.clientHeight + 20, semBarra: getComputedStyle(e).scrollbarWidth === 'none' } });
       h.ok(rolagem.passa && rolagem.semBarra, 'a fila longa rola sem barra visível');
@@ -282,7 +282,7 @@ export default async function (h) {
   await h.reset(); await h.cenario({ spotifyExtras: 'login', xss: true });
   p = await h.pagina(); await pronta(h, p); await h.dormir(400); await p.click('.player .capa'); await h.dormir(800);
   await p.click('#f-player [data-fila]'); await h.dormir(500); await p.click('#pc-lista [data-pc-voltar]'); await p.click('#f-player [data-aparelhos]'); await h.dormir(500);
-  h.ok(await p.evaluate(() => !window.__xss && document.querySelectorAll('#pc-lista img').length === 0), 'nome de aparelho e de música com HTML aparece como texto e não executa');
+  h.ok(await p.evaluate(() => !window.__xss && document.querySelectorAll('#pc-lista img:not(.capa-mini)').length === 0), 'nome de aparelho e de música com HTML aparece como texto e não executa');
   await p.context().close();
 
   /* ---------- Editor de tecla: os apps do Mac de quem usa, com busca, ícone e ações ---------- */

@@ -115,6 +115,9 @@ function abrirMenu(el) {
   l.style.left = pos.left + 'px'; l.style.top = pos.top + 'px';
 }
 const relogioHTML = () => `<div class="relogio" aria-label="Hora"><div class="placa" data-i="0"></div><div class="placa" data-i="1"></div><div class="dois-pontos" aria-hidden="true"><i></i><i></i></div><div class="placa" data-i="2"></div><div class="placa" data-i="3"></div></div><div class="data-linha"><div class="data"></div></div>`;
+/* Relógio da composição C, no estilo do Fliqo: dois blocos bem quadrados, as horas em cima e os minutos embaixo, cada um com os dois
+   algarismos na mesma placa que vira. O resto do relógio (tique, virarPlaca) é o mesmo das placas de um algarismo. */
+const relogioQHTML = () => `<div class="relogio relogio-q" aria-label="Hora"><div class="placa" data-i="h"></div><div class="placa" data-i="m"></div></div>`;
 const nivel = p => p == null ? '' : p >= 90 ? 'cheio' : p >= 70 ? 'alto' : '';
 const medidor = (rot, p) => `<div class="medidor ${nivel(p)}" aria-label="${rot}: ${p == null ? 'sem medição' : p + '%'}"><span class="trilho"><i style="width:${p ?? 0}%"></i></span><b>${p == null ? '-' : p + '%'}</b></div>`;
 function usoCartao() {
@@ -148,13 +151,18 @@ function monitorHTML() {
   };
   return `<div class="monitor-tira" role="group" aria-label="Monitor do Mac">${itens.map(k => por[k]()).join('')}</div>`;
 }
-/* Composição C: o mês de agora com hoje marcado. O bloco todo é um botão que abre a agenda */
+/* Composição C: o mesmo mês da Agenda (nome grande em vermelho, setas, números grandes, pontinho nos dias com evento, hoje em círculo
+   vermelho). As setas só mexem neste bloco. O resto do bloco é um botão que abre a agenda */
 function mesCHTML() {
-  const hoje = new Date(V.ref), ano = hoje.getFullYear(), mes = hoje.getMonth(), dias = new Date(ano, mes + 1, 0).getDate();
-  const nome = hoje.toLocaleDateString('pt-BR', { month: 'long' });
-  let dias_ = '<span></span>'.repeat(new Date(ano, mes, 1).getDay());
-  for (let n = 1; n <= dias; n++) { const dow = new Date(ano, mes, n).getDay(); dias_ += `<span class="${dow === 0 || dow === 6 ? 'fds' : ''} ${n === hoje.getDate() ? 'hoje' : ''}">${n}</span>` }
-  return `<button class="cartao mes-c" data-painel="calendario" aria-label="${nome} de ${ano}. Abrir a agenda"><span class="mes-c-nome">${nome}</span><span class="sb-semana" aria-hidden="true"><span class="fds">D</span><span>S</span><span>T</span><span>Q</span><span>Q</span><span>S</span><span class="fds">S</span></span><span class="mes-c-dias">${dias_}</span></button>`;
+  const hoje = new Date(V.ref), m = mesCAtual(), ano = m.getFullYear(), mes = m.getMonth(), dias = new Date(ano, mes + 1, 0).getDate();
+  const nome = m.toLocaleDateString('pt-BR', { month: 'long' }) + (ano !== hoje.getFullYear() ? ' ' + ano : ''), temEv = diasComEvento(mesC.ev, m);
+  let grade = '<span></span>'.repeat(new Date(ano, mes, 1).getDay());
+  for (let n = 1; n <= dias; n++) {
+    const d = new Date(ano, mes, n), dow = d.getDay(), tem = temEv.get(n) || 0;
+    grade += `<span class="sb-dia ${dow === 0 || dow === 6 ? 'fds' : ''} ${mesmoDia(d, hoje) ? 'hoje' : ''} ${tem ? 'tem' : ''}">${n}</span>`;
+  }
+  return `<div class="mes-c"><div class="mes-topo"><h2>${esc(nome)}</h2><button class="seta" data-mes-c="-1" aria-label="Mês anterior">${SVG.esq}</button><button class="seta" data-mes-c="1" aria-label="Próximo mês">${SVG.dir}</button></div>
+    <button class="mes-c-corpo" data-painel="calendario" aria-label="${esc(nome)}. Abrir a agenda"><span class="sb-semana" aria-hidden="true"><span class="fds">D</span><span>S</span><span>T</span><span>Q</span><span>Q</span><span>S</span><span class="fds">S</span></span><span class="sb-grade mes-c-dias">${grade}</span></button></div>`;
 }
 const usoAtual = () => posicao === 'horizontal' && V.comp === 'a' ? usoCartao() : usoTira();
 const temModos = s => s.repetir !== undefined || s.aleatorio !== undefined; // Mac antigo não manda: sem inventar, os botões não aparecem
@@ -237,17 +245,14 @@ const chavePlayer = () => { const s = V.spotify; return s ? JSON.stringify([s.fa
 function render() {
   $('#lista-perfis').hidden = true; // a folha do Menu fica presa à tecla de antes: sem ela, refazer a tela a fecha
   const x = $('#teclas .paginas')?.scrollLeft || 0;
-  const sem = V.comp === 'c' ? 'sem-musica sem-sessoes sem-uso' : `${semMusica() ? 'sem-musica' : ''} ${V.blocos.sessoes === false ? 'sem-sessoes' : ''} ${usoVisivel().length ? '' : 'sem-uso'}`;
+  const sem = `${semMusica() ? 'sem-musica' : ''} ${V.blocos.sessoes === false ? 'sem-sessoes' : ''} ${usoVisivel().length ? '' : 'sem-uso'}`;
   const c = $('#conteudo');
   c.classList.toggle('carregando', !!V.carregando);
   c.setAttribute('aria-busy', String(!!V.carregando));
   const cm = monitorItens().length ? ' com-monitor' : '';
   c.innerHTML = V.comp === 'c'
-    // C: o relógio com as horas sobre os minutos (o mesmo desenho do relógio grande da A) e o mês, com a fileira de teclas da A
-    ? `<div class="comp-a comp-c ${sem}${cm}"><div class="topo">
-        <div class="esquerda"><div class="relogio-linha">${relogioHTML()}${monitorHTML()}</div></div>
-        <div class="direita">${mesCHTML()}</div>
-      </div><div class="teclas" id="teclas">${teclasHTML(porPagina())}</div></div>`
+    // C: o relógio quadrado à esquerda, uma linha cinza e o mês à direita. Sem fileira de teclas (pedido de 12/11/2026)
+    ? `<div class="comp-c${cm}"><div class="c-relogio">${relogioQHTML()}${monitorHTML()}</div><div class="c-divisor" role="separator"></div>${mesCHTML()}</div>`
     : V.comp === 'a'
     ? `<div class="comp-a ${sem}${cm}"><div class="topo">
         <div class="esquerda"><div class="relogio-linha">${relogioHTML()}${posicao === 'vertical' ? usoTira() : ''}${monitorHTML()}</div>${posicao === 'vertical' ? '' : usoCartao()}</div>
@@ -259,6 +264,7 @@ function render() {
       </div><div class="teclas" id="teclas">${teclasHTML(porPagina())}</div></div>`;
   marcarRelogioGrande();
   tique(true);
+  lerMesC();
   ligarCarrossel();
   const pg = $('#teclas .paginas'); if (pg && x) pg.scrollLeft = x;
   pintarEscondidos();
@@ -416,7 +422,8 @@ function virarPlaca(el, novo) {
 function tique(inicial) {
   const agora = new Date();
   const dig = (String(agora.getHours()).padStart(2, '0') + String(agora.getMinutes()).padStart(2, '0')).split('');
-  $$('.placa').forEach(el => { const d = dig[el.dataset.i]; if (inicial || !el.dataset.d) montarPlaca(el, d); else if (el.dataset.d !== d) virarPlaca(el, d) });
+  const alvo = { ...dig, h: dig[0] + dig[1], m: dig[2] + dig[3] }; // h e m: as placas de dois algarismos da composição C
+  $$('.placa').forEach(el => { const d = alvo[el.dataset.i]; if (inicial || !el.dataset.d) montarPlaca(el, d); else if (el.dataset.d !== d) virarPlaca(el, d) });
   const [dia, ...resto] = agora.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }).split(', ');
   $$('.data').forEach(d => { d.innerHTML = `<b>${dia}</b>, ${resto.join(', ')}` });
 }
@@ -499,7 +506,7 @@ function pintarPlayerCheio() {
     $('#pc-corpo').innerHTML = playerCheioHTML(s); pintarProgresso(true);
   }
   pintarMidia($('.pc', f), s); pintarExtras(s);
-  if (lp.qual === 'fila' && s.faixa !== lp.faixa) { lp.faixa = s.faixa; lerListaPlayer() } // a fila anda com a música
+  if (lp.qual === 'fila' && s.faixa !== lp.faixa) { lp.faixa = s.faixa; pintarTopoFila(); lerListaPlayer() } // a fila anda com a música: o alto troca na hora, a lista quando o Mac responder
   const img = $('.capa-grande', f); if (img?.dataset.erro && s.capaId) { delete img.dataset.erro; img.src = canal.capaUrl(s.capaId) }
 }
 async function ativarPerfil(id) {
@@ -520,6 +527,7 @@ tela.addEventListener('click', ev => {
   const m = ev.target.closest('[data-midia]'); if (m) return midia(m.dataset.midia);
   if (!organizando && ev.target.closest('[data-abrir-spotify]') && V.spotify) return abrirPlayer();
   if (!organizando && ev.target.closest('.relogio, .data-linha')) return abrirRelogio();
+  const sm = ev.target.closest('[data-mes-c]'); if (sm) return moverMesC(Number(sm.dataset.mesC)); // as setas do mês da C não abrem a agenda
   const pn = ev.target.closest('[data-painel]'); if (pn && !organizando) return abrirPainel(pn.dataset.painel);
   if (ev.target.closest('[data-fechar]') || ev.target.id === 'veu') return fecharFolha();
   const t = ev.target.closest('.tecla');

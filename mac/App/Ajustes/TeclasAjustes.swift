@@ -142,7 +142,8 @@ struct AjustesDaAgenda: View {
 
 // MARK: - Monitor
 
-/// Um bloco pequeno no iPhone com processador, memória, bateria e rede. Nasce desligado, e cada item se liga ou desliga aqui,
+/// Um bloco pequeno no iPhone com processador, memória, bateria e rede, e a tela do Monitor de Atividade, que ainda mostra GPU, disco,
+/// energia, ventoinhas e dispositivos (só o que este Mac conseguir ler). Nasce desligado, e cada item se liga ou desliga aqui,
 /// porque a tela do iPhone não tem muito espaço. De fábrica, ligado o bloco, todos os itens aparecem.
 struct AjustesDoMonitor: View {
     @ObservedObject var modelo: ModeloApp
@@ -158,6 +159,11 @@ struct AjustesDoMonitor: View {
                 item("Memória", "Quanto da memória está em uso", c.monitor.memoria) { $0.monitor.memoria = $1 }
                 item("Bateria", "A carga e se está na tomada. Some em Mac sem bateria", c.monitor.bateria) { $0.monitor.bateria = $1 }
                 item("Rede", "A velocidade de download e de upload", c.monitor.rede) { $0.monitor.rede = $1 }
+                item("GPU", "Quanto da placa de vídeo está em uso. Na tela do Monitor de Atividade", c.monitor.gpu) { $0.monitor.gpu = $1 }
+                item("Disco", "O espaço livre. Na tela do Monitor de Atividade", c.monitor.disco) { $0.monitor.disco = $1 }
+                item("Energia", "Os watts que o Mac usa agora. Na tela do Monitor de Atividade", c.monitor.energia) { $0.monitor.energia = $1 }
+                item("Ventoinhas", "A rotação em RPM. Some em Mac sem ventoinha. Na tela do Monitor de Atividade", c.monitor.ventoinhas) { $0.monitor.ventoinhas = $1 }
+                item("Dispositivos", "Quantos dispositivos USB estão conectados. Na tela do Monitor de Atividade", c.monitor.dispositivos) { $0.monitor.dispositivos = $1 }
             }
         }
     }

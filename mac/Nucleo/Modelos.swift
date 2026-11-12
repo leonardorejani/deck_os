@@ -67,8 +67,17 @@ struct ConfigMonitor: Codable, Equatable, Sendable {
     var memoria = true
     var bateria = true
     var rede = true
-    var algum: Bool { cpu || memoria || bateria || rede }
-    var itens: [String] { [cpu ? "cpu" : nil, memoria ? "memoria" : nil, bateria ? "bateria" : nil, rede ? "rede" : nil].compactMap { $0 } }
+    /// Itens da tela do Monitor de Atividade no iPhone (12/11/2026). Só aparecem se o Mac souber ler.
+    var gpu = true
+    var disco = true
+    var energia = true
+    var ventoinhas = true
+    var dispositivos = true
+    var algum: Bool { !itens.isEmpty }
+    var itens: [String] {
+        [cpu ? "cpu" : nil, memoria ? "memoria" : nil, bateria ? "bateria" : nil, rede ? "rede" : nil, gpu ? "gpu" : nil,
+         disco ? "disco" : nil, energia ? "energia" : nil, ventoinhas ? "ventoinhas" : nil, dispositivos ? "dispositivos" : nil].compactMap { $0 }
+    }
 }
 
 /// Quais controles a tela "Controles do Mac" mostra no iPhone (volume, brilho e luz do teclado). Todos ligados de fábrica.
@@ -279,6 +288,20 @@ struct EstadoMonitor: Codable, Equatable, Sendable {
     /// Bytes por segundo recebidos e enviados. nil na primeira leitura, porque taxa precisa de duas medidas.
     var baixa: Int? = nil
     var sobe: Int? = nil
+    /// Uso da GPU, 0 a 100. nil quando o Mac não informa.
+    var gpu: Int? = nil
+    /// Espaço livre e total do disco, em bytes.
+    var discoLivre: Int? = nil
+    var discoTotal: Int? = nil
+    /// Consumo do Mac em watts (a carga total do sistema, ou o fluxo da bateria quando só isso estiver disponível). nil em Mac sem a medida.
+    var watts: Double? = nil
+    /// A bateria está recebendo carga. Só vem junto com `watts`.
+    var carregando: Bool? = nil
+    /// Rotação de cada ventoinha, em RPM, e a maior rotação possível. nil em Mac sem ventoinha (MacBook Air).
+    var ventoinhas: [Int]? = nil
+    var ventoinhaMax: Int? = nil
+    /// Quantos dispositivos USB estão conectados.
+    var dispositivos: Int? = nil
 }
 
 // MARK: - Painéis

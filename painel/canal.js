@@ -7,8 +7,6 @@
      spotify(acao, valor?)     -> {ok: true}     acao: tocar, pausar, anterior, proxima, posicao (segundos), repetir e aleatorio (true liga, false desliga)
      controles()               -> {volume?, mudo?, brilho?, teclado?}  o que o Mac oferece (0 a 100), campo que falta = não oferece
      controle(item, v)         -> {ok: true}     item: volume, mudo (v 0 ou 1), brilho ou teclado
-     processos()               -> {cpu: [Processo], memoria: [Processo]}  os 5 maiores em cada (pid, nome, cpu, memoria em bytes, podeEncerrar)
-     encerrarProcesso(pid, nome) -> {ok: true}   pede ao programa que feche; o Mac recusa se o pid já é de outro programa
      spotifyVolume(v, alvo)    -> {ok: true}     v de 0 a 100, alvo: spotify, mac ou aparelho
      aparelhos()               -> [Aparelho]     só com o Spotify conectado (senão 409)
      transferir(id)            -> {ok: true}     passa a música para o aparelho (só conectado)
@@ -105,8 +103,6 @@ function criarCanalHttps() {
     entrarNaReuniao: link => pedir('POST', '/api/reuniao/entrar', { link }),
     controles: () => pedir('GET', '/api/controles'),
     controle: (item, v) => pedir('POST', `/api/controles/${encodeURIComponent(item)}?v=${encodeURIComponent(v)}`),
-    processos: () => pedir('GET', '/api/processos'),
-    encerrarProcesso: (pid, nome) => pedir('POST', `/api/processos/${encodeURIComponent(pid)}/encerrar?nome=${encodeURIComponent(nome)}`),
     agendaDestinos: pedirAcesso => pedir('GET', '/api/agenda/destinos' + (pedirAcesso ? '?pedir=1' : '')),
     criarCompromisso: dados => pedir('POST', '/api/agenda/criar', dados, 15000), // o Mac grava pelo EventKit, que pode demorar com a conta na nuvem
     apps: () => pedir('GET', '/api/apps'),
