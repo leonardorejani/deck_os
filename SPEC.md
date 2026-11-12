@@ -513,6 +513,8 @@ uma linha e "Excluir tecla" (⌘Z desfaz). Embaixo, dois passos numerados:
    - Atalho: busca na lista do app Atalhos.
    - Teclado: "Clique aqui e aperte as teclas", que grava do teclado de verdade (Esc cancela, exige
      uma tecla de controle), com exemplos prontos.
+     Embaixo, "Montar escolhendo as teclas": modificadores e a tecla em botões, para o atalho que outro
+     app (CleanShot, Raycast) já usa e que o gravador não consegue pegar (decisão 33 da seção 13).
    - Comando: caixa em fonte de código, "Testar agora" e comandos prontos (apagar tela, abrir
      Downloads, silenciar, esvaziar Lixeira).
 
@@ -909,8 +911,22 @@ Ajustes de UX (11/11/2026, teste do Leonardo no iPhone):
     - Sem iPhone e sem rede: nada de cabo, Bluetooth nem renovação do app do iPhone, e o servidor escuta só no
       loopback, então não aparece para outros aparelhos.
     - Código em `mac/Nucleo/Variante.swift`. Testes: `mac/Testes/VarianteTestes.swift` e `scripts/teste/bancada.test.sh`.
+33. Gravar atalho de teclado que outro app já usa (12/11/2026). Palavras dele: "uso o CleanShot com os mesmos comandos do
+    Mac, tentei configurar as teclas com as combinações mas ele sempre ativava o atalho ao invés de salvar o atalho."
+    - Causa: o atalho global do outro app dispara antes de a tecla chegar ao Deck, então o gravador (monitor local do
+      AppKit) nunca via a combinação.
+    - Na tecla do tipo Teclado, além de "Clique aqui e aperte as teclas", existe "Montar escolhendo as teclas":
+      modificadores (⌃ ⌥ ⌘ ⇧ e fn) ligados e desligados em botões, e a tecla escolhida numa lista por grupo (Letras,
+      Números, F1 a F12, Setas, Outras). Não aperta nada. A combinação só vai para a tecla quando está completa
+      (pelo menos um modificador e uma tecla). Incompleta, a que já estava gravada continua valendo no iPhone e a tela
+      diz o que falta.
+    - Gravando, o Deck captura a tecla antes dos atalhos de outros apps (CGEventTap de sessão), só enquanto grava e só
+      com a Acessibilidade liberada. O tap engole o teclado do sistema inteiro, então desliga sozinho ao parar, quando
+      o Deck sai da frente e depois de 30 s. Sem Acessibilidade cai no monitor local, e a tela avisa que, se o atalho
+      abrir outro app, é para montar escolhendo as teclas.
+    - Ao usar a tecla, o Deck posta a tecla descendo e subindo no HID, com os modificadores nos dois eventos.
 
-33. Spotify fechou e abriu de novo, o player volta (12/11/2026). Palavras dele: "Quando o spotify fechou no pc ele sumiu do
+34. Spotify fechou e abriu de novo, o player volta (12/11/2026). Palavras dele: "Quando o spotify fechou no pc ele sumiu do
     app, mas quando foi reaberto nao apareceu de volta. mesmo dando play".
     - Causa: a leitura do Spotify rodava o `osascript` sem tempo limite. Um Spotify que acabou de abrir (ou está fechando)
       pode não atender o evento por minutos, e essa leitura pendurada segurava o cache do estado: todo pedido seguinte
