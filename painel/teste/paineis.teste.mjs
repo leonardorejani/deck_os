@@ -114,6 +114,9 @@ export default async function (h) {
   await p.click('.tecla[data-id="whatsapp"]'); await h.espera(p, () => document.querySelectorAll('#wa-lista .conversa').length === 5);
   await p.click('#wa-lista [data-wa="w1"]'); await h.dormir(700);
   h.ok(await p.evaluate(() => !window.__xss && document.querySelectorAll('#wa-lista img').length === 0), 'texto do WhatsApp com HTML aparece como texto e não executa');
+  // marcação que sobrava: cerca de código, link, itálico, __forte__ e citação
+  const lim = await p.evaluate(() => limparContexto('Veja:\n```bash\nls -la | grep x\n# comentario do shell\n```\n\n- item *italico* e [link](https://x.com) e __forte__\n\n> citacao'));
+  h.ok(lim === 'Veja:\nls -la | grep x\n# comentario do shell\n\n- item italico e link e forte\n\ncitacao', `contexto sem cerca de código, link, itálico nem citação, e o comando dentro da cerca fica intacto (${JSON.stringify(lim)})`);
   await p.context().close(); await h.cenario({ xss: false });
 
   /* ---------- Agenda ---------- */
@@ -263,6 +266,38 @@ export default async function (h) {
     await h.foto(p, `sessoes-aberta-${w}`);
     await p.context().close();
   }
+
+  /* Contexto da sessão aberta: o pedido em destaque, a resposta sugerida, Abrir no Mac e o contexto legível embaixo */
+  for (const [w, alt, nome] of [[932, 430, 'deitado'], [430, 932, 'em pé']]) {
+    await h.reset();
+    p = await h.pagina({ w, h: alt }); await pronta(h, p);
+    await p.click('.sessoes'); await h.espera(p, () => document.querySelectorAll('#se-lista .cartao-sessao').length === 5);
+    await abrirSessaoPor('s2'); await h.dormir(700);
+    const d = await p.evaluate(() => { const q = x => document.querySelector('#se-lista ' + x); const rot = [...document.querySelectorAll('#se-lista .rotulo')].map(e => e.textContent);
+      return { pergunta: q('.pergunta')?.textContent, sugestao: q('.sugestao p')?.textContent, rotulos: rot, ctx: q('.texto-contexto')?.innerText, paras: document.querySelectorAll('#se-lista .texto-contexto p').length,
+        ordem: ['.pede', '[data-sessao-mac]', '.contexto'].map(x => q(x)?.getBoundingClientRect().top), cru: /\*\*|`|^#|\|---/m.test(q('.texto-contexto')?.textContent || '') } });
+    h.ok(d.pergunta.startsWith('Escolha: A reserva 2 das 4 vagas') && d.sugestao === 'A, e pode abrir o PR rascunho', `${nome}: o pedido inteiro (needs) aparece em destaque, com a resposta sugerida (${d.pergunta.slice(0, 30)})`);
+    h.ok(d.rotulos.join() === 'Pede a sua resposta,Resposta sugerida pela sessão,Contexto', `${nome}: blocos por assunto com rótulo (${d.rotulos})`);
+    h.ok(d.ctx.includes('Com A sobram 2 vagas') && d.ctx.includes('1080p · 4 vagas') && !d.cru && d.paras >= 3, `${nome}: o contexto vem legível, sem marcação solta e com a tabela em linhas (${d.paras} parágrafos)`);
+    h.ok(d.ordem[0] < d.ordem[1] && d.ordem[1] < d.ordem[2], `${nome}: ordem pedido, Abrir no Mac, contexto`);
+    await p.click('#se-lista [data-sessao-mac]'); await h.dormir(300);
+    h.ok((await h.contadores()).sessoesAbertas.includes('s2'), `${nome}: Abrir no Mac continua abrindo a sessão`);
+    await h.foto(p, `sessoes-contexto-${w}`);
+    await p.context().close();
+  }
+  // sessão de Mac antigo (sem pedido, contexto nem sugestão) continua abrindo com a pergunta
+  await h.reset(); p = await h.pagina(); await pronta(h, p);
+  await p.click('.sessoes'); await h.espera(p, () => document.querySelectorAll('#se-lista .cartao-sessao').length === 5);
+  await abrirSessaoPor('s3'); await h.dormir(300);
+  h.ok(await p.evaluate(() => document.querySelector('#se-lista .pergunta').textContent === 'Você aprova o plano do runner 02 (e2e do ci-1)?' && !document.querySelector('#se-lista .contexto, #se-lista .sugestao')), 'sessão sem contexto: mostra a pergunta e não abre bloco vazio');
+  await p.context().close();
+  // texto do contexto com HTML malicioso aparece como texto
+  await h.reset(); await h.cenario({ xss: true });
+  p = await h.pagina(); await pronta(h, p);
+  await p.click('.sessoes'); await h.espera(p, () => document.querySelectorAll('#se-lista .cartao-sessao').length === 5);
+  await abrirSessaoPor('s2'); await h.dormir(300);
+  h.ok(await p.evaluate(() => !window.__xss && document.querySelectorAll('#se-lista .texto-contexto img').length === 0 && document.querySelector('#se-lista .texto-contexto').textContent.includes('<img')), 'contexto com HTML aparece como texto e não executa');
+  await p.context().close(); await h.cenario({ xss: false });
 
   /* Dispensar (na sessão aberta): some da lista e do bloco, fica guardado, volta quando a sessão muda */
   await h.reset();

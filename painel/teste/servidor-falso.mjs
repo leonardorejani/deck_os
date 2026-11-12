@@ -101,7 +101,9 @@ const emDias = (dias, h, m = 0) => { const d = new Date(); d.setDate(d.getDate()
 const SESSOES = () => [...SESSOES_BASE(), ...Array.from({ length: 7 }, (_, i) => ({ id: 's' + (6 + i), nome: 'sessão extra ' + (i + 1), projeto: 'projeto_' + (i + 1), pergunta: 'Pergunta longa da sessão extra ' + (i + 1) + ', com bastante texto para passar de duas linhas na lista e mostrar inteira só quando a pessoa tocar em Responder, sem cortar nada. '.repeat(4), desde: new Date(T0 - (5 + i) * 86400000).toISOString() }))];
 const SESSOES_BASE = () => [
   { id: 's1', nome: X('convite novos usuarios'), projeto: X('app_web'), pergunta: c.perguntaGigante ? Array.from({ length: 40 }, (_, i) => `Linha ${i + 1} da pergunta: posso seguir com o plano e abrir o PR agora?`).join('\n') : c.textoLongo ? 'Posso editar /Users/exemplo/projeto/painel/paineis.js agora?' : X(c.sessaoMuda ? 'Agora pode salvar o TXT no DNS?' : 'Salvar o TXT de verificação do domínio no DNS?'), desde: new Date(T0 - 5 * 60000).toISOString() },
-  { id: 's2', nome: 'EXPORTAR_VIDEO_1080', projeto: 'video', pergunta: '1080p medido, aguarda decisão sobre times, PR e vídeo.', desde: new Date(T0 - 13 * 3600000).toISOString() },
+  { id: 's2', nome: 'EXPORTAR_VIDEO_1080', projeto: 'video', pergunta: '1080p medido, aguarda decisão sobre times, PR e vídeo.', desde: new Date(T0 - 13 * 3600000).toISOString(),
+    pedido: 'Escolha: A reserva 2 das 4 vagas para reuniões, B times em 540p, ou C vídeo dos times no node01. Depois diga se abro o PR rascunho.', sugestao: 'A, e pode abrir o PR rascunho',
+    contexto: c.xss ? '<img src=x onerror=window.__xss=1> **negrito** `codigo`' : 'needs input ficou claro.\n\n## O que foi medido\n\n| Item | Valor |\n|---|---|\n| 1080p | 4 vagas |\n| 540p | 9 vagas |\n\nCom **A** sobram 2 vagas para as reuniões, usando `tc` no wg0.' },
   { id: 's3', nome: 'CI_RUNNER_02', projeto: 'infra', pergunta: 'Você aprova o plano do runner 02 (e2e do ci-1)?', desde: new Date(T0 - 14 * 3600000).toISOString() },
   { id: 's4', nome: 'instala repo', projeto: 'app_web', pergunta: 'Registro essa conclusão na memória do projeto?', desde: new Date(T0 - 16 * 3600000).toISOString() },
   { id: 's5', nome: 'podio ranking pontuação', projeto: 'app_web', pergunta: 'Posso fazer o commit e abrir o PR?', desde: new Date(T0 - 4 * 86400000).toISOString() },
@@ -209,7 +211,7 @@ function estado() {
       { id: 'claude-equipe', nome: 'Claude', conta: 'equipe', semana: semMed ? null : 77, renova: emDias(1, 9) },
       { id: 'codex', nome: 'Codex', conta: 'pro', semana: semMed ? null : 4, renova: emDias(0, 23) },
     ],
-    sessoes: SESSOES().slice(0, c.sessoes),
+    sessoes: SESSOES().slice(0, c.sessoes).map(({ contexto, ...leve }) => leve), // o Mac de verdade só manda o contexto em /api/sessoes
     whatsapp: c.whatsappOrigem === 'web' ? { total: 23, conversas: 0, origem: 'web', navegador: 'Google Chrome', aberto: true }
       : c.whatsappOrigem === 'web-fechado' ? { total: 0, conversas: 0, origem: 'web', navegador: 'Arc', aberto: false }
       : { total: 23, conversas: 5, origem: 'app' },

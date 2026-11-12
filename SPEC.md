@@ -245,10 +245,16 @@ que abre `message://` no Mail. Tecla do Mail com ação (caixa de entrada de uma
 ### Sessões esperando
 
 Tela de sessões em cartões, um por sessão: nome, projeto, há quanto tempo e o começo da pergunta (3 linhas), a mais
-recente primeiro (duas colunas deitado, uma em pé). Tocar num cartão abre a sessão com a pergunta inteira, legível,
-com rolagem sem barra, e dois botões: **Dispensar** (esconde até ela mudar de novo) e **Voltar** (aos cartões, no mesmo ponto
-da rolagem). Se a sessão aberta for respondida no Mac, a tela volta aos cartões e avisa. Sem link para abrir a sessão no
-Claude do iPhone (item 4 da seção 13), o botão "Responder" saiu: quem responde faz isso na própria sessão, e a tela diz isso.
+recente primeiro (duas colunas deitado, uma em pé). Cartão com uma barra de cor na lateral (azul, amarela depois de 1 h
+de espera). Tocar num cartão abre a sessão, de cima para baixo: **Pede a sua resposta** (o pedido inteiro da sessão, em
+destaque), a **resposta sugerida** pela sessão quando ela tem uma (só leitura), **Abrir no Mac** e o **Contexto** (a última
+mensagem da sessão, com a marcação solta limpa e a tabela em linhas). Rolagem sem barra e dois botões no rodapé:
+**Dispensar** (esconde até ela mudar de novo) e **Voltar** (aos cartões, no mesmo ponto da rolagem). Se a sessão aberta for
+respondida no Mac, a tela volta aos cartões e avisa. Sem link para abrir a sessão no Claude do iPhone (item 4 da seção 13),
+o botão "Responder" saiu: quem responde faz isso na própria sessão, e a tela diz isso. O pedido, a sugestão e o contexto
+vêm de `GET /api/sessoes` (`pedido`, `sugestao`, `contexto`, todos opcionais: Mac antigo não manda e a tela abre só com a
+pergunta). O estado (`/api/estado`) leva só o resumo, sem `contexto`. O Mac mascara tokens e senhas e corta o contexto em
+4 mil caracteres antes de mandar.
 A sessão aberta tem **Abrir no Mac** (`POST /api/sessoes/<id>/abrir`), que traz para a frente o terminal onde ela está. O
 `state.json` do job não diz em que app a sessão roda, então o Mac descobre pelo processo: a sessão em segundo plano é
 acompanhada por um `claude attach <nome>` num terminal, e o app dono desse terminal é o primeiro `.app` entre os pais do
@@ -319,7 +325,7 @@ contas que o dono adicionar em User Management (até 25): quem não estiver na l
 | Renovação de cada conta | `reset_7d` da medição do Claude por perfil, `resets_at` do Codex | mostrado como dia e hora ("sex 14h") |
 | Cores da capa | o Mac lê a arte do Spotify e tira as duas cores dominantes | vão junto do estado do Spotify |
 | Ícones | ícone do app instalado no Mac (Claude, Spotify, WhatsApp...) | Codex com o ícone oficial do app do Codex para Mac (nuvem azul com o prompt). No app de verdade, o ícone sai do app instalado. Sem ele, usa esse mesmo ícone guardado no Deck |
-| Sessões esperando | `~/.claude/jobs/*/state.json` com estado `blocked` | nome, pergunta (`detail`), projeto e hora. Hoje há 13, algumas paradas desde outubro. Falta confirmar qual link abre a sessão no Claude do iPhone |
+| Sessões esperando | `~/.claude/jobs/*/state.json` com estado `blocked` | nome, resumo da pergunta (`detail`), pedido inteiro (`needs`), resposta sugerida (`suggestedReply`), projeto e hora. O contexto é o `text` da última linha do `timeline.jsonl` da sessão, quando ela é `blocked` (o `state.json` não guarda ferramenta nem comando de permissão). Hoje há 13, algumas paradas desde outubro. Falta confirmar qual link abre a sessão no Claude do iPhone |
 
 ## 8. Instalar no iPhone
 
@@ -1000,6 +1006,17 @@ ficam sem medição". Decisão: o Deck mede o uso pelo token de `claude setup-to
 `anthropic-ratelimit-unified-7d-*` de um pedido de 1 token ao Claude, porque o endereço `/api/oauth/usage` pede
 o escopo `user:profile` e o token de setup-token só tem `user:inference` (403). Conta da troca de contas sem
 medição do autoswitch passa a ser medida pelo token do perfil (type oauth_token). A leitura fica em cache de 5 min.
+
+31. Sessões com o contexto do que esperam (12/11/2026). Palavras dele: "quando clico no card da sessão ele não mostra nada de
+    contexto que eu tenho que aprovar, se for assim não muda nada eu abrir isso no celular." E: "muda o visual, deixa mais
+    bonito aí sla, intuitivo e fácil de ler". Decisão: a sessão aberta mostra o pedido inteiro, o contexto e Abrir no Mac, e o
+    cartão e a tela ganham hierarquia nova (seção 5). Sem responder pelo iPhone nesta versão. O Mac não vê o pedido de
+    permissão (ferramenta e comando) porque o `state.json` não o guarda: o que existe é `needs` e a última mensagem da
+    sessão no `timeline.jsonl`, e é isso que a tela mostra.
+    Correção da verificação (12/11/2026): como o pedido é "sem segredo: mascare tokens", a máscara cobre também URL de banco
+    com senha (qualquer esquema, não só http), par chave/valor em JSON com aspas e chave com underscore (`sk_live_...`). E
+    "fácil de ler" inclui bloco de código com cerca (a cerca some e o comando fica como está), link, itálico, `__forte__` e
+    citação sem a marcação.
 
 ## 14. Melhorias (10/11/2026)
 
