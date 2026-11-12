@@ -156,6 +156,8 @@ struct Roteador: Sendable {
     var abridorDeSessao: (any AbridorDeSessao)? = nil
     /// Os apps do Mac de quem usa (lista, ícone e ações de tecla). Nil: as rotas /api/apps não existem (404).
     var apps: (any ProvedorDeApps)? = nil
+    /// A tela do Mail (últimas mensagens). Nil: as rotas /api/mail não existem (404).
+    var mail: (any ProvedorDeMail)? = nil
 
     func responder(_ r: HttpRequisicao) -> RespostaRota {
         if r.caminho == "/api/parear" {
@@ -215,6 +217,10 @@ struct Roteador: Sendable {
             return somente(["GET"], r) ?? .codificar(200, paineis.sessoes())
         case "/api/agenda":
             return somente(["GET"], r) ?? agenda(r)
+        case "/api/mail":
+            return somente(["GET"], r) ?? caixaDeMail(r)
+        case "/api/mail/abrir":
+            return somente(["POST"], r) ?? abrirMensagem(r)
         default:
             break
         }
@@ -277,6 +283,33 @@ struct Roteador: Sendable {
         }
         if let erro = reunioes.entrar(link) { return .erro(422, erro) }
         return .json(200, Data("{\"ok\":true}".utf8))
+    }
+
+    /// GET /api/mail?conta=<id>. Sem `conta`, a primeira conta do Mail. O id só vai ao script como argumento separado.
+    private func caixaDeMail(_ r: HttpRequisicao) -> RespostaRota {
+        guard let mail else { return .erro(404, "Essa rota não existe.") }
+        var conta: String?
+        if let c = r.query["conta"], !c.isEmpty {
+            guard Self.textoSimples(c, maximo: 200) else { return .erro(400, "Essa conta do Mail não é válida.") }
+            conta = c
+        }
+        return .codificar(200, mail.caixa(conta: conta))
+    }
+
+    /// POST /api/mail/abrir, corpo {"id": "<Message-ID>"}: abre a mensagem no Mail do Mac. Não marca nada.
+    private func abrirMensagem(_ r: HttpRequisicao) -> RespostaRota {
+        guard let mail else { return .erro(404, "Essa rota não existe.") }
+        guard let obj = (try? JSONSerialization.jsonObject(with: r.corpo)) as? [String: Any], let id = obj["id"] as? String,
+              LeitorDeMail.idLimpo(id) != nil else {
+            return .erro(400, "Informe a mensagem a abrir, por exemplo {\"id\": \"<Message-ID>\"}.")
+        }
+        if let erro = mail.abrir(id: id) { return .erro(422, erro) }
+        return .json(200, Data("{\"ok\":true}".utf8))
+    }
+
+    /// Texto sem caractere de controle e sem tamanho absurdo.
+    static func textoSimples(_ s: String, maximo: Int) -> Bool {
+        !s.isEmpty && s.count <= maximo && !s.unicodeScalars.contains { CharacterSet.controlCharacters.contains($0) }
     }
 
     /// GET /api/agenda/destinos: onde dá para salvar, o padrão e a permissão de cada app. `?pedir=1` abre no Mac a
