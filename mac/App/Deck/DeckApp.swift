@@ -13,13 +13,18 @@ struct DeckApp: App {
     init() {
         // Nos testes o app é só o hospedeiro: não sobe servidor nem mexe na config do dono.
         let testando = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+        // Deck Bancada: na primeira abertura parte de uma cópia da config do Deck real (só lida).
+        if !testando && Variante.atual == .bancada {
+            PrimeiraAberturaDaBancada.preparar(origem: PrimeiraAberturaDaBancada.origemPadrao, destino: ArmazemConfig.urlPadrao)
+        }
         let m = testando ? ModeloApp(config: Config.padrao(nomeMac: "Mac de teste")) : ModeloApp()
         _modelo = StateObject(wrappedValue: m)
         if !testando {
             m.iniciar()
-            m.ligarRenovacao()
+            // A bancada não renova o app do iPhone.
+            if Variante.atual.ligaIphone { m.ligarRenovacao() }
             // Só para a prova: `--renovar-agora` reinstala o app no iPhone assim que o Deck abre, e o resultado vai para o log.
-            if CommandLine.arguments.contains("--renovar-agora") { Task { await m.executarRenovacao(manual: true) } }
+            if Variante.atual.ligaIphone, CommandLine.arguments.contains("--renovar-agora") { Task { await m.executarRenovacao(manual: true) } }
         }
     }
 
@@ -108,7 +113,9 @@ enum GlifoDaBarra {
                     c.stroke()
                 }
             }
-            quadro(2, 2, cheio: true); quadro(10, 2, cheio: false); quadro(2, 10, cheio: false); quadro(10, 10, cheio: false)
+            // A bancada pinta a diagonal (1ª e 4ª teclas) para não se confundir com o Deck de verdade na barra.
+            let bancada = Variante.atual == .bancada
+            quadro(2, 2, cheio: true); quadro(10, 2, cheio: false); quadro(2, 10, cheio: false); quadro(10, 10, cheio: bancada)
             return true
         }
         img.isTemplate = true

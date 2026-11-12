@@ -119,6 +119,14 @@ final class InicialTestes: XCTestCase {
 
     // MARK: acessos
 
+    func testListaDeAcessosDaBancadaNaoTemBluetoothNemRedeLocal() {
+        XCTAssertTrue(OrdemDosAcessos.painel(para: .deck).contains(.bluetooth))
+        XCTAssertTrue(OrdemDosAcessos.painel(para: .deck).contains(.redeLocal))
+        XCTAssertFalse(OrdemDosAcessos.painel(para: .bancada).contains(.bluetooth))
+        XCTAssertFalse(OrdemDosAcessos.painel(para: .bancada).contains(.redeLocal))
+        XCTAssertEqual(OrdemDosAcessos.painel(para: .bancada).count, 5)
+    }
+
     func testPermitirGuardaOQueOMacRespondeEOrdemDosNomesDoMacOS() async {
         let p = PedidosFalsos()
         p.respostas[.automacao] = .recusado
