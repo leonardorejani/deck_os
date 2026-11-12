@@ -283,15 +283,61 @@ final class EsteMacESobreTestes: XCTestCase {
 
 final class LinksDoProjetoTestes: XCTestCase {
     func testEnderecosDoProjetoAberto() {
-        XCTAssertEqual(LinksDoProjeto.repositorio.absoluteString, "https://github.com/leonardorejani/deck_os")
-        XCTAssertEqual(LinksDoProjeto.estrela, LinksDoProjeto.repositorio, "a estrela é dada na página do repositório")
+        XCTAssertEqual(LinksDoProjeto.estrela.absoluteString, "https://github.com/leonardorejani/deck_os", "a estrela é dada na página do repositório")
         XCTAssertEqual(LinksDoProjeto.problema.absoluteString, "https://github.com/leonardorejani/deck_os/issues/new")
         XCTAssertEqual(LinksDoProjeto.licenca.absoluteString, "https://github.com/leonardorejani/deck_os/blob/main/LICENSE")
-        for u in [LinksDoProjeto.repositorio, LinksDoProjeto.estrela, LinksDoProjeto.problema, LinksDoProjeto.licenca] {
+        for u in [LinksDoProjeto.estrela, LinksDoProjeto.problema, LinksDoProjeto.licenca] {
             XCTAssertEqual(u.scheme, "https")
             XCTAssertEqual(u.host, "github.com")
         }
-        XCTAssertEqual("https://" + LinksDoProjeto.enderecoCurto, LinksDoProjeto.repositorio.absoluteString)
+    }
+
+    private func fonte(_ caminho: String) throws -> String {
+        let raiz = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
+        return try String(contentsOf: raiz.appendingPathComponent(caminho), encoding: .utf8)
+    }
+
+    /// Sobre > Projeto aberto: sem a linha Repositório, "Gostou do Deck?" em primeiro e o botão amarelo com estrela.
+    func testSobreSemRepositorioEComEstrelaPrimeiro() throws {
+        let t = try fonte("mac/App/Ajustes/Sobre.swift")
+        XCTAssertFalse(t.contains("\"Repositório\""), "a linha Repositório saiu")
+        let gostou = try XCTUnwrap(t.range(of: "titulo: \"Gostou do Deck?\""))
+        for outra in ["titulo: \"Licença\"", "titulo: \"Achou um erro?\""] {
+            XCTAssertLessThan(gostou.lowerBound, try XCTUnwrap(t.range(of: outra)).lowerBound, "Gostou do Deck? vem antes de \(outra)")
+        }
+        XCTAssertTrue(t.contains("estilo: .estrela, icone: \"star.fill\""))
+        XCTAssertFalse(t.contains("estilo: .primario"), "o botão azul saiu")
+    }
+
+    /// Os Ajustes do Mac não mostram mais a pasta da configuração (grupo Avançado).
+    func testEsteMacSemGrupoAvancado() throws {
+        let t = try fonte("mac/App/Ajustes/EsteMac.swift")
+        XCTAssertFalse(t.contains("Mostrar no Finder"))
+        XCTAssertFalse(t.contains("config.json\""))
+        XCTAssertFalse(t.contains("titulo: \"Avançado\""))
+    }
+
+    /// O amarelo da estrela tem texto escuro: contraste alto nos dois temas.
+    func testEstrelaTemContrasteBom() {
+        func luz(_ c: NSColor) -> Double {
+            let c = c.usingColorSpace(.sRGB)!
+            func f(_ v: CGFloat) -> Double { let d = Double(v); return d <= 0.03928 ? d / 12.92 : pow((d + 0.055) / 1.055, 2.4) }
+            return 0.2126 * f(c.redComponent) + 0.7152 * f(c.greenComponent) + 0.0722 * f(c.blueComponent)
+        }
+        for nome in [NSAppearance.Name.aqua, .darkAqua] {
+            NSAppearance(named: nome)!.performAsCurrentDrawingAppearance {
+                let fundo = luz(NSColor(Tema.Cor.estrela)), texto = luz(NSColor(Tema.Cor.estrelaTexto))
+                XCTAssertGreaterThan((fundo + 0.05) / (texto + 0.05), 7, "\(nome)")
+            }
+        }
+    }
+
+    /// A nota do Wi-Fi diz que é o PWA e o que ele tem a menos.
+    func testNotaDoWifiExplicaOPwa() {
+        let n = TextosDeAjuste.notaDoWifi
+        for trecho in ["PWA", "Tela de Início", "mesma rede", "cabo", "Bluetooth"] { XCTAssertTrue(n.contains(trecho), trecho) }
+        XCTAssertFalse(n.contains("—") || n.contains(";"))
     }
 
     /// O arquivo LICENSE do repositório existe e é a MIT com o autor certo (o botão "MIT" aponta para ele).

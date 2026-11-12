@@ -22,6 +22,7 @@
   --fino: 2px; --micro: 4px; --mini: 6px;
   --raio-fino: 2px; --raio-ic-p: 8px;
   --branco: #fff; --pop-direita: 120px;
+  --estrela: #F5C518; --estrela-texto: #1A1400;   /* botão da estrela do GitHub: amarelo com texto escuro nos dois temas */
   --rolagem: rgb(255 255 255 / .22);   /* barra de rolagem: fina, sem trilho, como a do macOS */
   --veu-sis: rgb(0 0 0 / .35);   /* fundo atrás do alerta do macOS */
   --escala: 1;
@@ -142,6 +143,7 @@ a.btn { text-decoration: none }
 .btn:disabled { opacity: .4; cursor: default; transform: none }
 .btn svg { width: 15px; height: 15px }
 .btn.primario { background: var(--destaque); color: var(--destaque-texto) }
+.btn.estrela { background: var(--estrela); color: var(--estrela-texto) }
 .btn.secundario { background: var(--superficie-2); color: var(--texto) }
 .btn.perigo { background: none; color: var(--perigo); padding: 0 var(--item) }
 .btn.link { background: none; color: var(--texto-2) }

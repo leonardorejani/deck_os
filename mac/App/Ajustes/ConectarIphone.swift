@@ -47,7 +47,7 @@ struct ConectarIphone: View {
             }
             GrupoDoAppNativo(modelo: modelo)
             GrupoDeAjuste(titulo: modelo.iphone != nil ? "Parear outro iPhone pelo Wi-Fi" : "Parear um iPhone pelo Wi-Fi",
-                          nota: "O iPhone e o Mac precisam estar no mesmo Wi-Fi. Nada sai da sua rede.") {
+                          nota: TextosDeAjuste.notaDoWifi) {
                 if case .falhou(let motivo) = modelo.servidor {
                     CartaoServidorFalhou(motivo: motivo) { modelo.tentarServidorDeNovo() }
                 } else {
@@ -221,6 +221,10 @@ struct PassoDeParear: View {
 }
 
 enum TextosDeAjuste {
+    /// Explica o que o Wi-Fi (PWA) tem a menos que o app nativo. Cada diferença existe no código:
+    /// cabo e Bluetooth só na casca nativa (SPEC 13, item 9), e a tela acesa é da casca (painel/pwa.js só pede o Wake Lock no Safari).
+    static let notaDoWifi = "Pelo Wi-Fi o iPhone usa o Deck como app da Tela de Início (PWA), que é limitado. Só funciona com o iPhone na mesma rede do Mac, não conecta por cabo nem por Bluetooth, deixa de atualizar quando o iPhone sai do Wi-Fi e a tela pode apagar sozinha. Para ter tudo isso, use o app no iPhone, acima. Nada sai da sua rede."
+
     /// "Safari, pelo Wi-Fi desde 09:12" (sem a hora quando não se sabe). Um aparelho por forma de conexão.
     static func conexao(_ iphone: IphonePareado) -> String {
         let base = "\(iphone.canal == .wifi ? "Safari" : "App nativo"), \(iphone.canal.texto)"

@@ -107,7 +107,7 @@ final class PortaDoBluetooth: @unchecked Sendable {
         let nome = nomeMac()
         let cfg = EnlaceSeguro.ConfigServidor(
             nomeMac: nome,
-            chaves: { [roteador] in [roteador.config.ler().codigoAcesso] },
+            chaves: { [roteador, agora] in Self.chavesVigentes(roteador.config.ler(), agora: agora()) },
             codigoAcesso: { [roteador] in roteador.config.ler().codigoAcesso },
             decidir: { [self] iphone, codigo in decidirUm(iphone, codigo, rotulo, fluxo) })
         let seguro: FluxoCifrado
@@ -118,6 +118,14 @@ final class PortaDoBluetooth: @unchecked Sendable {
         log("bluetooth \(rotulo): conexão cifrada")
         SessaoCabo(fluxo: seguro, roteador: roteador, nomeMac: nome, rotulo: "bluetooth/\(rotulo)", log: log, ajustar: CapaPequena.ajustar, aoAtender: aoAtender).rodar()
         log("bluetooth \(rotulo): caiu")
+    }
+
+    /// Os códigos que abrem o Bluetooth agora: o atual e, na folga de 10 min do rodízio, o anterior. Sem o anterior,
+    /// um iPhone que ainda não recebeu o código novo é tratado como desconhecido e o app dele esquece o pareamento.
+    static func chavesVigentes(_ c: Config, agora: Date) -> [String] {
+        var chaves = [c.codigoAcesso]
+        if let anterior = c.codigoAnterior, Int(agora.timeIntervalSince1970) < (c.anteriorValeAte ?? 0) { chaves.append(anterior) }
+        return chaves
     }
 
     private func reservar() -> Bool {
