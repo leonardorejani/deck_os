@@ -21,9 +21,18 @@ extension Blocos {
     /// O Codable sintetizado ignora os valores padrão quando falta chave. Aqui falta = ligado.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: ChavesConfig.self)
-        func ler(_ nome: String) throws -> Bool { try c.decodeIfPresent(Bool.self, forKey: ChavesConfig(nome)) ?? true }
+        func ler(_ nome: String, padrao: Bool = true) throws -> Bool { try c.decodeIfPresent(Bool.self, forKey: ChavesConfig(nome)) ?? padrao }
         self.init(spotify: try ler("spotify"), agenda: try ler("agenda"), whatsapp: try ler("whatsapp"),
-                  sessoes: try ler("sessoes"), uso: try ler("uso"))
+                  sessoes: try ler("sessoes"), uso: try ler("uso"), monitor: try ler("monitor", padrao: false))
+    }
+}
+
+extension ConfigMonitor {
+    /// Item que falta fica ligado: quem liga o monitor começa vendo tudo e desliga o que não quer.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: ChavesConfig.self)
+        func ler(_ nome: String) -> Bool { ((try? c.decodeIfPresent(Bool.self, forKey: ChavesConfig(nome))) ?? nil) ?? true }
+        self.init(cpu: ler("cpu"), memoria: ler("memoria"), bateria: ler("bateria"), rede: ler("rede"))
     }
 }
 
@@ -95,6 +104,7 @@ extension Config {
             contas: try c.decodeIfPresent([ContaIA].self, forKey: chave("contas")) ?? [],
             blocos: try c.decodeIfPresent(Blocos.self, forKey: chave("blocos")) ?? Blocos(),
             whatsapp: (try? c.decodeIfPresent(ConfigWhatsApp.self, forKey: chave("whatsapp"))) ?? ConfigWhatsApp(),
+            monitor: (try? c.decodeIfPresent(ConfigMonitor.self, forKey: chave("monitor"))) ?? ConfigMonitor(),
             nomeMac: try c.decodeIfPresent(String.self, forKey: chave("nomeMac")) ?? nomePadrao,
             porta: try c.decodeIfPresent(Int.self, forKey: chave("porta")) ?? 4777,
             codigoAcesso: try c.decodeIfPresent(String.self, forKey: chave("codigoAcesso")) ?? Config.novoCodigoAcesso(),
@@ -170,7 +180,7 @@ extension Config {
         if let d = c.agendaPadrao, !DestinoAgenda.tipos.contains(d.tipo) || vazio(d.id) || d.id.count > 200 {
             return "O lugar padrão da agenda não é válido."
         }
-        if !["a", "b"].contains(c.comp) { return "A composição da tela deve ser A ou B." }
+        if !["a", "b", "c"].contains(c.comp) { return "A composição da tela deve ser A, B ou C." }
         if !(1024...65535).contains(c.porta) { return "A porta deve estar entre 1024 e 65535." }
         if c.codigoAcesso.count != tamanhoCodigo || !c.codigoAcesso.allSatisfy({ alfabetoCodigo.contains($0) }) {
             return "O código de acesso é inválido."

@@ -18,7 +18,7 @@ let pendSpotify = 0;                  // comandos do Spotify ainda a caminho do 
 const otmTeclas = {};                 // id da tecla -> { acesa, ate }
 
 /* ---------- vista: do estado do Mac para o que a tela mostra ---------- */
-const BLOCOS_PADRAO = { spotify: true, agenda: true, whatsapp: true, sessoes: true, uso: true };
+const BLOCOS_PADRAO = { spotify: true, agenda: true, whatsapp: true, sessoes: true, uso: true, monitor: false };
 function conferirSobrepor(e) {
   if (!sobrepor.ate) return;
   if (performance.now() > sobrepor.ate) { sobrepor = {}; return }
@@ -61,7 +61,8 @@ function vistaReal() {
   const perfil = (config?.perfis || []).find(p => p.id === perfilId);
   const mostrar = id => (config?.contas || []).find(c => c.id === id)?.mostrar !== false;
   return {
-    comp: e.comp === 'b' ? 'b' : 'a', blocos, ref, nomeMac: e.nomeMac,
+    comp: ['b', 'c'].includes(e.comp) ? e.comp : 'a', blocos, ref, nomeMac: e.nomeMac,
+    monitor: blocos.monitor ? e.monitor || {} : null,
     spotify: blocos.spotify === false ? null : spotifyOtimista(e.spotify || null),
     uso: blocos.uso === false ? [] : (e.uso || []).filter(u => mostrar(u.id)),
     sessoes: [...(e.sessoes || [])].filter(s => !dispensada(s)).sort((a, b) => Date.parse(b.desde) - Date.parse(a.desde)),
@@ -77,7 +78,7 @@ const FORMA_PADRAO = { v: 1, comp: 'a', blocos: { spotify: true, sessoes: true }
 function lerForma() {
   try {
     const f = JSON.parse(lerGuardado(CHAVE_FORMA));
-    if (f?.v === 1 && ['a', 'b'].includes(f.comp) && typeof f.blocos?.spotify === 'boolean' && typeof f.blocos?.sessoes === 'boolean' && [f.uso, f.sessoes, f.teclas].every(n => Number.isInteger(n) && n >= 0)) return f;
+    if (f?.v === 1 && ['a', 'b', 'c'].includes(f.comp) && typeof f.blocos?.spotify === 'boolean' && typeof f.blocos?.sessoes === 'boolean' && [f.uso, f.sessoes, f.teclas].every(n => Number.isInteger(n) && n >= 0)) return f;
   } catch {}
   return FORMA_PADRAO;
 }
@@ -92,7 +93,7 @@ function vistaEsqueleto() {
     uso: Array.from({ length: f.uso }, (_, i) => ({ id: 'u' + i, nome: 'Claude', conta: 'conta', semana: 0, renova: null })),
     sessoes: Array.from({ length: f.sessoes }, (_, i) => ({ id: 's' + i, nome: 'Sessão', projeto: '', pergunta: 'Pergunta', desde: new Date(agora - 300000).toISOString() })),
     teclas: Array.from({ length: f.teclas }, (_, i) => ({ id: 'e' + i, nome: 'Tecla', tipo: 'comando', valor: '', icone: 'svg:raio' })),
-    perfilAtivo: '', perfis: [], acesas: [], selos: {}, agenda: null, whatsapp: null,
+    perfilAtivo: '', perfis: [], acesas: [], selos: {}, agenda: null, whatsapp: null, monitor: null,
   };
 }
 const semMusica = () => !V.spotify;
@@ -124,6 +125,36 @@ function usoCartao() {
 function usoTira() {
   if (!usoVisivel().length) return ''; // nenhuma conta para mostrar: a faixa some
   return `<div class="uso-tira depende">${esconder('uso')}${usoVisivel().map(u => { const p = u.semana, txt = p == null ? '-' : p + '%'; return `<span class="${nivel(p)}" aria-label="${esc(u.nome)} ${esc(u.conta)}: ${p == null ? 'sem medição' : txt}">${icServico(u.nome)}<span class="nome-u">${esc(u.nome === 'Claude' ? u.conta : u.nome)}</span> <span class="mini"><i style="width:${p ?? 0}%"></i></span><b>${txt}</b></span>` }).join('')}</div>`;
+}
+/* Monitor do Mac: uma faixa pequena com o que a pessoa deixou ligado nos Ajustes do Mac (`itens` do estado).
+   Bateria some sozinha em Mac sem bateria. Processador, memória e rede ficam com "-" até a primeira medida. */
+const MONITOR_ITENS = ['cpu', 'memoria', 'bateria', 'rede'];
+const monitorItens = () => {
+  const m = V.monitor; if (!m) return [];
+  return MONITOR_ITENS.filter(k => (m.itens || []).includes(k) && (k !== 'bateria' || m.bateria != null)); // `itens`: o que a pessoa deixou ligado nos Ajustes do Mac
+};
+const velocidade = b => b == null ? '-' : b >= 1048576 ? (b / 1048576).toFixed(b >= 10485760 ? 0 : 1).replace('.', ',') + ' MB/s' : Math.round(b / 1024) + ' KB/s';
+// na tela o "/s" é um pedaço à parte: na linha apertada da horizontal ele sai e a seta já diz que é por segundo
+const velocidadeTela = b => esc(velocidade(b)).replace(/\/s$/, '<span class="por-s">/s</span>');
+const nivelBateria = m => m.naTomada || m.bateria > 20 ? '' : m.bateria <= 10 ? 'cheio' : 'alto';
+function monitorHTML() {
+  const itens = monitorItens(); if (!itens.length) return '';
+  const m = V.monitor, pct = (rot, nome, p, nv) => `<span class="${nv ?? nivel(p)}" aria-label="${nome}: ${p == null ? 'sem medição' : p + '%'}"><span class="rot-m">${rot}</span> <span class="mini"><i style="width:${p ?? 0}%"></i></span><b>${p == null ? '-' : p + '%'}</b></span>`;
+  const por = {
+    cpu: () => pct('CPU', 'Processador', m.cpu),
+    memoria: () => pct('Mem', 'Memória', m.memoria),
+    bateria: () => pct(m.naTomada ? 'Tomada' : 'Bat', 'Bateria' + (m.naTomada ? ', na tomada' : ''), m.bateria, nivelBateria(m)),
+    rede: () => `<span aria-label="Rede: baixando ${velocidade(m.baixa)}, enviando ${velocidade(m.sobe)}"><span class="rot-m">${SVG.baixa}</span><b>${velocidadeTela(m.baixa)}</b> <span class="rot-m">${SVG.sobe}</span><b>${velocidadeTela(m.sobe)}</b></span>`,
+  };
+  return `<div class="monitor-tira" role="group" aria-label="Monitor do Mac">${itens.map(k => por[k]()).join('')}</div>`;
+}
+/* Composição C: o mês de agora com hoje marcado. O bloco todo é um botão que abre a agenda */
+function mesCHTML() {
+  const hoje = new Date(V.ref), ano = hoje.getFullYear(), mes = hoje.getMonth(), dias = new Date(ano, mes + 1, 0).getDate();
+  const nome = hoje.toLocaleDateString('pt-BR', { month: 'long' });
+  let dias_ = '<span></span>'.repeat(new Date(ano, mes, 1).getDay());
+  for (let n = 1; n <= dias; n++) { const dow = new Date(ano, mes, n).getDay(); dias_ += `<span class="${dow === 0 || dow === 6 ? 'fds' : ''} ${n === hoje.getDate() ? 'hoje' : ''}">${n}</span>` }
+  return `<button class="cartao mes-c" data-painel="calendario" aria-label="${nome} de ${ano}. Abrir a agenda"><span class="mes-c-nome">${nome}</span><span class="sb-semana" aria-hidden="true"><span class="fds">D</span><span>S</span><span>T</span><span>Q</span><span>Q</span><span>S</span><span class="fds">S</span></span><span class="mes-c-dias">${dias_}</span></button>`;
 }
 const usoAtual = () => posicao === 'horizontal' && V.comp === 'a' ? usoCartao() : usoTira();
 const temModos = s => s.repetir !== undefined || s.aleatorio !== undefined; // Mac antigo não manda: sem inventar, os botões não aparecem
@@ -197,24 +228,31 @@ const porPagina = () => V.comp === 'b' ? (posicao === 'vertical' ? 6 : 9) : posi
 
 /* ---------- desenho ---------- */
 // o que, se mudar, obriga a refazer a tela inteira
-const chaveLayout = () => JSON.stringify([posicao, V.comp, !!V.carregando, V.blocos.sessoes !== false, usoVisivel().length > 0, V.perfilAtivo, V.perfis, V.teclas.map(t => [t.id, t.nome, t.tipo, t.valor, t.icone, !!t.estado]), appsMac.versao]);
+const chaveLayout = () => JSON.stringify([posicao, V.comp, monitorItens(), !!V.carregando, V.blocos.sessoes !== false, usoVisivel().length > 0, V.perfilAtivo, V.perfis, V.teclas.map(t => [t.id, t.nome, t.tipo, t.valor, t.icone, !!t.estado]), appsMac.versao]);
 const chaveTeclas = () => JSON.stringify(V.teclas.map(t => { const i = infoTecla(t); return [i.acesa, i.selo, i.hora] }));
 const chavePlayer = () => { const s = V.spotify; return s ? JSON.stringify([s.faixa, s.artista, s.album, s.capaId, s.cores, s.duracao, temModos(s), conectado(s)]) : null };
 
 function render() {
   $('#lista-perfis').hidden = true; // a folha do Menu fica presa à tecla de antes: sem ela, refazer a tela a fecha
   const x = $('#teclas .paginas')?.scrollLeft || 0;
-  const sem = `${semMusica() ? 'sem-musica' : ''} ${V.blocos.sessoes === false ? 'sem-sessoes' : ''} ${usoVisivel().length ? '' : 'sem-uso'}`;
+  const sem = V.comp === 'c' ? 'sem-musica sem-sessoes sem-uso' : `${semMusica() ? 'sem-musica' : ''} ${V.blocos.sessoes === false ? 'sem-sessoes' : ''} ${usoVisivel().length ? '' : 'sem-uso'}`;
   const c = $('#conteudo');
   c.classList.toggle('carregando', !!V.carregando);
   c.setAttribute('aria-busy', String(!!V.carregando));
-  c.innerHTML = V.comp === 'a'
-    ? `<div class="comp-a ${sem}"><div class="topo">
-        <div class="esquerda"><div class="relogio-linha">${relogioHTML()}${posicao === 'vertical' ? usoTira() : ''}</div>${posicao === 'vertical' ? '' : usoCartao()}</div>
+  const cm = monitorItens().length ? ' com-monitor' : '';
+  c.innerHTML = V.comp === 'c'
+    // C: o relógio com as horas sobre os minutos (o mesmo desenho do relógio grande da A) e o mês, com a fileira de teclas da A
+    ? `<div class="comp-a comp-c ${sem}${cm}"><div class="topo">
+        <div class="esquerda"><div class="relogio-linha">${relogioHTML()}${monitorHTML()}</div></div>
+        <div class="direita">${mesCHTML()}</div>
+      </div><div class="teclas" id="teclas">${teclasHTML(porPagina())}</div></div>`
+    : V.comp === 'a'
+    ? `<div class="comp-a ${sem}${cm}"><div class="topo">
+        <div class="esquerda"><div class="relogio-linha">${relogioHTML()}${posicao === 'vertical' ? usoTira() : ''}${monitorHTML()}</div>${posicao === 'vertical' ? '' : usoCartao()}</div>
         <div class="direita">${playerHTML()}${sessoesHTML()}</div>
       </div><div class="teclas" id="teclas">${teclasHTML(porPagina())}</div></div>`
-    : `<div class="comp-b ${sem}"><div class="esquerda">
-        <div class="relogio-linha"><div>${relogioHTML()}</div>${usoTira()}</div>
+    : `<div class="comp-b ${sem}${cm}"><div class="esquerda">
+        <div class="relogio-linha"><div>${relogioHTML()}</div>${usoTira()}${monitorHTML()}</div>
         ${playerHTML()}${sessoesHTML()}
       </div><div class="teclas" id="teclas">${teclasHTML(porPagina())}</div></div>`;
   marcarRelogioGrande();
@@ -222,7 +260,7 @@ function render() {
   ligarCarrossel();
   const pg = $('#teclas .paginas'); if (pg && x) pg.scrollLeft = x;
   pintarEscondidos();
-  ultima = { layout: chaveLayout(), semMusica: semMusica(), player: chavePlayer(), uso: usoAtual(), sessoes: sessoesHTML(), teclas: chaveTeclas() };
+  ultima = { layout: chaveLayout(), semMusica: semMusica(), player: chavePlayer(), uso: usoAtual(), sessoes: sessoesHTML(), teclas: chaveTeclas(), monitor: monitorHTML(), mes: V.comp === 'c' ? mesCHTML() : '' };
   pintarProgresso(true);
 }
 // só o que mudou: o relógio, o carrossel e os gestos em andamento não são refeitos a cada segundo
@@ -231,7 +269,7 @@ function atualizar() {
   pintarEscondidos();
   if (chaveLayout() !== ultima.layout) { render(); return }
   const sem = semMusica();
-  if (V.spotify) {
+  if (V.spotify && V.comp !== 'c') { // a C não tem o player pequeno
     const kp = chavePlayer();
     if (kp !== ultima.player) { $('.player').outerHTML = playerHTML(); ultima.player = kp }
     const pl = $('.player');
@@ -241,9 +279,12 @@ function atualizar() {
     pintarMidia(pl, V.spotify);
   }
   if (folhaAberta?.id === 'f-player') pintarPlayerCheio();
-  if (sem !== ultima.semMusica) { ultima.semMusica = sem; alternarMusica(sem) }
+  if (sem !== ultima.semMusica) { ultima.semMusica = sem; if (V.comp !== 'c') alternarMusica(sem) } // a C não tem player: o relógio já ocupa o lugar
   const uso = usoAtual(), elUso = $('.cartao.uso, .uso-tira');
   if (elUso && uso !== ultima.uso) { elUso.outerHTML = uso; ultima.uso = uso }
+  const mon = monitorHTML(), elMon = $('.monitor-tira');
+  if (elMon && mon !== ultima.monitor) { elMon.outerHTML = mon; ultima.monitor = mon }
+  if (V.comp === 'c') { const mes = mesCHTML(), elMes = $('.mes-c'); if (elMes && mes !== ultima.mes) { elMes.outerHTML = mes; ultima.mes = mes } }
   const ses = sessoesHTML(), elSes = $('.sessoes');
   if (elSes && ses !== ultima.sessoes) { elSes.outerHTML = ses; ultima.sessoes = ses }
   const kt = chaveTeclas();

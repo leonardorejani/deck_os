@@ -85,7 +85,7 @@ const painelDe = t => t.tipo === 'app' && !t.acao ? PAINEL_DO_APP[t.valor] : und
 const normalizarTecla = t => t.tipo !== 'painel' ? t : ({ whatsapp: 'WhatsApp', calendario: 'Calendar' })[t.valor] ? { ...t, tipo: 'app', valor: ({ whatsapp: 'WhatsApp', calendario: 'Calendar' })[t.valor] } : null;
 // tecla de app pode ter acao: { id, valor } (ex.: { id: 'mail-caixa', valor: '<id da conta>' }), lida do catálogo GET /api/apps/<bundle>/acoes do Mac (SPEC 13, item 26). O protótipo só a preserva
 // config.whatsapp = { origem: 'auto' | 'app' | 'web', navegador? } existe só no config.json do Mac (SPEC 13, item 16): o protótipo não a usa
-const BLOCOS = { spotify: true, agenda: true, whatsapp: true, sessoes: true, uso: true }; // o Deck mostra o que acha. Esconder é no modo organizar
+const BLOCOS = { spotify: true, agenda: true, whatsapp: true, sessoes: true, uso: true, monitor: false }; // o Deck mostra o que acha (o monitor do Mac nasce desligado). Esconder é no modo organizar
 let nomeMac = 'MacBook Pro de Exemplo';
 // perfis de teclas (Trabalho, Ensaio...): cada um com as suas. O iPhone mostra o perfil ativo
 let perfis = [

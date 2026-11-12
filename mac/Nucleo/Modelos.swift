@@ -54,6 +54,18 @@ struct Blocos: Codable, Equatable, Sendable {
     var whatsapp = true
     var sessoes = true
     var uso = true
+    /// O monitor do Mac nasce desligado: ligar é escolha de quem usa (SPEC, seção 13, 12/11/2026).
+    var monitor = false
+}
+
+/// Quais itens o monitor do Mac mostra no iPhone ("não tem mais espaço": quem usa escolhe o que fica na tela).
+struct ConfigMonitor: Codable, Equatable, Sendable {
+    var cpu = true
+    var memoria = true
+    var bateria = true
+    var rede = true
+    var algum: Bool { cpu || memoria || bateria || rede }
+    var itens: [String] { [cpu ? "cpu" : nil, memoria ? "memoria" : nil, bateria ? "bateria" : nil, rede ? "rede" : nil].compactMap { $0 } }
 }
 
 /// De onde o Deck lê as não lidas do WhatsApp.
@@ -88,11 +100,13 @@ struct Config: Codable, Equatable, Sendable {
     var versao = Config.versaoAtual
     var perfis: [Perfil]
     var perfilAtivo: String
-    /// Composição do painel: "a" (relógio em cima) ou "b" (deck ao lado).
+    /// Composição do painel: "a" (relógio em cima), "b" (deck ao lado) ou "c" (relógio e calendário do mês).
     var comp = "a"
     var contas: [ContaIA] = []
     var blocos = Blocos()
     var whatsapp = ConfigWhatsApp()
+    /// Itens do monitor do Mac. Só aparece no iPhone com `blocos.monitor` ligado.
+    var monitor = ConfigMonitor()
     var nomeMac: String
     var porta = 4777
     /// Código longo da API (20 letras). Sem ele nada é lido nem executado. Troca sozinho a cada 24 h
@@ -231,6 +245,27 @@ struct Estado: Codable, Equatable, Sendable {
     /// Selo por id de tecla (não lidas do WhatsApp, "!" da agenda sem permissão).
     var selos: [String: String]
     var avisos: [Aviso]
+    /// Só com o bloco do monitor ligado, e só os itens que a pessoa escolheu nos Ajustes do Mac.
+    var monitor: EstadoMonitor? = nil
+}
+
+/// Medidas do Mac. Cada uma é nil quando o item está escondido nos Ajustes ou o Mac não tem a medida
+/// (bateria num Mac de mesa, por exemplo).
+struct EstadoMonitor: Codable, Equatable, Sendable {
+    /// Os itens que a pessoa deixou ligados nos Ajustes do Mac ("cpu", "memoria", "bateria", "rede"). É daqui que o painel
+    /// sabe o que desenhar, porque medida ausente também quer dizer "ainda sem leitura" ou "Mac sem bateria".
+    var itens: [String] = []
+    /// Uso do processador, 0 a 100.
+    var cpu: Int? = nil
+    /// Memória em uso, 0 a 100.
+    var memoria: Int? = nil
+    /// Carga da bateria, 0 a 100. nil em Mac sem bateria.
+    var bateria: Int? = nil
+    /// Na tomada (carregando ou cheia). Só vem junto com `bateria`.
+    var naTomada: Bool? = nil
+    /// Bytes por segundo recebidos e enviados. nil na primeira leitura, porque taxa precisa de duas medidas.
+    var baixa: Int? = nil
+    var sobe: Int? = nil
 }
 
 // MARK: - Painéis

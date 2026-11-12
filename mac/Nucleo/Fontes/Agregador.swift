@@ -66,6 +66,8 @@ struct Fontes: Sendable {
     var capa: @Sendable () -> Data?
     var agenda: @Sendable (Date) -> Leitura<ResumoAgenda?>
     var acesas: @Sendable ([Tecla]) -> [String]
+    /// O monitor do Mac, só dos itens que a pessoa deixou ligados. Fonte de fora (teste antigo) não precisa trazer.
+    var monitor: @Sendable (ConfigMonitor, Date) -> Leitura<EstadoMonitor?> = { _, _ in Leitura(valor: nil, aviso: nil) }
 
     /// As fontes de verdade deste Mac. `casa` é a pasta do usuário.
     /// `origemWhatsApp` é quem decide entre o banco do app e o WhatsApp Web: o roteador passa o mesmo
@@ -85,6 +87,7 @@ struct Fontes: Sendable {
         if let spotifyAberto { aberto = spotifyAberto } else if executor is ExecutorShell { aberto = { FonteSpotify.spotifyAberto() } }
         let spotify = FonteSpotify(executor: executor, aberto: aberto)
         let agenda = FonteAgenda.viva()
+        let monitor = FonteMonitor()
         return Fontes(
             sessoes: { FonteSessoes.ler(raiz: jobs) },
             uso: { contas, agora in FonteUso.ler(contas: contas, claude: medicaoClaude, codex: sessoesCodex, agora: agora) },
@@ -98,7 +101,8 @@ struct Fontes: Sendable {
             },
             capa: { spotify.capa() },
             agenda: { agenda.ler($0) },
-            acesas: { TeclasAcesas.ler($0, executor: executor) }
+            acesas: { TeclasAcesas.ler($0, executor: executor) },
+            monitor: { c, agora in Leitura(valor: monitor.ler(c, agora: agora), aviso: nil) }
         )
     }
 }
@@ -111,6 +115,7 @@ final class Agregador: @unchecked Sendable {
     private let cacheUso = Cache<[ContaIA], Leitura<[UsoConta]>>(validade: 15)
     private let cacheWhatsApp = Cache<Int, Leitura<WhatsAppDados?>>(validade: 5)
     private let cacheAgenda = Cache<Int, Leitura<ResumoAgenda?>>(validade: 10)
+    private let cacheMonitor = Cache<ConfigMonitor, Leitura<EstadoMonitor?>>(validade: 3)
 
     /// Quanto o estado espera pelas fontes. Passou disso, a fonte que não respondeu entra com o
     /// último valor que deu certo (ou vazia), e o iPhone não fica sem painel por causa de uma só.
@@ -136,6 +141,7 @@ final class Agregador: @unchecked Sendable {
         private var agenda: Leitura<ResumoAgenda?>?
         private var acesas: [String]?
         private var selo: Int?
+        private var monitor: Leitura<EstadoMonitor?>?
         func gravar(_ f: (Colheita) -> Void) { trava.lock(); f(self); trava.unlock() }
         func guardar(sessoes v: Leitura<[Sessao]>) { gravar { $0.sessoes = v } }
         func guardar(uso v: Leitura<[UsoConta]>) { gravar { $0.uso = v } }
@@ -144,11 +150,12 @@ final class Agregador: @unchecked Sendable {
         func guardar(agenda v: Leitura<ResumoAgenda?>) { gravar { $0.agenda = v } }
         func guardar(acesas v: [String]) { gravar { $0.acesas = v } }
         func guardar(selo v: Int?) { gravar { $0.selo = v } }
+        func guardar(monitor v: Leitura<EstadoMonitor?>) { gravar { $0.monitor = v } }
         /// Cópia do que já chegou. Fonte lenta ainda escreve depois do limite, então ninguém lê o
         /// objeto vivo: cada campo nil é uma fonte que não respondeu a tempo.
-        func foto() -> (Leitura<[Sessao]>?, Leitura<[UsoConta]>?, Leitura<WhatsAppDados?>?, Leitura<EstadoSpotify?>?, Leitura<ResumoAgenda?>?, [String]?, Int?) {
+        func foto() -> (Leitura<[Sessao]>?, Leitura<[UsoConta]>?, Leitura<WhatsAppDados?>?, Leitura<EstadoSpotify?>?, Leitura<ResumoAgenda?>?, [String]?, Int?, Leitura<EstadoMonitor?>?) {
             trava.lock(); defer { trava.unlock() }
-            return (sessoes, uso, whatsapp, spotify, agenda, acesas, selo)
+            return (sessoes, uso, whatsapp, spotify, agenda, acesas, selo, monitor)
         }
     }
 
@@ -183,11 +190,15 @@ final class Agregador: @unchecked Sendable {
         // Validade 0: o Spotify é lido a cada pedido, mas só uma leitura por vez e com o último valor de reserva.
         if b.spotify { em { c.guardar(spotify: self.cacheSpotify.obterAgil(chave: 0, agora: agora, padrao: vazioSpotify, paciencia: p) { self.fontes.spotify(agora) }) } }
         if b.agenda { em { c.guardar(agenda: self.cacheAgenda.obterAgil(chave: 0, agora: agora, padrao: vazioAgenda, paciencia: p) { self.fontes.agenda(agora) }) } }
+        // O monitor só mede quando o bloco está ligado e há item escolhido: o que a pessoa esconde, o Mac não mede.
+        if b.monitor, config.monitor.algum {
+            em { c.guardar(monitor: self.cacheMonitor.obterAgil(chave: config.monitor, agora: agora, padrao: Leitura(valor: nil, aviso: nil), paciencia: p) { self.fontes.monitor(config.monitor, agora) }) }
+        }
         em { c.guardar(acesas: self.fontes.acesas(teclas)) }
         _ = grupo.wait(timeout: .now() + limite)
 
         // O que não chegou a tempo cai no último valor bom de cada cache (vazio se nunca houve).
-        let (fs, fu, fw, fp, fa, fz, fselo) = c.foto()
+        let (fs, fu, fw, fp, fa, fz, fselo, fm) = c.foto()
         let leituraSessoes = fs ?? cacheSessoes.ultimo() ?? vazioSessoes
         let leituraUso = fu ?? cacheUso.ultimo() ?? vazioUso
         let leituraWhats = fw ?? cacheWhatsApp.ultimo() ?? vazioWhats
@@ -227,7 +238,8 @@ final class Agregador: @unchecked Sendable {
         return Estado(
             agora: Datas.iso(agora), nomeMac: config.nomeMac, perfilAtivo: config.perfilAtivo, comp: config.comp, blocos: b,
             spotify: leituraSpotify.valor, uso: leituraUso.valor, sessoes: FonteSessoes.semContexto(leituraSessoes.valor), whatsapp: resumoWhats,
-            agenda: leituraAgenda.valor, acesas: acesas, selos: selos, avisos: avisos
+            agenda: leituraAgenda.valor, acesas: acesas, selos: selos, avisos: avisos,
+            monitor: b.monitor && config.monitor.algum ? (fm ?? cacheMonitor.ultimo())?.valor : nil
         )
     }
 

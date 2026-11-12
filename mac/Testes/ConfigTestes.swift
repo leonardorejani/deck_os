@@ -76,7 +76,7 @@ final class ConfigTestes: XCTestCase {
         XCTAssertNotNil(com { $0.perfis[0].teclas[0].valor = " " })
         XCTAssertEqual(com { $0.perfis[0].teclas[0].valor = "ctrl+zz" },
                        "A combinação da tecla \"Manter acordado\" não foi reconhecida: ctrl+zz")
-        XCTAssertNotNil(com { $0.comp = "c" })
+        XCTAssertNotNil(com { $0.comp = "d" }) // "c" passou a valer em 12/11/2026 (composição do relógio com o mês)
         XCTAssertNotNil(com { $0.porta = 80 })
         XCTAssertNotNil(com { $0.porta = 70000 })
         XCTAssertNotNil(com { $0.codigoAcesso = "curto" })

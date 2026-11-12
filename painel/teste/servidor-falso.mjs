@@ -35,6 +35,8 @@ const padrao = () => ({
   perfis: 'um',              // um | dois
   comp: 'a',
   blocos: { spotify: true, agenda: true, whatsapp: true, sessoes: true, uso: true },
+  monitorItens: { cpu: true, memoria: true, bateria: true, rede: true }, // o que a pessoa deixou ligado nos Ajustes do Mac
+  monitor: { cpu: 12, memoria: 63, bateria: 81, naTomada: false, baixa: 1258291, sobe: 40960 }, // o que o Mac mediu (sem `bateria` = Mac de mesa)
   nomeMac: 'MacBook Pro de Teste',
   faixa: 'Faixa de Exemplo', artista: 'Artista Exemplo',
   acesas: ['acordado'],
@@ -103,7 +105,7 @@ const contas = () => [
   { id: 'claude-equipe', nome: 'Claude', conta: 'equipe', mostrar: true },
   { id: 'codex', nome: 'Codex', conta: 'pro', mostrar: true },
 ];
-const configCompleta = () => ({ versao: 1, perfis: perfisConfig(), perfilAtivo: perfilAtivo === 'ensaio' && c.perfis === 'dois' ? 'ensaio' : 'trabalho', comp: c.comp, contas: contas(), blocos: c.blocos, nomeMac: X(c.nomeMac), porta: 4777 });
+const configCompleta = () => ({ versao: 1, perfis: perfisConfig(), perfilAtivo: perfilAtivo === 'ensaio' && c.perfis === 'dois' ? 'ensaio' : 'trabalho', comp: c.comp, contas: contas(), blocos: c.blocos, monitor: c.monitorItens, nomeMac: X(c.nomeMac), porta: 4777 });
 
 const emDias = (dias, h, m = 0) => { const d = new Date(); d.setDate(d.getDate() + dias); d.setHours(h, m, 0, 0); return d.toISOString() };
 const SESSOES = () => [...SESSOES_BASE(), ...Array.from({ length: 7 }, (_, i) => ({ id: 's' + (6 + i), nome: 'sessão extra ' + (i + 1), projeto: 'projeto_' + (i + 1), pergunta: 'Pergunta longa da sessão extra ' + (i + 1) + ', com bastante texto para passar de duas linhas na lista e mostrar inteira só quando a pessoa tocar em Responder, sem cortar nada. '.repeat(4), desde: new Date(T0 - (5 + i) * 86400000).toISOString() }))];
@@ -215,6 +217,7 @@ function estado() {
   if (c.agenda === 'sem') selos.calendario = '!';
   return {
     agora: new Date(Date.now() + c.relogioMs).toISOString(), nomeMac: X(c.nomeMac), perfilAtivo: configCompleta().perfilAtivo, comp: c.comp, blocos: c.blocos,
+    ...(c.blocos.monitor ? { monitor: { ...c.monitor, itens: Object.keys(c.monitorItens).filter(k => c.monitorItens[k]) } } : {}),
     spotify: estadoSpotify(),
     uso: [
       { id: 'claude-leo', nome: 'Claude', conta: X('leo'), semana: semMed ? null : 61, renova: emDias(3, 14) },
