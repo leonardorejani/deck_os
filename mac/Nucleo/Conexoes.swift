@@ -63,15 +63,16 @@ enum Conexoes {
 
 /// Os métodos de conectar um iPhone, na ordem do seletor no topo de Conexões.
 enum MetodoDeConexao: String, CaseIterable, Identifiable {
-    case cabo, whatsapp, pwa
+    case cabo, pwa, whatsapp, spotify
 
     var id: String { rawValue }
 
     var rotulo: String {
         switch self {
         case .cabo: return "Cabo e Bluetooth"
+        case .pwa: return "PWA"
         case .whatsapp: return "WhatsApp"
-        case .pwa: return "PWA (Wi-Fi)"
+        case .spotify: return "Spotify"
         }
     }
 }

@@ -44,7 +44,7 @@ final class ConexoesTestes: XCTestCase {
     }
 
     func testMetodosNaOrdemDoSeletor() {
-        XCTAssertEqual(MetodoDeConexao.allCases.map(\.rotulo), ["Cabo e Bluetooth", "WhatsApp", "PWA (Wi-Fi)"])
+        XCTAssertEqual(MetodoDeConexao.allCases.map(\.rotulo), ["Cabo e Bluetooth", "PWA", "WhatsApp", "Spotify"])
     }
 
     // MARK: Trazer o Deck de volta

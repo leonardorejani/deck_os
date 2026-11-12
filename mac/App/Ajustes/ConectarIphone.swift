@@ -1,8 +1,8 @@
 import SwiftUI
 import AppKit
 
-/// Seção "Conexões" dos Ajustes (antes "Conectar iPhone"). No topo, o método (Cabo e Bluetooth, WhatsApp ou PWA pelo
-/// Wi-Fi) e embaixo só o que é daquele método. O Spotify, que é um login à parte, fica no fim, sempre à mão.
+/// Seção "Conexões" dos Ajustes (antes "Conectar iPhone"). No topo, o método (Cabo e Bluetooth, PWA pelo
+/// Wi-Fi, WhatsApp ou Spotify) e embaixo só o que é daquele método. O Spotify é um login à parte e virou o quarto método.
 /// O que diz se há iPhone e se ele está falando é sempre `modelo.iphoneAtivo` (uma fonte só, a mesma do cabeçalho,
 /// do menu e do Sobre). O código curto do PWA vem do Pareamento do núcleo e é trocado pelo código de acesso longo
 /// quando o iPhone o digita. Cada tela mostra um código só: o do pedido de Bluetooth, ou o do cabo, ou o do PWA.
@@ -33,7 +33,7 @@ struct ConectarIphone: View {
         switch modelo.metodoDeConexao {
         case .pwa: return true
         case .cabo: return modelo.pedidoBluetooth == nil && modelo.nativo == nil
-        case .whatsapp: return false
+        case .whatsapp, .spotify: return false
         }
     }
 
@@ -50,10 +50,10 @@ struct ConectarIphone: View {
                 SeletorDeMetodo(escolhido: modelo.metodoDeConexao, aoVivo: aoVivoPorMetodo(agora)) { modelo.metodoDeConexao = $0 }
                 switch modelo.metodoDeConexao {
                 case .cabo: MetodoCaboEBluetooth(modelo: modelo, codigo: ParearIphone.codigoEmGrupos(codigo.codigo), agora: agora)
-                case .whatsapp: MetodoWhatsApp(modelo: modelo)
                 case .pwa: metodoPwa(agora)
+                case .whatsapp: MetodoWhatsApp(modelo: modelo)
+                case .spotify: GrupoSpotify(spotify: modelo.spotify)
                 }
-                GrupoSpotify(spotify: modelo.spotify)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
