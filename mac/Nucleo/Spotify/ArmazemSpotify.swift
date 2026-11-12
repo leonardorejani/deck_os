@@ -38,7 +38,7 @@ final class ArmazemSpotifyMemoria: ArmazemSpotify, @unchecked Sendable {
 /// O Chaveiro do Mac: um item só, com o JSON dos dados. Acessível depois do primeiro desbloqueio,
 /// porque o servidor do Deck renova o token com a tela bloqueada.
 struct ArmazemSpotifyChaveiro: ArmazemSpotify {
-    var servico = "com.leonardorejani.deck.spotify"
+    var servico = Variante.atual.servicoDoChaveiro("spotify")
     private static let conta = "login"
 
     private func consulta() -> [String: Any] {

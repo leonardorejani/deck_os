@@ -293,8 +293,9 @@ final class ModeloApp: ObservableObject {
         let roteador = Ligacao.roteador(armazem: armazem, pareamento: pareamento, pagina: ArquivosPagina(raiz: pasta),
                                         rodizio: rodizio, certificadoCA: GeradorCertificado().arquivos.ca, contaSpotify: spotify.conta,
                                         usoMedido: ModeloApp.usoMedidoPorToken())
-        ligarNativo(roteador: roteador)
-        let portaInicial = config.porta
+        // A bancada não tem iPhone: nada de cabo nem Bluetooth.
+        if Variante.atual.ligaIphone { ligarNativo(roteador: roteador) }
+        let portaInicial = Variante.atual.portaFixa ?? config.porta
         Task.detached(priority: .userInitiated) { [weak self] in
             let resultado = Result { try ModeloApp.abrirPorta(roteador: roteador, a: portaInicial) }
             await self?.servidorPronto(resultado)
@@ -330,7 +331,7 @@ final class ModeloApp: ObservableObject {
         let identidade = try gerador.carregarIdentidade(try gerador.garantir())
         var ultimo: Error = ErroServidor(description: "Não achei uma porta livre para o Deck.")
         for porta in Portas.candidatas(a: partir) {
-            let s = ServidorHttps(roteador: roteador, identidade: identidade, porta: UInt16(porta))
+            let s = ServidorHttps(roteador: roteador, identidade: identidade, porta: UInt16(porta), somenteLocal: Variante.atual.somenteLocal)
             do { try s.iniciar(); return (s, porta) } catch { ultimo = error }
         }
         throw ultimo

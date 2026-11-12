@@ -271,6 +271,33 @@ final class ModeloTeclasTestes: XCTestCase {
         XCTAssertEqual(k.valor, "cmd+shift+4")
     }
 
+    func testMontarCombinacaoGravaSoQuandoCompleta() {
+        let m = modelo()
+        let tl = tela(m)
+        tl.escolherTipo(.tecla)
+        tl.escolherTeclaDaMontagem("4")
+        XCTAssertEqual(m.config.perfis[0].teclas[0].tipo, "app", "só a tecla escolhida, sem modificador: nada gravado")
+        XCTAssertEqual(tl.montagem(de: tl.tecla!).faltaDizer, "Ligue pelo menos um modificador.")
+        tl.alternarModificador(.comando)
+        tl.alternarModificador(.shift)
+        let k = m.config.perfis[0].teclas[0]
+        XCTAssertEqual(k.tipo, "tecla")
+        XCTAssertEqual(k.valor, "cmd+shift+4")
+        XCTAssertEqual(tl.montagem(de: tl.tecla!).modificadores, [.comando, .shift])
+    }
+
+    func testMontagemIncompletaNaoApagaACombinacaoJaGravada() {
+        let m = modelo()
+        let tl = tela(m)
+        tl.escolherTipo(.tecla)
+        tl.escolherCombinacao("cmd+k")
+        tl.alternarModificador(.comando)
+        XCTAssertEqual(m.config.perfis[0].teclas[0].valor, "cmd+k", "o iPhone continua com a combinação que funciona")
+        XCTAssertEqual(tl.montagem(de: tl.tecla!).faltaDizer, "Ligue pelo menos um modificador.")
+        tl.alternarModificador(.opcao)
+        XCTAssertEqual(m.config.perfis[0].teclas[0].valor, "opt+k")
+    }
+
     func testConferirVoltaParaOPerfilAtivoSeOEditadoSumiu() {
         let m = modelo()
         let tl = tela(m)
