@@ -1213,6 +1213,20 @@ tecla", "isso é muito feio, tira eles daí e deixa o usuário fazer a combinaç
   Deck sabe consultar (Safari, Chrome, Arc, Brave, Edge), traz a aba para a frente e aperta Cmd+D ou Cmd+E, igual ao item 35 da
   seção 13. Trocar o app da tecla, ou o tipo, apaga a ação e o desligar que eram do antigo.
 
+Conexões e WhatsApp, depois de testar (12/11/2026, frente conexoes-whatsapp). Pedidos dele, resumidos: o aparelho
+conectado pelo QR aparecia como "Outro dispositivo" e tem que aparecer como "Deck OS", a mensagem nova levava cerca de 1 s,
+havia conversa sem nome e sem avatar, e as arquivadas só podem aparecer no filtro "Arquivadas". Decidido: o seletor de Conexões vira Cabo e Bluetooth, PWA, WhatsApp e Spotify (o
+Spotify deixa de ser grupo no fim). O ajudante se apresenta como "Deck OS" (tipo desktop, o padrão da biblioteca era o tipo
+desconhecido, que o celular escreve como "Outro dispositivo"), e só vale para aparelho pareado depois da mudança. A lista sai
+do ajudante na hora (antes esperava 300 ms) e o núcleo não segura mais o cache de 5 s quando o ajudante empurra lista nova.
+Com a folha aberta o painel relê a cada 1 s. Contato só com LID ganha nome pelo contato salvo, pelo nome que a pessoa se deu
+ou pelo número, e a conversa ganha a foto de perfil (cache em disco, entregue em base64 por `/api/whatsapp/foto`). Cada
+mensagem mostra o horário, foto aparece como imagem, áudio tem player (os dois baixados sob demanda por
+`/api/whatsapp/midia`, até 8 MB, só leitura) e visualização única é só o balão com o ícone, sem nunca baixar o conteúdo.
+Arquivadas ficam fora de Todas, Contatos e Grupos, só no filtro Arquivadas, e não contam no total nem no selo. "Responder no
+Mac" abre `https://web.whatsapp.com/send?phone=<número>` no navegador escolhido ou no padrão (grupo e contato sem número
+abrem o Web e o aviso diz que não há link direto). O Deck continua só lendo: nunca envia nem marca como lido.
+
 ## 14. Melhorias (10/11/2026)
 
 Feitas no protótipo em 10/11/2026: 14.1 a 14.9 e 14.14, marcadas com **(feito)**. As outras

@@ -53,10 +53,23 @@ enum TextosWhatsAppQR {
     }
 }
 
+/// A foto ou o áudio de uma mensagem, baixado pelo ajudante e lido da pasta da sessão.
+struct MidiaBaixada: Equatable, Sendable {
+    var tipo: String
+    var dados: Data
+}
+
+enum ResultadoMidia: Equatable, Sendable {
+    case pronta(MidiaBaixada)
+    case erro(String)
+}
+
 enum LinhaDoAjudante: Equatable {
     case fase(FaseQR, String)
     case qr(String)
     case conversas([ConversaWhatsApp])
+    /// A resposta a um pedido de mídia: o arquivo (na pasta midia) e o tipo, ou o motivo de não ter vindo.
+    case midia(req: String, arquivo: String?, tipo: String?, erro: String?)
 
     private struct Cru: Decodable {
         var t: String
@@ -64,6 +77,10 @@ enum LinhaDoAjudante: Equatable {
         var detalhe: String?
         var codigo: String?
         var lista: [ConversaWhatsApp]?
+        var req: String?
+        var arquivo: String?
+        var tipo: String?
+        var erro: String?
     }
 
     /// Linha que não é JSON do ajudante (ou de um tipo que não conhecemos) é ignorada, nunca derruba a leitura.
@@ -75,6 +92,7 @@ enum LinhaDoAjudante: Equatable {
             return .fase(f, c.detalhe ?? "")
         case "qr": return c.codigo.map(LinhaDoAjudante.qr)
         case "conversas": return c.lista.map(LinhaDoAjudante.conversas)
+        case "midia": return c.req.map { .midia(req: $0, arquivo: c.arquivo, tipo: c.tipo, erro: c.erro) }
         default: return nil
         }
     }
@@ -93,6 +111,15 @@ final class PonteWhatsAppQR: @unchecked Sendable {
     /// Durante o "apagar": o erro que o ajudante mandar é a saída que falhou.
     private var apagando = false
     private var apagouComErro = false
+    /// Sobe a cada lista nova do ajudante. A leitura do painel usa como chave de cache: mensagem nova não espera o prazo do cache.
+    private var _versao = 0
+    private var pedidos = 0
+    private var esperas: [String: EsperaDeMidia] = [:]
+
+    private final class EsperaDeMidia: @unchecked Sendable {
+        let sinal = DispatchSemaphore(value: 0)
+        var resultado: ResultadoMidia = .erro("Não consegui baixar.")
+    }
     /// Avisa a tela do Mac quando algo muda (QR novo, conectou, caiu). Chamado fora da trava.
     var aoMudar: (@Sendable (EstadoQR) -> Void)?
 
@@ -116,6 +143,12 @@ final class PonteWhatsAppQR: @unchecked Sendable {
     }
 
     var disponivel: Bool { executavel != nil }
+
+    /// Muda toda vez que o ajudante manda uma lista nova (ou a conexão muda).
+    var versao: Int {
+        trava.lock(); defer { trava.unlock() }
+        return _versao
+    }
 
     var atual: EstadoQR {
         trava.lock(); defer { trava.unlock() }
@@ -272,9 +305,63 @@ final class PonteWhatsAppQR: @unchecked Sendable {
             estado.qr = c
         case .conversas(let c):
             estado.conversas = c
+        case .midia(let req, let arquivo, let tipo, let erro):
+            if let espera = esperas[req] {
+                espera.resultado = Self.lerMidia(pasta: pasta, arquivo: arquivo, tipo: tipo, erro: erro)
+                espera.sinal.signal()
+            }
         }
         trava.unlock()
         notificar()
+    }
+
+    // MARK: Foto e mídia (só leitura, sob demanda)
+
+    private static let nomeDeArquivo = #"^[0-9a-f]{16}\.[a-z0-9]{2,5}$"#
+    private static let tipoDeMidia = #"^(image|audio)/[a-z0-9.+-]+(; ?codecs=[a-z0-9.,+ -]+)?$"#
+    /// A foto de perfil tem teto de 2 MB e a mídia de 8 MB, os mesmos do ajudante.
+    static let limiteFoto = 2 << 20
+    static let limiteMidia = 8 << 20
+
+    /// A foto de perfil já guardada pelo ajudante. O nome do arquivo é um hash: nada de caminho vindo de fora.
+    func foto(arquivo: String) -> MidiaBaixada? {
+        guard arquivo.range(of: Self.nomeDeArquivo, options: .regularExpression) != nil, arquivo.hasSuffix(".jpg"),
+              let d = try? Data(contentsOf: pasta.appendingPathComponent("fotos").appendingPathComponent(arquivo)),
+              !d.isEmpty, d.count <= Self.limiteFoto else { return nil }
+        return MidiaBaixada(tipo: "image/jpeg", dados: d)
+    }
+
+    static func lerMidia(pasta: URL, arquivo: String?, tipo: String?, erro: String?) -> ResultadoMidia {
+        if let erro { return .erro(erro) }
+        guard let arquivo, let tipo, arquivo.range(of: nomeDeArquivo, options: .regularExpression) != nil,
+              tipo.range(of: tipoDeMidia, options: .regularExpression) != nil,
+              let d = try? Data(contentsOf: pasta.appendingPathComponent("midia").appendingPathComponent(arquivo)),
+              !d.isEmpty, d.count <= limiteMidia else { return .erro("Não consegui abrir essa mídia.") }
+        return .pronta(MidiaBaixada(tipo: tipo, dados: d))
+    }
+
+    /// Pede ao ajudante a foto ou o áudio de uma mensagem e espera (no máximo `limite` segundos). Só com a conexão de pé.
+    func midia(chat: String, id: String, limite: TimeInterval = 40) -> ResultadoMidia {
+        trava.lock()
+        guard let ent = entrada, processo != nil, estado.fase == .conectado else {
+            trava.unlock()
+            return .erro("O WhatsApp por QR não está conectado agora.")
+        }
+        pedidos += 1
+        let req = String(pedidos)
+        let espera = EsperaDeMidia()
+        esperas[req] = espera
+        trava.unlock()
+        let pedido: [String: String] = ["c": "midia", "req": req, "chat": chat, "id": id]
+        if let json = try? JSONSerialization.data(withJSONObject: pedido) {
+            try? ent.write(contentsOf: json + Data("\n".utf8))
+        }
+        let chegou = espera.sinal.wait(timeout: .now() + limite) == .success
+        trava.lock()
+        esperas[req] = nil
+        let r = chegou ? espera.resultado : .erro("Demorou demais para baixar. Tente de novo.")
+        trava.unlock()
+        return r
     }
 
     private func terminou(geracao g: Int) {
@@ -298,7 +385,10 @@ final class PonteWhatsAppQR: @unchecked Sendable {
         notificar()
     }
 
-    private func notificar() { aoMudar?(atual) }
+    private func notificar() {
+        trava.lock(); _versao += 1; trava.unlock()
+        aoMudar?(atual)
+    }
 
     // MARK: Leitura para o painel
 
@@ -308,12 +398,19 @@ final class PonteWhatsAppQR: @unchecked Sendable {
         garantirLigada()
         let e = atual
         let conectado = e.fase == .conectado
-        let total = e.conversas.reduce(0) { $0 + $1.naoLidas }
+        // Arquivada não conta (nem no selo): ela só aparece no filtro Arquivadas. Nome em branco nunca vai para a tela.
+        let conversas = e.conversas.map { c -> ConversaWhatsApp in
+            var c = c
+            if c.nome.trimmingCharacters(in: .whitespaces).isEmpty { c.nome = c.grupo ? "Grupo" : "Contato" }
+            return c
+        }
+        let contam = conversas.filter { $0.arquivada != true }
+        let total = contam.reduce(0) { $0 + $1.naoLidas }
         // Reconectando (queda curta): a lista de antes continua à vista, o total volta a ser medição quando conectar.
-        let resumo = ResumoWhatsApp(total: total, conversas: e.conversas.count, origem: "qr", navegador: nil, aberto: conectado,
+        let resumo = ResumoWhatsApp(total: total, conversas: contam.count, origem: "qr", navegador: nil, aberto: conectado,
                                     reconectando: e.reconectando ? true : nil)
         let aviso = e.aviso.map { Aviso(fonte: "whatsapp", texto: $0) }
-        return Leitura(valor: WhatsAppDados(resumo: resumo, conversas: conectado || e.reconectando ? e.conversas : []), aviso: aviso)
+        return Leitura(valor: WhatsAppDados(resumo: resumo, conversas: conectado || e.reconectando ? conversas : []), aviso: aviso)
     }
 }
 

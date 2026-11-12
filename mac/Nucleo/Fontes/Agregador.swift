@@ -62,6 +62,9 @@ struct Fontes: Sendable {
     var uso: @Sendable ([ContaIA], Date) -> Leitura<[UsoConta]>
     var whatsapp: @Sendable () -> Leitura<WhatsAppDados?>
     var seloWhatsApp: @Sendable () -> Int?
+    /// Muda quando a fonte do WhatsApp tem dado novo por conta própria (o aparelho conectado empurra a mensagem). É a chave do
+    /// cache: mensagem nova não espera o prazo de 5 s. Fonte que não empurra fica em 0.
+    var versaoWhatsApp: @Sendable () -> Int = { 0 }
     var spotify: @Sendable (Date) -> Leitura<EstadoSpotify?>
     var capa: @Sendable () -> Data?
     var agenda: @Sendable (Date) -> Leitura<ResumoAgenda?>
@@ -93,6 +96,7 @@ struct Fontes: Sendable {
             uso: { contas, agora in FonteUso.ler(contas: contas, claude: medicaoClaude, codex: sessoesCodex, agora: agora) },
             whatsapp: { whats.ler() },
             seloWhatsApp: { Selo.total(executor: executor, app: "WhatsApp") },
+            versaoWhatsApp: { ponteQR?.versao ?? 0 },
             spotify: { agora in
                 var leitura = spotify.ler(agora: agora)
                 // Com login, a API do Spotify soma curtida, repetição e aparelho (sem travar o estado).
@@ -181,7 +185,7 @@ final class Agregador: @unchecked Sendable {
         if b.uso { em { c.guardar(uso: self.cacheUso.obterAgil(chave: config.contas, agora: agora, padrao: vazioUso, paciencia: p) { self.fontes.uso(config.contas, agora) }) } }
         if b.whatsapp {
             em {
-                let leitura = self.cacheWhatsApp.obterAgil(chave: 0, agora: agora, padrao: vazioWhats, paciencia: p) { self.fontes.whatsapp() }
+                let leitura = self.cacheWhatsApp.obterAgil(chave: self.fontes.versaoWhatsApp(), agora: agora, padrao: vazioWhats, paciencia: p) { self.fontes.whatsapp() }
                 c.guardar(whatsapp: leitura)
                 // Banco fechado: o selo do Dock dá o total. Roda aqui dentro, no mesmo prazo das outras fontes.
                 if leitura.valor == nil { c.guardar(selo: self.cacheSelo.obterAgil(chave: 0, agora: agora, padrao: nil, paciencia: p) { self.fontes.seloWhatsApp() }) }
@@ -245,7 +249,7 @@ final class Agregador: @unchecked Sendable {
 
     // Para as rotas de lista (GET /api/whatsapp, /api/sessoes, /api/capa, /api/agenda).
     func conversasWhatsApp(agora: Date = Date()) -> [ConversaWhatsApp] {
-        cacheWhatsApp.obter(chave: 0, agora: agora) { fontes.whatsapp() }.valor?.conversas ?? []
+        cacheWhatsApp.obter(chave: fontes.versaoWhatsApp(), agora: agora) { fontes.whatsapp() }.valor?.conversas ?? []
     }
     func sessoes(agora: Date = Date()) -> [Sessao] {
         cacheSessoes.obter(chave: 0, agora: agora) { fontes.sessoes() }.valor

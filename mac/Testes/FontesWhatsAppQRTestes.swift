@@ -327,6 +327,124 @@ final class FontesWhatsAppQRTestes: XCTestCase {
         let ruim = try JSONDecoder().decode(ConfigWhatsApp.self, from: Data(#"{"origem":"qr","origemAntes":"zap"}"#.utf8))
         XCTAssertNil(ruim.origemAntes)
     }
+    // MARK: Conexões e WhatsApp (12/11/2026): arquivadas, nome em branco, foto, mídia e velocidade
+
+    func testLeNomeNumeroFotoArquivadaEMidiaDaConversa() throws {
+        let linha = #"{"t":"conversas","lista":[{"id":"5@s.whatsapp.net","nome":"Ana","grupo":false,"naoLidas":1,"ultima":"2026-11-12T13:00:00Z","arquivada":true,"numero":"5544999990000","foto":"0123456789abcdef.jpg","mensagens":[{"de":"","texto":"Foto","hora":"2026-11-12T13:00:00Z","id":"M1","tipo":"foto","midia":true},{"de":"","texto":"Áudio único","hora":"2026-11-12T13:01:00Z","id":"M2","tipo":"audio","unica":true}]}]}"#
+        guard case .conversas(let c)? = LinhaDoAjudante.interpretar(linha) else { return XCTFail("não leu") }
+        XCTAssertEqual(c[0].arquivada, true)
+        XCTAssertEqual(c[0].numero, "5544999990000")
+        XCTAssertEqual(c[0].foto, "0123456789abcdef.jpg")
+        XCTAssertEqual(c[0].mensagens[0].tipo, "foto")
+        XCTAssertEqual(c[0].mensagens[0].midia, true)
+        XCTAssertEqual(c[0].mensagens[1].unica, true)
+        XCTAssertNil(c[0].mensagens[1].midia)
+    }
+
+    func testArquivadaNaoContaNoTotalMasContinuaNaLista() throws {
+        let linha = #"{"t":"conversas","lista":[{"id":"a","nome":"Ana","grupo":false,"naoLidas":2,"ultima":"2026-11-12T13:00:00Z","mensagens":[]},{"id":"b","nome":"Bia","grupo":false,"naoLidas":5,"ultima":"2026-11-12T13:00:00Z","arquivada":true,"mensagens":[]}]}"#
+        let p = try ponte("echo '{\"t\":\"fase\",\"fase\":\"conectado\",\"detalhe\":\"\"}'; echo '\(linha)'; cat >/dev/null")
+        defer { p.desligar() }
+        p.garantirLigada()
+        esperar("conversas") { p.atual.conversas.count == 2 }
+        let l = p.ler()
+        XCTAssertEqual(l.valor?.resumo.total, 2, "arquivada não entra na conta nem no selo")
+        XCTAssertEqual(l.valor?.resumo.conversas, 1)
+        XCTAssertEqual(l.valor?.conversas.count, 2, "mas a arquivada tem de chegar ao painel, que a mostra no filtro Arquivadas")
+    }
+
+    func testConversaSemNomeNuncaVaiEmBranco() throws {
+        let linha = #"{"t":"conversas","lista":[{"id":"1@lid","nome":"","grupo":false,"naoLidas":1,"ultima":"2026-11-12T13:00:00Z","mensagens":[]},{"id":"g","nome":" ","grupo":true,"naoLidas":1,"ultima":"2026-11-12T13:00:00Z","mensagens":[]}]}"#
+        let p = try ponte("echo '{\"t\":\"fase\",\"fase\":\"conectado\",\"detalhe\":\"\"}'; echo '\(linha)'; cat >/dev/null")
+        defer { p.desligar() }
+        p.garantirLigada()
+        esperar("conversas") { p.atual.conversas.count == 2 }
+        XCTAssertEqual(p.ler().valor?.conversas.map(\.nome), ["Contato", "Grupo"])
+    }
+
+    func testVersaoSobeQuandoOAjudanteEmpurraLista() throws {
+        let p = try ponte("echo '{\"t\":\"fase\",\"fase\":\"conectado\",\"detalhe\":\"\"}'; echo '\(Self.conversas)'; cat >/dev/null")
+        defer { p.desligar() }
+        let antes = p.versao
+        p.garantirLigada()
+        esperar("conversas") { p.atual.conversas.count == 2 }
+        XCTAssertGreaterThan(p.versao, antes)
+    }
+
+    func testAgregadorNaoEsperaOPrazoDoCacheQuandoChegaMensagemNova() {
+        let versao = ContadorQr(0)
+        let lidas = ContadorQr(0)
+        let fontes = Fontes(
+            sessoes: { Leitura(valor: [], aviso: nil) }, uso: { _, _ in Leitura(valor: [], aviso: nil) },
+            whatsapp: { lidas.valor += 1; return Leitura(valor: WhatsAppDados(resumo: ResumoWhatsApp(total: 0, conversas: 0), conversas: []), aviso: nil) },
+            seloWhatsApp: { nil }, versaoWhatsApp: { versao.valor },
+            spotify: { _ in Leitura(valor: nil, aviso: nil) }, capa: { nil }, agenda: { _ in Leitura(valor: nil, aviso: nil) }, acesas: { _ in [] })
+        let a = Agregador(fontes: fontes)
+        let agora = Date()
+        _ = a.conversasWhatsApp(agora: agora)
+        _ = a.conversasWhatsApp(agora: agora.addingTimeInterval(1))
+        XCTAssertEqual(lidas.valor, 1, "sem novidade, vale o cache")
+        versao.valor = 1
+        _ = a.conversasWhatsApp(agora: agora.addingTimeInterval(1))
+        XCTAssertEqual(lidas.valor, 2, "lista nova do ajudante não espera os 5 s do cache")
+    }
+
+    func testFotoSoDeArquivoComNomeDeHash() throws {
+        let sessao = pasta.appendingPathComponent("sessao", isDirectory: true)
+        try FileManager.default.createDirectory(at: sessao.appendingPathComponent("fotos"), withIntermediateDirectories: true)
+        try Data([1, 2, 3]).write(to: sessao.appendingPathComponent("fotos/0123456789abcdef.jpg"))
+        try Data([9]).write(to: sessao.appendingPathComponent("segredo.jpg"))
+        let p = PonteWhatsAppQR(executavel: nil, pasta: sessao)
+        XCTAssertEqual(p.foto(arquivo: "0123456789abcdef.jpg"), MidiaBaixada(tipo: "image/jpeg", dados: Data([1, 2, 3])))
+        for ruim in ["../segredo.jpg", "..%2Fsegredo.jpg", "fotos/0123456789abcdef.jpg", "0123456789abcdef.png", "ABCDEF.jpg", "", "0123456789abcdef.jpg/../../x"] {
+            XCTAssertNil(p.foto(arquivo: ruim), ruim)
+        }
+    }
+
+    func testPedeAMidiaAoAjudanteELeOArquivoBaixado() throws {
+        // O ajudante de mentira lê o pedido, grava o arquivo em <pasta>/midia e responde com a linha.
+        let p = try ponte(#"""
+        mkdir -p "$2/midia"; echo '{"t":"fase","fase":"conectado","detalhe":""}'
+        while read l; do
+          req=$(echo "$l" | sed 's/.*"req":"\([^"]*\)".*/\1/')
+          printf 'oi' > "$2/midia/0123456789abcdef.ogg"
+          echo "{\"t\":\"midia\",\"req\":\"$req\",\"arquivo\":\"0123456789abcdef.ogg\",\"tipo\":\"audio/ogg; codecs=opus\"}"
+        done
+        """#)
+        defer { p.desligar() }
+        p.garantirLigada()
+        esperar("conectou") { p.atual.fase == .conectado }
+        XCTAssertEqual(p.midia(chat: "a@s.whatsapp.net", id: "M1", limite: 5), .pronta(MidiaBaixada(tipo: "audio/ogg; codecs=opus", dados: Data("oi".utf8))))
+    }
+
+    func testMidiaQueOAjudanteRecusaVoltaComOMotivo() throws {
+        let p = try ponte(#"""
+        echo '{"t":"fase","fase":"conectado","detalhe":""}'
+        while read l; do
+          req=$(echo "$l" | sed 's/.*"req":"\([^"]*\)".*/\1/')
+          echo "{\"t\":\"midia\",\"req\":\"$req\",\"erro\":\"Arquivo grande demais para abrir aqui.\"}"
+        done
+        """#)
+        defer { p.desligar() }
+        p.garantirLigada()
+        esperar("conectou") { p.atual.fase == .conectado }
+        XCTAssertEqual(p.midia(chat: "a", id: "M1", limite: 5), .erro("Arquivo grande demais para abrir aqui."))
+    }
+
+    func testMidiaSemConexaoNaoEspera() {
+        let p = PonteWhatsAppQR(executavel: nil, pasta: pasta)
+        XCTAssertEqual(p.midia(chat: "a", id: "M1", limite: 5), .erro("O WhatsApp por QR não está conectado agora."))
+    }
+
+    func testMidiaComArquivoOuTipoForaDoPadraoEMaterialRecusado() throws {
+        let sessao = pasta.appendingPathComponent("sessao", isDirectory: true)
+        try FileManager.default.createDirectory(at: sessao.appendingPathComponent("midia"), withIntermediateDirectories: true)
+        try Data([1]).write(to: sessao.appendingPathComponent("midia/0123456789abcdef.jpg"))
+        XCTAssertEqual(PonteWhatsAppQR.lerMidia(pasta: sessao, arquivo: "0123456789abcdef.jpg", tipo: "image/jpeg", erro: nil), .pronta(MidiaBaixada(tipo: "image/jpeg", dados: Data([1]))))
+        for (arq, tipo) in [("../x.jpg", "image/jpeg"), ("0123456789abcdef.jpg", "text/html"), ("0123456789abcdef.jpg", "image/jpeg\r\nX: y")] {
+            guard case .erro = PonteWhatsAppQR.lerMidia(pasta: sessao, arquivo: arq, tipo: tipo, erro: nil) else { return XCTFail("aceitou \(arq) \(tipo)") }
+        }
+    }
 }
 
 private final class Lista: @unchecked Sendable {
@@ -339,4 +457,14 @@ private final class Lista: @unchecked Sendable {
 private final class Caixa: @unchecked Sendable {
     var valor: ConfigWhatsApp
     init(_ v: ConfigWhatsApp) { valor = v }
+}
+
+private final class ContadorQr: @unchecked Sendable {
+    private let trava = NSLock()
+    private var v: Int
+    init(_ v: Int) { self.v = v }
+    var valor: Int {
+        get { trava.lock(); defer { trava.unlock() }; return v }
+        set { trava.lock(); v = newValue; trava.unlock() }
+    }
 }

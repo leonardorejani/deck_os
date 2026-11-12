@@ -74,6 +74,9 @@
     config: () => pedir('GET', '/api/config'),
     gravarConfig: config => pedir('PUT', '/api/config', undefined, config),
     whatsapp: () => pedir('GET', '/api/whatsapp'),
+    whatsappFoto: arquivo => pedir('GET', '/api/whatsapp/foto/' + encodeURIComponent(arquivo)),
+    whatsappMidia: (chat, id) => pedir('GET', '/api/whatsapp/midia', { chat: String(chat), id: String(id) }, undefined, 45000), // o Mac baixa da internet antes de responder
+    abrirConversa: id => pedir('POST', '/api/whatsapp/abrir', undefined, { id }),
     agenda: (de, dias) => pedir('GET', '/api/agenda', { de: String(de), dias: String(dias) }),
     sessoes: () => pedir('GET', '/api/sessoes'),
     abrirSessao: id => pedir('POST', '/api/sessoes/' + encodeURIComponent(id) + '/abrir'),
