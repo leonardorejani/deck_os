@@ -35,8 +35,8 @@ const padrao = () => ({
   perfis: 'um',              // um | dois
   comp: 'a',
   blocos: { spotify: true, agenda: true, whatsapp: true, sessoes: true, uso: true },
-  monitorItens: { cpu: true, memoria: true, bateria: true, rede: true }, // o que a pessoa deixou ligado nos Ajustes do Mac
-  monitor: { cpu: 12, memoria: 63, bateria: 81, naTomada: false, baixa: 1258291, sobe: 40960 }, // o que o Mac mediu (sem `bateria` = Mac de mesa)
+  monitorItens: { cpu: true, memoria: true, bateria: true, rede: true, gpu: true, disco: true, energia: true, ventoinhas: true, dispositivos: true }, // o que a pessoa deixou ligado nos Ajustes do Mac
+  monitor: { cpu: 12, memoria: 63, bateria: 81, naTomada: false, baixa: 1258291, sobe: 40960, gpu: 27, discoLivre: 412000000000, discoTotal: 994000000000, watts: 11.4, carregando: false, ventoinhas: [2400, 2600], ventoinhaMax: 6000, dispositivos: 3 }, // o que o Mac mediu (sem `bateria` = Mac de mesa, e o que falta some)
   nomeMac: 'MacBook Pro de Teste',
   faixa: 'Faixa de Exemplo', artista: 'Artista Exemplo',
   acesas: ['acordado'],
@@ -68,32 +68,20 @@ const padrao = () => ({
   mailAviso: '',             // a lista de contas do Mail não pôde ser lida: o motivo vem no aviso da ação
   comControles: false,       // o perfil ganha a tecla Controles (abre a tela dos controles do Mac no iPhone)
   controles: 'tudo',         // tudo | sem-brilho (Mac sem tela interna nem luz no teclado) | nada (não oferece nada) | antigo (Mac sem a rota: 404) | erro (500) | recusa (os pedidos de escrita falham com 422)
-  comMonitorApp: false,      // o perfil ganha a tecla do app Monitor de Atividade (abre a tela dos processos no iPhone)
-  processos: 'normal',       // normal | antigo (Mac sem a rota: 404) | erro (500) | recusa (encerrar falha com 422) | vazio (nenhum processo)
-  procAtraso: 0,             // ms de espera antes de o Mac encerrar um processo
-  procs: [                   // o que o Mac "tem rodando": o Mac de mentira devolve os 5 maiores de cada lista
-    { pid: 201, nome: 'Navegador', cpu: 42.5, memoria: 1932735283, podeEncerrar: true },
-    { pid: 202, nome: 'Editor de Video', cpu: 77.3, memoria: 3221225472, podeEncerrar: true },
-    { pid: 203, nome: 'WindowServer', cpu: 18.2, memoria: 524288000, podeEncerrar: false },
-    { pid: 204, nome: 'Musica', cpu: 6.1, memoria: 412000000, podeEncerrar: true },
-    { pid: 205, nome: 'Chat', cpu: 3.4, memoria: 880000000, podeEncerrar: true },
-    { pid: 206, nome: 'Planilha', cpu: 1.2, memoria: 640000000, podeEncerrar: true },
-    { pid: 207, nome: 'kernel_task', cpu: 0.9, memoria: 2147483648, podeEncerrar: false },
-    { pid: 208, nome: 'Notas', cpu: 0.1, memoria: 120000000, podeEncerrar: true },
-  ],
+  comMonitorApp: false,      // o perfil ganha a tecla do app Monitor de Atividade (abre a tela do monitor no iPhone)
   ctVolume: 30, ctMudo: false, ctBrilho: 60, ctTeclado: 20, ctAtraso: 0,
   spotifyModos: 'sim',       // sim | sem (Mac antigo: o estado não traz álbum, repetir nem aleatório)
 });
 let c = padrao();
 let T0 = Date.now(); // as sessões esperam desde um instante fixo (o Mac real manda sempre o mesmo `desde` até a sessão mudar)
-let cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, whatsapp: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], criados: [], destinosPedidos: 0, mail: [], mailAbertas: [], controles: [], processos: [] };
+let cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, whatsapp: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], criados: [], destinosPedidos: 0, mail: [], mailAbertas: [], controles: [] };
 let posicaoBase = { s: 132, desde: Date.now() };
 let perfilAtivo = 'trabalho';
 let criadosAgenda = [], padraoAgenda = null, lembretesAcesso = null, liberarEm = 0; // o que o iPhone criou na agenda, o destino padrão e o acesso aos Lembretes
 let codigoAtual = CODIGO, codigoAnterior = null; // rodízio: o atual, e o anterior que ainda vale (a folga de 10 min)
 let parearGasto = false, parearErros = 0; // o código de 6 dígitos serve uma vez e aguenta 5 erros
 let gravada = null; // o que o iPhone gravou: perfis e blocos, como o Mac guardaria no config.json
-const zerar = () => { parearGasto = false; parearErros = 0; codigoAtual = CODIGO; codigoAnterior = null; T0 = Date.now(); gravada = null; c = padrao(); cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, whatsapp: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], criados: [], destinosPedidos: 0, mail: [], mailAbertas: [], controles: [], processos: [] }; posicaoBase = { s: 132, desde: Date.now() }; perfilAtivo = 'trabalho'; criadosAgenda = []; padraoAgenda = null; lembretesAcesso = null };
+const zerar = () => { parearGasto = false; parearErros = 0; codigoAtual = CODIGO; codigoAnterior = null; T0 = Date.now(); gravada = null; c = padrao(); cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, whatsapp: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], criados: [], destinosPedidos: 0, mail: [], mailAbertas: [], controles: [] }; posicaoBase = { s: 132, desde: Date.now() }; perfilAtivo = 'trabalho'; criadosAgenda = []; padraoAgenda = null; lembretesAcesso = null };
 
 // com xss ligado, todo texto que a página mostra chega como HTML que tenta executar código
 const X = t => c.xss ? `"><img src=x onerror="window.__xss=(window.__xss||0)+1">${t}` : t;
@@ -371,24 +359,6 @@ async function api(req, res, url) {
     if (c.ctAtraso) await new Promise(r => setTimeout(r, c.ctAtraso));
     cont.controles.push(`${item}=${v}`);
     if (item === 'volume') c.ctVolume = v; else if (item === 'mudo') c.ctMudo = v === 1; else if (item === 'brilho') c.ctBrilho = v; else c.ctTeclado = v;
-    return json(res, 200, { ok: true });
-  }
-  if (rota === '/api/processos' || (rota.startsWith('/api/processos/') && rota.endsWith('/encerrar'))) {
-    if (c.processos === 'antigo') return json(res, 404, { erro: 'Essa rota não existe.' });
-    if (c.processos === 'erro') return json(res, 500, { erro: 'O Mac não conseguiu listar os processos.' });
-    if (rota === '/api/processos') {
-      if (m !== 'GET') return json(res, 405, { erro: 'Esse pedido não é aceito nessa rota.' });
-      cont.processos.push('ler');
-      const l = c.processos === 'vazio' ? [] : c.procs.map(p => ({ ...p, nome: X(p.nome) }));
-      return json(res, 200, { cpu: [...l].sort((a, b) => b.cpu - a.cpu).slice(0, 5), memoria: [...l].sort((a, b) => b.memoria - a.memoria).slice(0, 5) });
-    }
-    if (m !== 'POST') return json(res, 405, { erro: 'Esse pedido não é aceito nessa rota.' });
-    const pid = Number(rota.slice('/api/processos/'.length, -'/encerrar'.length)), nome = url.searchParams.get('nome');
-    if (!Number.isInteger(pid) || pid <= 1 || !nome) return json(res, 400, { erro: 'Pedido de processo inválido.' });
-    if (c.procAtraso) await new Promise(r => setTimeout(r, c.procAtraso));
-    if (c.processos === 'recusa') return json(res, 422, { erro: 'Esse processo é do sistema ou do Deck e não pode ser encerrado.' });
-    cont.processos.push(`encerrar ${pid} ${nome}`);
-    c.procs = c.procs.filter(p => p.pid !== pid);
     return json(res, 200, { ok: true });
   }
   if (rota === '/api/agenda/destinos' && m === 'GET') {

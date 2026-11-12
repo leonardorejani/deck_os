@@ -321,15 +321,20 @@ function trechoDoEvento(e) {
   let f = e.fim ? new Date(e.fim) : i; if (isNaN(f) || f < i) f = i; if (f > i) f = new Date(f - 1000);
   return { i, a: diaDe(i), z: diaDe(f) };
 }
-function pintarCal() {
-  const hoje = new Date(V.ref), m = ag.mes;
-  $('#ca-titulo').textContent = m.toLocaleDateString('pt-BR', { month: 'long' }) + (m.getFullYear() !== hoje.getFullYear() ? ' ' + m.getFullYear() : '');
-  const dias = new Date(m.getFullYear(), m.getMonth() + 1, 0).getDate(), temEv = new Map();
+/* Quantos eventos cada dia do mês tem (dia do mês -> quantidade). O evento de vários dias conta em cada dia do mês que ele cobre */
+function diasComEvento(eventos, m) {
+  const temEv = new Map(), dias = new Date(m.getFullYear(), m.getMonth() + 1, 0).getDate();
   const m1 = new Date(m.getFullYear(), m.getMonth(), 1), m2 = new Date(m.getFullYear(), m.getMonth(), dias);
-  for (const e of ag.mesEv || []) { // o evento de vários dias pinta cada dia do mês que ele cobre
+  for (const e of eventos || []) {
     const t = trechoDoEvento(e); if (!t) continue;
     for (let d = new Date(Math.max(t.a, m1)); d <= Math.min(t.z, m2); d.setDate(d.getDate() + 1)) temEv.set(d.getDate(), (temEv.get(d.getDate()) || 0) + 1);
   }
+  return temEv;
+}
+function pintarCal() {
+  const hoje = new Date(V.ref), m = ag.mes;
+  $('#ca-titulo').textContent = m.toLocaleDateString('pt-BR', { month: 'long' }) + (m.getFullYear() !== hoje.getFullYear() ? ' ' + m.getFullYear() : '');
+  const dias = new Date(m.getFullYear(), m.getMonth() + 1, 0).getDate(), temEv = diasComEvento(ag.mesEv, m);
   let h = '<span></span>'.repeat(new Date(m.getFullYear(), m.getMonth(), 1).getDay());
   for (let n = 1; n <= dias; n++) {
     const d = new Date(m.getFullYear(), m.getMonth(), n), dow = d.getDay(), tem = temEv.get(n) || 0;
@@ -383,6 +388,32 @@ function trocarMes(passo) {
     requestAnimationFrame(() => { g.style.translate = ''; g.style.opacity = ''; ag.trocando = false });
   }, msCss('--mov-sai-rapido') + 10);
 }
+/* ---------- Mês da composição C: o mesmo mês da Agenda, em outro lugar da tela ---------- */
+/* O mês que a C mostra é só dela (as setas dela não mexem na Agenda). Sem mexer nas setas por 30 s, ela volta para o mês de agora. */
+const mesC = { mes: null, ev: null, seq: 0, lido: 0, volta: 0 };
+const MESC_RELER = 30000;
+function mesCAtual() { if (!mesC.mes) { const h = new Date(V.ref); mesC.mes = new Date(h.getFullYear(), h.getMonth(), 1) } return mesC.mes }
+async function lerMesC(forcar) {
+  if (!V || V.comp !== 'c' || (!forcar && mesC.ev && Date.now() - mesC.lido < MESC_RELER)) return;
+  const ref = mesCAtual(), n = ++mesC.seq; mesC.lido = Date.now();
+  if (semPermissao()) { mesC.ev = []; return }
+  try {
+    const l = await canal.agenda(dataIso(ref), new Date(ref.getFullYear(), ref.getMonth() + 1, 0).getDate());
+    if (n !== mesC.seq) return;
+    mesC.ev = Array.isArray(l) ? l : [];
+  } catch (e) { if (n === mesC.seq && !mesC.ev) mesC.ev = []; if (e.status === 401) return tratarErro(e) } // sem agenda, o mês aparece sem pontinhos
+  if (V.comp === 'c') atualizar();
+}
+function moverMesC(passo) {
+  const m = mesCAtual(); mesC.mes = new Date(m.getFullYear(), m.getMonth() + passo, 1); mesC.ev = null; mesC.volta = Date.now() + 30000;
+  atualizar(); lerMesC(true);
+}
+setInterval(() => {
+  if (!V || V.comp !== 'c' || document.hidden) return;
+  if (mesC.volta && Date.now() > mesC.volta) { mesC.mes = null; mesC.ev = null; mesC.volta = 0; atualizar() }
+  lerMesC();
+}, 5000);
+
 $('#ca-ant').innerHTML = SVG.esq; $('#ca-prox').innerHTML = SVG.dir;
 $('#ca-ant').onclick = () => trocarMes(-1); $('#ca-prox').onclick = () => trocarMes(1);
 $('#ca-grade').addEventListener('click', e => {

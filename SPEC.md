@@ -1168,6 +1168,24 @@ Teste do Deck 1.0 (12/11/2026, frente iphone-bugs), dito pelo Leonardo:
       Com o dedo em cima da tela (e uns 400 ms depois) a lista espera, porque o monitor muda quase a cada segundo e repintar
       destruía o botão antes do dedo subir. Os cartões continuam andando. O toque do próprio dedo repinta na hora.
 
+    Telas do iPhone refeitas (12/11/2026). Pedido dele: o Monitor de Atividade como uma grade de cartões escuros arredondados
+    (ícone pequeno e rótulo em cinza no topo, número grande em branco, barra fina embaixo, laranja quando alto), sem processos
+    e sem Encerrar. Na composição C, tirar a fileira de teclas, pôr à direita o calendário igual ao da Agenda, uma linha cinza
+    dividindo e, do outro lado, o relógio estilo Fliqo bem quadrado, com a hora em cima e os minutos embaixo. No player em tela
+    cheia, o botão de lista que abre as próximas músicas deslizando da direita para a esquerda, e o play no centro do círculo.
+    - Monitor: CPU, GPU, memória, bateria, rede (download grande, upload menor), disco disponível, energia (watts), ventoinhas
+      (RPM) e dispositivos conectados. O Mac lê GPU, disco livre, energia, RPM e USB (`Estado.monitor` ganhou `gpu`,
+      `discoLivre`, `discoTotal`, `watts`, `carregando`, `ventoinhas`, `ventoinhaMax` e `dispositivos`) e o item que ele não
+      consegue ler some, em vez de aparecer com "-". Cada item novo tem a chave dele em Ajustes, Este Mac, Monitor do Mac,
+      ligada por padrão. A lista dos 5 maiores processos e o Encerrar saíram da tela e do canal do painel. O número conta do
+      valor antigo ao novo em 600 ms (tatile, movimento, regra 9) e os cartões não são refeitos a cada segundo.
+    - Composição C: sem fileira de teclas. O calendário é o da Agenda (mês grande em vermelho, setas que só mexem nele e voltam
+      ao mês de hoje depois de 30 s, números grandes, pontinho nos dias com evento, hoje em círculo vermelho) e tocar nele
+      abre a Agenda. O relógio tem dois blocos quadrados que viram, as horas em cima e os minutos embaixo.
+    - Player em tela cheia: a fila (só com o Spotify conectado, como antes) desliza da direita para a esquerda e volta para a
+      direita. No alto fica a capa e o nome da música que toca, e as próximas ficam embaixo, rolando. O triângulo do play
+      nasce centrado no círculo, sem o empurrão de 2 px do CSS que o deixava 3 a 4 px à direita.
+
 35. WhatsApp por QR, aparelho conectado (12/11/2026). Palavras dele: "vamos seguir com o QR code". Decidido:
     - Uma quarta origem do WhatsApp, `whatsapp.origem` = `qr`, ao lado de `auto`, `app` e `web`. Nasce DESLIGADA: o
       `auto` nunca escolhe `qr`, só a pessoa liga, em Ajustes > Este Mac > WhatsApp > Aparelho conectado (QR).

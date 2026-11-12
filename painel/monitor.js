@@ -1,125 +1,124 @@
-/* Monitor de Atividade no iPhone: a tecla do app abre esta tela. Em cima, os mesmos dados do bloco do monitor (V.monitor,
-   que o Mac já manda no estado) em tamanho grande, só os itens que a pessoa deixou ligados nos Ajustes do Mac. Embaixo, os
-   5 processos que mais usam processador e os 5 que mais usam memória (GET /api/processos), cada um com "Encerrar", que
-   sempre pede confirmação antes. Quem diz se um processo pode ser encerrado é o Mac (`podeEncerrar`).
-   Usa as peças de deck.js (V, canal, avisar, abrirFolha, tratarErro, monitorItens, velocidade, nivel) e paineis.js (msgErro). */
+/* Monitor de Atividade no iPhone: a tecla do app abre esta tela. Uma grade de cartões com o que o Mac mede (V.monitor, que o Mac
+   já manda no estado): CPU, GPU, memória, bateria, rede, disco disponível, energia, ventoinhas e dispositivos conectados. Só
+   aparece o que a pessoa deixou ligado nos Ajustes do Mac e o que o Mac conseguiu ler (medida ausente some, não vira "-").
+   O cartão não é refeito a cada segundo: os mesmos elementos são atualizados, e o número conta do valor antigo ao novo
+   (tatile, movimento, regra 9: 600 ms, ease-out cúbico, algarismos de largura fixa).
+   Usa as peças de deck.js (V, folhaAberta, semAcesso, offline, monitorItens, velocidade, nivel, nivelBateria) e util.js (SVG, esc). */
 
-const mn = { dados: null, erro: '', seq: 0, confirmando: null, encerrando: null, chave: '', chaveM: '', chaveB: '', toque: false, soltou: 0 }; // confirmando e encerrando: { lista, pid }
+const ORDEM_MONITOR = ['cpu', 'gpu', 'memoria', 'bateria', 'rede', 'disco', 'energia', 'ventoinhas', 'dispositivos'];
+const mn = { chave: '' };
 
 const decimal = (n, casas = 1) => n.toFixed(casas).replace('.', ',');
-const tamanhoMem = b => b >= 1073741824 ? decimal(b / 1073741824) + ' GB' : Math.round(b / 1048576) + ' MB';
-const pctProc = c => decimal(c) + '%';
+const inteiro = n => Math.round(n).toLocaleString('pt-BR');
+const pct = n => `${Math.round(n)}<small>%</small>`;
+/* Disco em GB decimais, como o Finder mostra: sem casa decimal a partir de 10 GB */
+const tamanhoDisco = b => b >= 1e12 ? `${decimal(b / 1e12, 2)}<small>TB</small>` : b >= 1e10 ? `${Math.round(b / 1e9)}<small>GB</small>` : `${decimal(b / 1e9)}<small>GB</small>`;
+const nivelDisco = usado => usado >= 95 ? 'cheio' : usado >= 85 ? 'alto' : '';
 
-function abrirMonitor() {
-  mn.dados = null; mn.erro = ''; mn.confirmando = null; mn.encerrando = null; mn.chave = ''; mn.chaveM = ''; mn.chaveB = ''; mn.toque = false;
-  const c = $('#mn-corpo'); c.innerHTML = '<div id="mn-metricas"></div><div id="mn-baixo"></div>';
-  pintarMonitor(true); abrirFolha('#f-monitor'); lerProcessos();
+/* O que cada cartão sabe dizer: `ler(m)` devolve null (o Mac não leu: o cartão some) ou { nums, fmt, barra, nivel, tag, rotulo }.
+   CPU, memória e rede nunca devolvem null: na primeira leitura ainda não há taxa e o cartão mostra "-" até a segunda.
+   nums são os valores que contam (o de rede tem dois), fmt desenha cada um, barra vai de 0 a 100 (null: sem barra). */
+const CARTOES = {
+  cpu: { rot: 'CPU', ic: 'cpu', ler: m => ({ nums: [m.cpu], fmt: pct, barra: m.cpu ?? 0, nivel: nivel(m.cpu) }) },
+  gpu: { rot: 'GPU', ic: 'gpu', ler: m => m.gpu == null ? null : { nums: [m.gpu], fmt: pct, barra: m.gpu, nivel: nivel(m.gpu) } },
+  memoria: { rot: 'Memória', ic: 'memoria', ler: m => ({ nums: [m.memoria], fmt: pct, barra: m.memoria ?? 0, nivel: nivel(m.memoria) }) },
+  bateria: { rot: 'Bateria', ic: 'bateria', ler: m => m.bateria == null ? null : { nums: [m.bateria], fmt: pct, barra: m.bateria, nivel: nivelBateria(m), tag: m.naTomada ? 'na tomada' : '' } },
+  rede: { rot: 'Rede', ic: 'rede', rede: true, ler: m => ({ nums: [m.baixa, m.sobe], fmt: n => esc(velocidade(n)), barra: null, nivel: '', rotulo: `Rede: baixando ${velocidade(m.baixa)}, enviando ${velocidade(m.sobe)}` }) },
+  disco: {
+    rot: 'Disco disponível', ic: 'disco',
+    ler: m => {
+      if (m.discoLivre == null || !(m.discoTotal > 0)) return null;
+      const usado = Math.max(0, Math.min(100, 100 - m.discoLivre / m.discoTotal * 100));
+      return { nums: [m.discoLivre], fmt: tamanhoDisco, barra: usado, nivel: nivelDisco(usado), rotulo: `Disco disponível: ${tamanhoDisco(m.discoLivre).replace(/<[^>]+>/g, ' ')}` };
+    },
+  },
+  energia: { rot: 'Energia', ic: 'raio', ler: m => m.watts == null ? null : { nums: [m.watts], fmt: n => `${decimal(n)}<small>W</small>`, barra: null, nivel: '', tag: m.carregando ? 'carregando' : '' } },
+  ventoinhas: {
+    rot: 'Ventoinhas', ic: 'ventoinha',
+    ler: m => {
+      if (!Array.isArray(m.ventoinhas) || !m.ventoinhas.length) return null;
+      const media = m.ventoinhas.reduce((a, b) => a + b, 0) / m.ventoinhas.length, p = m.ventoinhaMax > 0 ? Math.min(100, media / m.ventoinhaMax * 100) : null;
+      return { nums: [media], fmt: n => `${inteiro(n)}<small>RPM</small>`, barra: p, nivel: p == null ? '' : nivel(p), rotulo: `Ventoinhas: ${inteiro(media)} RPM${m.ventoinhas.length > 1 ? `, ${m.ventoinhas.length} ventoinhas` : ''}` };
+    },
+  },
+  dispositivos: { rot: 'Dispositivos', ic: 'usb', ler: m => m.dispositivos == null ? null : { nums: [m.dispositivos], fmt: n => String(Math.round(n)), barra: null, nivel: '', tag: 'conectados' } },
+};
+
+/* Os cartões que valem agora: o que está ligado nos Ajustes, na ordem da tela, sem o que o Mac não leu */
+function cartoesAgora() {
+  const m = V?.monitor; if (!m) return [];
+  const ligados = m.itens || [];
+  return ORDEM_MONITOR.filter(k => ligados.includes(k)).map(k => ({ k, def: CARTOES[k], d: CARTOES[k].ler(m) })).filter(c => c.d);
 }
-async function lerProcessos() {
-  const n = ++mn.seq;
-  try {
-    const d = await canal.processos(); if (n !== mn.seq) return;
-    mn.dados = { cpu: Array.isArray(d?.cpu) ? d.cpu : [], memoria: Array.isArray(d?.memoria) ? d.memoria : [] }; mn.erro = '';
-  } catch (e) {
-    if (n !== mn.seq) return;
-    if (e.status === 401) return tratarErro(e);
-    const msg = e.status === 404 ? 'Este Mac ainda não lista os processos. Atualize o Deck no Mac.' : msgErro(e);
-    if (mn.dados) { if (!mn.erroAvisado) avisar(msg, { erro: true }); mn.erroAvisado = true; return } // com a lista na tela, avisa uma vez só
-    mn.erro = msg;
+
+/* ---------- número que conta ---------- */
+const MOV_CONTAR = 600;
+const reduzMovimento = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+const easeOutCubico = f => 1 - Math.pow(1 - f, 3);
+/* `el._alvo` é o valor que a tela deve mostrar e `el._atual` o que mostra agora. Mudou no meio da contagem: recomeça de onde está */
+function mostrarNumero(el, para, fmt, animar) {
+  if (para == null) { cancelAnimationFrame(el._raf); el._alvo = el._atual = null; el.textContent = '-'; return }
+  if (el._alvo === para) return;
+  cancelAnimationFrame(el._raf);
+  const de = el._atual;
+  el._alvo = para;
+  if (!animar || de == null || document.hidden || reduzMovimento()) { el._atual = para; el.innerHTML = fmt(para); return }
+  const t0 = performance.now();
+  const passo = agora => {
+    const f = Math.min(1, (agora - t0) / MOV_CONTAR);
+    el._atual = f >= 1 ? para : de + (para - de) * easeOutCubico(f);
+    el.innerHTML = fmt(el._atual);
+    if (f < 1) el._raf = requestAnimationFrame(passo);
+  };
+  el._raf = requestAnimationFrame(passo);
+}
+
+/* ---------- desenho ---------- */
+const cartaoVazio = (k, def) => {
+  const topo = `<span class="mn-topo"><span class="mn-ic" aria-hidden="true">${SVG[def.ic]}</span><span class="mn-rot">${def.rot}</span><span class="mn-tag"></span></span>`;
+  const corpo = def.rede
+    ? `<span class="mn-duas"><span class="mn-linha"><span class="mn-seta">${SVG.baixa}</span><b class="mn-num mn-vel" data-s="0"></b></span><span class="mn-linha"><span class="mn-seta">${SVG.sobe}</span><b class="mn-num mn-vel mn-menor" data-s="1"></b></span></span>`
+    : `<b class="mn-num" data-s="0"></b>`;
+  return `<div class="mn-cartao" data-k="${k}" role="group">${topo}${corpo}<span class="mn-barra" hidden><i></i></span><span class="mn-nota"></span></div>`;
+};
+function pintarCartao(el, def, d, animar) {
+  const rot = d.rotulo || `${def.rot}: ${d.nums[0] == null ? 'sem medição' : d.fmt(d.nums[0]).replace(/<[^>]+>/g, ' ').trim()}`;
+  el.setAttribute('aria-label', rot + (d.tag ? `, ${d.tag}` : ''));
+  el.classList.toggle('alto', d.nivel === 'alto'); el.classList.toggle('cheio', d.nivel === 'cheio');
+  // a nota pequena fica no topo, ao lado do rótulo, quando o cartão tem barra, e no lugar da barra quando não tem
+  const tag = $('.mn-tag', el), nota = $('.mn-nota', el), noTopo = d.barra != null;
+  if (tag.textContent !== (noTopo ? d.tag || '' : '')) tag.textContent = noTopo ? d.tag || '' : '';
+  if (nota.textContent !== (noTopo ? '' : d.tag || '')) nota.textContent = noTopo ? '' : d.tag || '';
+  const barra = $('.mn-barra', el); barra.hidden = d.barra == null;
+  if (d.barra != null) $('i', barra).style.transform = `scaleX(${Math.max(0, Math.min(1, d.barra / 100))})`;
+  $$('.mn-num', el).forEach(n => mostrarNumero(n, d.nums[+n.dataset.s], d.fmt, animar));
+}
+
+const avisoVazio = (titulo, texto) => `<div class="vazio-bloco mn-vazio"><strong>${titulo}</strong><span>${texto}</span></div>`;
+function pintarMonitor() {
+  const corpo = $('#mn-corpo'), cartoes = cartoesAgora(), ligado = !!V?.monitor && (V.monitor.itens || []).length > 0;
+  let chave, aviso = '';
+  if (!V?.monitor || !ligado) {
+    chave = 'vazio:' + (V?.blocos?.monitor ? 'sem-item' : 'desligado');
+    aviso = avisoVazio(V?.blocos?.monitor ? 'Nenhum item ligado' : 'O monitor está desligado', 'Para ver o uso do Mac aqui, ligue o Monitor do Mac em Ajustes, Este Mac.');
+  } else if (!cartoes.length) {
+    chave = 'vazio:sem-leitura';
+    aviso = avisoVazio('O Mac não conseguiu ler os itens', 'Os itens ligados em Ajustes, Este Mac, não estão disponíveis neste Mac agora.');
+  } else chave = 'grade:' + cartoes.map(c => c.k).join(',');
+  // a grade só é refeita quando a lista de cartões muda. No resto do tempo os mesmos elementos são atualizados no lugar
+  const refez = chave !== mn.chave;
+  if (refez) {
+    mn.chave = chave;
+    corpo.innerHTML = aviso || `<div class="mn-grade" data-n="${cartoes.length}">${cartoes.map(c => cartaoVazio(c.k, c.def)).join('')}</div>`;
   }
-  mn.erroAvisado = false;
-  const ainda = pid => [...mn.dados.cpu, ...mn.dados.memoria].some(p => p.pid === pid);
-  if (mn.confirmando && !ainda(mn.confirmando.pid)) mn.confirmando = null; // o processo já saiu da lista: a pergunta perdeu o sentido
-  pintarMonitor();
+  corpo.setAttribute('aria-busy', 'false');
+  for (const c of cartoes) pintarCartao($(`.mn-cartao[data-k="${c.k}"]`, corpo), c.def, c.d, !refez);
 }
 
-/* ---------- o que o Mac mede, grande ---------- */
-const NOME_ITEM = { cpu: 'Processador', memoria: 'Memória', bateria: 'Bateria', rede: 'Rede' };
-function cartaoMonitor(k, m) {
-  const barra = (p, nv) => `<span class="mn-barra"><i style="width:${p ?? 0}%"></i></span>`;
-  if (k === 'rede') {
-    return `<div class="mn-cartao mn-rede" role="group" aria-label="Rede: baixando ${velocidade(m.baixa)}, enviando ${velocidade(m.sobe)}"><span class="mn-rot">Rede</span>
-      <span class="mn-duas"><span><span class="mn-seta">${SVG.baixa}</span><b class="mn-num mn-vel">${esc(velocidade(m.baixa))}</b></span><span><span class="mn-seta">${SVG.sobe}</span><b class="mn-num mn-vel">${esc(velocidade(m.sobe))}</b></span></span></div>`;
-  }
-  const p = m[k], nv = k === 'bateria' ? nivelBateria(m) : nivel(p);
-  const rot = k === 'bateria' ? 'Bateria' + (m.naTomada ? ' (na tomada)' : '') : NOME_ITEM[k];
-  return `<div class="mn-cartao ${nv}" role="group" aria-label="${rot}: ${p == null ? 'sem medição' : p + '%'}"><span class="mn-rot">${rot}</span>
-    <b class="mn-num">${p == null ? '-' : p + '<small>%</small>'}</b>${barra(p)}</div>`;
-}
-function metricasHTML() {
-  const itens = monitorItens();
-  if (!V?.monitor || !itens.length) {
-    const desligado = !V?.blocos?.monitor;
-    return `<div class="vazio-bloco mn-vazio"><strong>${desligado ? 'O monitor está desligado' : 'Nenhum item ligado'}</strong><span>Para ver o processador, a memória, a bateria e a rede aqui, ligue o Monitor do Mac em Ajustes, Este Mac.</span></div>`;
-  }
-  return `<div class="mn-grade" data-n="${itens.length}">${itens.map(k => cartaoMonitor(k, V.monitor)).join('')}</div>`;
-}
+function abrirMonitor() { mn.chave = ''; pintarMonitor(); abrirFolha('#f-monitor') }
 
-/* ---------- processos ---------- */
-function linhaProcesso(p, lista) {
-  const valor = lista === 'cpu' ? pctProc(p.cpu) : tamanhoMem(p.memoria);
-  const nome = esc(p.nome);
-  if (mn.confirmando && mn.confirmando.lista === lista && mn.confirmando.pid === p.pid) {
-    const indo = mn.encerrando?.pid === p.pid;
-    return `<li class="mn-proc confirmando" data-pid="${p.pid}"><span class="mn-pergunta">Encerrar <b>${nome}</b>? O que não foi salvo nele pode ser perdido.</span>
-      <span class="mn-acoes"><button class="btn secundario pequeno" data-mn-cancelar${indo ? ' disabled' : ''}>Cancelar</button><button class="btn pequeno mn-sim" data-mn-sim data-pid="${p.pid}"${indo ? ' disabled' : ''}>${indo ? 'Encerrando' : 'Encerrar'}</button></span></li>`;
-  }
-  return `<li class="mn-proc" data-pid="${p.pid}"><span class="mn-nome">${nome}</span><span class="mn-valor">${valor}</span>
-    <span class="mn-fim">${p.podeEncerrar ? `<button class="btn secundario pequeno" data-mn-pedir data-lista="${lista}" data-pid="${p.pid}" aria-label="Encerrar ${nome}">Encerrar</button>` : ''}</span></li>`;
-}
-const listaHTML = (titulo, lista) => `<section class="mn-secao" aria-label="${titulo}"><h3>${titulo}</h3>${
-  mn.dados[lista].length ? `<ul class="mn-lista">${mn.dados[lista].map(p => linhaProcesso(p, lista)).join('')}</ul>` : '<p class="mn-nada">Nenhum processo para mostrar.</p>'}</section>`;
-const esqueletoMn = () => '<div class="esq-lista" aria-hidden="true">' + '<div class="mn-proc esq"><i class="barra" style="width:45%"></i><i class="barra" style="width:56px"></i></div>'.repeat(5) + '</div>';
-
-/* O corpo tem duas partes que se repintam sozinhas: os cartões (mudam quase a cada segundo, não têm botão) e as listas (têm
-   Encerrar). Repintar a lista com o dedo em cima do botão destrói o botão e o clique se perde, então enquanto há toque em
-   andamento (e uns instantes depois) a lista espera. `forcar` é o clique da própria pessoa, que repinta na hora. */
-const tocando = () => mn.toque || Date.now() - mn.soltou < 400;
-function pintarMonitor(forcar) {
-  const corpo = $('#mn-corpo'), metricas = metricasHTML();
-  let baixo;
-  if (!mn.dados) baixo = mn.erro ? `<div class="vazio-bloco mn-vazio"><strong>Não deu para ler</strong><span>${esc(mn.erro)}</span><button class="btn secundario pequeno" data-mn-tentar style="justify-self:start">Tentar de novo</button></div>` : esqueletoMn();
-  else baixo = `<div class="mn-listas">${listaHTML('Mais usam o processador', 'cpu')}${listaHTML('Mais usam a memória', 'memoria')}</div>`;
-  corpo.setAttribute('aria-busy', String(!mn.dados && !mn.erro));
-  const y = corpo.scrollTop;
-  if (metricas !== mn.chaveM) { mn.chaveM = metricas; $('#mn-metricas').innerHTML = metricas }
-  if (baixo !== mn.chaveB && (forcar || !tocando())) { mn.chaveB = baixo; $('#mn-baixo').innerHTML = baixo }
-  corpo.scrollTop = y;
-}
-$('#mn-corpo').addEventListener('pointerdown', () => { mn.toque = true });
-const soltarMn = () => { mn.toque = false; mn.soltou = Date.now() };
-$('#mn-corpo').addEventListener('pointerup', soltarMn);
-$('#mn-corpo').addEventListener('pointercancel', soltarMn);
-
-async function encerrarProcesso(pid, nome) {
-  mn.encerrando = { pid }; pintarMonitor(true);
-  try {
-    await canal.encerrarProcesso(pid, nome);
-    mn.confirmando = null; mn.encerrando = null; avisar(`Pedi para o ${nome} fechar`);
-    await new Promise(r => setTimeout(r, 600)); // o programa leva um instante para sair
-  } catch (e) {
-    mn.encerrando = null; mn.confirmando = null; tratarErro(e);
-  }
-  lerProcessos();
-}
-
-$('#f-monitor').addEventListener('click', ev => {
-  const pedir = ev.target.closest('[data-mn-pedir]');
-  if (pedir) { mn.confirmando = { lista: pedir.dataset.lista, pid: Number(pedir.dataset.pid) }; return pintarMonitor(true) }
-  if (ev.target.closest('[data-mn-cancelar]')) { mn.confirmando = null; return pintarMonitor(true) }
-  const sim = ev.target.closest('[data-mn-sim]');
-  if (sim && !mn.encerrando) {
-    const pid = Number(sim.dataset.pid), p = [...mn.dados.cpu, ...mn.dados.memoria].find(x => x.pid === pid); // o nome é o que a tela mostrava: o Mac confere
-    return p && encerrarProcesso(pid, p.nome);
-  }
-  if (ev.target.closest('[data-mn-tentar]')) { mn.erro = ''; mn.dados = null; pintarMonitor(true); lerProcessos() }
-});
-
-/* aberta, a tela repinta o monitor a cada segundo (V.monitor chega com o estado) e relê os processos a cada 3 s.
-   Com a pergunta de confirmar na tela a lista não é relida: o processo não troca de lugar embaixo do dedo. */
-let ticMn = 0;
+/* aberta, a tela acompanha o estado (V.monitor chega com ele) a cada segundo */
 setInterval(() => {
-  if (document.hidden || !V || V.carregando || semAcesso || offline || folhaAberta?.id !== 'f-monitor') { ticMn = 0; return }
+  if (document.hidden || !V || V.carregando || semAcesso || offline || folhaAberta?.id !== 'f-monitor') return;
   pintarMonitor();
-  if (++ticMn % 3 === 0 && !mn.confirmando && !mn.encerrando) lerProcessos();
 }, 1000);

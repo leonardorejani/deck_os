@@ -118,7 +118,6 @@ button.cartao { font: inherit; color: inherit; text-align: left; border: 0; curs
 .midia svg { width: 22px; height: 22px }
 .midia .tocar { background: var(--texto); color: var(--fundo) }
 .midia .tocar svg { width: 20px; height: 20px }
-.midia .tocar.play svg { translate: 2px 0 } /* play óptico: 2px pra direita (tatile, forma 4) */
 .vazio-bloco { color: var(--texto-2); font-size: var(--texto-sm); display: grid; gap: var(--item); align-content: center; height: 100% }
 .vazio-bloco strong { color: var(--texto); font-size: var(--texto-base); font-weight: 600 }
 
@@ -224,20 +223,25 @@ button.cartao { font: inherit; color: inherit; text-align: left; border: 0; curs
 .horizontal .comp-b.com-monitor:not(.relogio-grande) .sessoes .sessao ~ .sessao { display: none } /* a linha do monitor toma o lugar da segunda sessão: melhor uma inteira que duas cortadas */
 .monitor-tira > span { gap: 3px }
 .horizontal .monitor-tira .por-s { display: none } /* a linha é de uma fileira só e o iPhone deitado tem pouca largura */
-.horizontal .comp-a.comp-c.relogio-grande .relogio-linha { grid-template-rows: auto minmax(0, 1fr) auto } /* na C o monitor tem a linha dele embaixo das placas, e elas cedem a altura dela */
-.horizontal .comp-c.com-monitor { --placa-h: 98px }
 
-/* ---------- Composição C: relógio à esquerda (horas sobre minutos) e o mês à direita ---------- */
-/* Usa a grade e a fileira de teclas da A, com o relógio no desenho do "relógio grande" (deck.js marca sem-musica, sem-sessoes e sem-uso). */
-.comp-c .mes-c { grid-area: 1 / 2 / 3 / 3; display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: var(--item); align-content: stretch; border: 0; font: inherit; color: var(--texto); text-align: center; cursor: pointer }
-.comp-c .mes-c-nome { font-size: var(--texto-xl); font-weight: 700; color: var(--cal-vermelho); text-transform: uppercase; text-align: left; line-height: 1.2 }
-.comp-c .sb-semana { font-size: var(--texto-xs); color: var(--texto-2) }
-.comp-c .mes-c-dias { display: grid; grid-template-columns: repeat(7, 1fr); grid-auto-rows: minmax(0, 1fr); align-items: center; justify-items: center; font-size: var(--texto-sm); font-weight: 600; font-variant-numeric: tabular-nums; min-height: 0 }
-.comp-c .mes-c-dias span { display: grid; place-items: center; min-width: 28px; height: 28px; border-radius: 50% }
-.comp-c .mes-c-dias .fds { color: var(--texto-2) }
-.comp-c .mes-c-dias .hoje { background: var(--cal-vermelho); color: var(--destaque-bloco-texto) }
-.vertical .comp-c .mes-c-dias { grid-auto-rows: 30px }
-.vertical .comp-c.relogio-grande.sem-uso.sem-sessoes.sem-musica { --placa-h: 84px } /* o mês divide a coluna com o relógio: as placas não podem ter os 200 px da A sem nada ao lado */
+/* ---------- Composição C: relógio quadrado (estilo Fliqo) à esquerda, uma linha cinza, e o mês da Agenda à direita ---------- */
+/* Sem fileira de teclas. O mês usa as mesmas classes da Agenda (.mes-topo, .seta, .sb-semana, .sb-grade, .sb-dia). */
+.comp-c { --q: 172px; --dia-cal: 40px; display: grid; grid-template-columns: auto 1px minmax(0, 1fr); gap: var(--secao); height: 100%; min-height: 0 }
+.comp-c.com-monitor { --q: 140px }
+.comp-c.com-monitor .c-relogio { width: 250px }
+.comp-c .monitor-tira { flex-wrap: wrap; justify-content: center; row-gap: var(--micro-gap) }
+.comp-c .c-relogio { display: flex; flex-direction: column; justify-content: center; align-items: center; min-width: 0; min-height: 0 }
+.comp-c .relogio-q { flex-direction: column; gap: var(--grade) }
+.comp-c .relogio-q .placa { --w: var(--q); --h: var(--q); font-size: calc(var(--q) * .68); letter-spacing: -.02em }
+.comp-c .c-divisor { align-self: stretch; margin: var(--pad) 0; background: var(--borda) }
+.comp-c .mes-c { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: var(--item); min-width: 0; min-height: 0; padding-top: var(--item) }
+.comp-c .mes-c-corpo { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: var(--item); min-height: 0; padding: 0; border: 0; background: none; color: var(--texto); font: inherit; cursor: pointer }
+.vertical .comp-c { --q: 184px; --dia-cal: 44px; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1px minmax(0, 1fr); gap: var(--pad); padding-top: var(--item) }
+.vertical .comp-c.com-monitor { --q: 160px }
+.vertical .comp-c .c-relogio { width: auto }
+.vertical .comp-c .sb-grade { grid-auto-rows: 54px } /* folga para o pontinho do dia com evento não encostar no número de baixo */
+.vertical .comp-c .monitor-tira { flex-wrap: nowrap }
+.vertical .comp-c .c-divisor { margin: 0 var(--pad) }
 
 /* ---------- Em pé ---------- */
 .vertical .comp-a, .vertical .comp-b { display: flex; flex-direction: column; gap: var(--grade); padding-top: var(--item) }
@@ -729,8 +733,18 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; text
 .volume.arrastando .trilho { height: 8px }
 .volume.arrastando .trilho i::after { content: ""; position: absolute; right: calc(-1 * var(--item) + 1px); top: 50%; width: 14px; height: 14px; translate: 0 -50%; border-radius: 50%; background: var(--texto); box-shadow: var(--sombra-2) }
 .vol-num { flex: none; min-width: 3ch; text-align: right }
-.pc-lista { position: absolute; inset: 0; z-index: 3; display: grid; grid-template-rows: auto minmax(0, 1fr); padding: 0 var(--seguro-dir) 0 var(--seguro-esq); background: var(--cal-fundo) }
+.pc-lista { position: absolute; inset: 0; z-index: 3; display: grid; grid-template-rows: auto auto minmax(0, 1fr); padding: 0 var(--seguro-dir) 0 var(--seguro-esq); background: var(--cal-fundo); translate: 100% 0; visibility: hidden; transition: translate var(--mov-sai-padrao) var(--curva-sai), visibility 0s linear var(--mov-sai-padrao) }
+.pc-lista.aberta { translate: 0 0; visibility: visible; transition: translate var(--mov-padrao) var(--curva-entra) } /* desliza da direita para a esquerda, e sai de volta para a direita */
 .pc-lista[hidden] { display: none }
+.pc-lista > header { grid-row: 1 }
+.pc-lista-topo { grid-row: 2; display: flex; align-items: center; gap: var(--icone); padding: var(--item) 0 var(--icone); border-bottom: 1px solid var(--borda) }
+.pc-lista-topo[hidden] { display: none }
+.pc-lista-topo .capa-mini { flex: none; width: 72px; height: 72px; border-radius: var(--raio); object-fit: cover; background: var(--superficie-2); box-shadow: var(--sombra-2) }
+.pc-lista-topo .tx { min-width: 0; display: grid }
+.pc-lista-topo b { font-size: var(--texto-md); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.pc-lista-topo small { color: var(--texto-2); font-size: var(--texto-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.pc-lista-topo .rotulo { color: var(--sucesso); font-size: var(--texto-xs) }
+.pc-lista > .corpo { grid-row: 3 }
 .pc-lista > header { display: flex; align-items: center; gap: var(--icone); padding: var(--pad) 0 var(--item); min-height: var(--linha) }
 .pc-lista > header h2 { margin: 0; flex: 1; font-size: var(--texto-md) }
 .pc-lista .corpo { overflow: auto; overscroll-behavior: contain; scrollbar-width: none; padding: 0 0 var(--seguro-baixo) }
@@ -764,43 +778,38 @@ button.item-lista:disabled { opacity: .5; cursor: default }
 .ctl-linha .btn[aria-pressed="true"] { background: var(--destaque-suave); color: var(--texto) }
 .ctl-linha.esq .barra { display: block; height: 10px }
 
-/* ---------- Monitor de Atividade (monitor.js): os dados do monitor em tamanho grande e os 5 maiores processos ---------- */
-.mn-grade { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--grade); padding-bottom: var(--secao) }
+/* ---------- Monitor de Atividade (monitor.js): grade de cartões escuros, rótulo cinza em cima, número grande, barra fina embaixo ---------- */
+.mn-grade { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); grid-auto-rows: minmax(104px, 1fr); gap: var(--grade); min-height: 100%; padding-bottom: var(--pad); box-sizing: border-box }
 .mn-grade[data-n="1"] { grid-template-columns: minmax(0, 1fr) }
 .mn-grade[data-n="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)) }
 .mn-grade[data-n="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)) }
-.vertical .mn-grade { grid-template-columns: repeat(2, minmax(0, 1fr)) }
+.mn-grade[data-n="4"] { grid-template-columns: repeat(4, minmax(0, 1fr)) }
+.mn-grade:is([data-n="5"], [data-n="6"]) { grid-template-columns: repeat(3, minmax(0, 1fr)) }
+.mn-grade:is([data-n="7"], [data-n="8"]) { grid-template-columns: repeat(4, minmax(0, 1fr)) }
+.vertical .mn-grade { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(112px, auto); min-height: 0 }
 .vertical .mn-grade[data-n="1"] { grid-template-columns: minmax(0, 1fr) }
-.mn-cartao { display: grid; gap: var(--item); align-content: start; padding: var(--pad); border-radius: var(--raio); background: var(--superficie-2); min-width: 0; font-variant-numeric: tabular-nums }
-.mn-rot { font-size: var(--texto-sm); color: var(--texto-2) }
-.mn-num { font-size: var(--texto-2xl); font-weight: 700; line-height: 1; color: var(--texto); white-space: nowrap }
-.mn-num small { font-size: var(--texto-md); font-weight: 600; color: var(--texto-2); margin-left: 2px }
-.mn-vel { font-size: var(--texto-lg) }
-.mn-barra { display: block; height: 8px; border-radius: var(--raio-pilula); background: var(--superficie); overflow: hidden }
-.mn-barra i { display: block; height: 100%; border-radius: inherit; background: var(--texto-2) }
+.mn-cartao { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: var(--item); padding: var(--pad) var(--icone); border-radius: var(--raio-card); background: var(--superficie-2); min-width: 0; font-variant-numeric: tabular-nums; transition: background-color var(--mov-padrao) var(--curva-move) }
+.mn-topo { display: flex; align-items: center; gap: var(--item); min-width: 0; color: var(--texto-2); font-size: var(--texto-sm) }
+.mn-ic { flex: none; display: grid; place-items: center }
+.mn-ic svg { width: 16px; height: 16px }
+.mn-rot { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.mn-tag { margin-left: auto; flex: none; font-size: var(--texto-xs); color: var(--texto-2); white-space: nowrap }
+.mn-tag:empty { display: none }
+.mn-nota { grid-area: 3 / 1; align-self: end; line-height: 20px; font-size: var(--texto-xs); color: var(--texto-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.mn-nota:empty { display: none }
+.mn-num { align-self: center; font-size: var(--texto-2xl); font-weight: 700; line-height: 1; color: var(--texto); white-space: nowrap; font-variant-numeric: tabular-nums; transition: color var(--mov-padrao) var(--curva-move) }
+.mn-num small { font-size: var(--texto-md); font-weight: 600; color: var(--texto-2); margin-left: var(--micro-gap) }
+.mn-vel { font-size: var(--texto-xl) }
+.mn-vel.mn-menor { font-size: var(--texto-md); font-weight: 600; color: var(--texto-2) }
+.mn-barra { display: block; height: 4px; margin: var(--item) 0; border-radius: var(--raio-pilula); background: var(--superficie); overflow: hidden }
+.mn-barra[hidden] { display: block; visibility: hidden } /* a linha da barra fica reservada: o cartão sem barra tem a mesma altura dos outros */
+.mn-barra i { display: block; height: 100%; width: 100%; border-radius: inherit; background: var(--texto-2); transform: scaleX(0); transform-origin: left; transition: transform var(--mov-contar) var(--curva-entra), background-color var(--mov-padrao) var(--curva-move) }
 .mn-cartao.alto .mn-barra i { background: var(--aviso) }
 .mn-cartao.alto .mn-num { color: var(--aviso) }
 .mn-cartao.cheio .mn-barra i { background: var(--perigo) }
 .mn-cartao.cheio .mn-num { color: var(--perigo) }
-.mn-duas { display: grid; gap: var(--item) }
-.mn-duas > span { display: flex; align-items: center; gap: var(--item); min-width: 0 }
-.mn-seta { display: inline-flex; color: var(--texto-2) }
+.mn-duas { align-self: center; display: grid; gap: var(--item) }
+.mn-linha { display: flex; align-items: center; gap: var(--item); min-width: 0 }
+.mn-seta { display: inline-flex; flex: none; color: var(--texto-2) }
 .mn-seta svg { width: 18px; height: 18px }
 .mn-vazio { height: auto; min-height: 120px; padding-bottom: var(--secao) }
-.mn-listas { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--secao); align-items: start }
-.vertical .mn-listas { grid-template-columns: minmax(0, 1fr); gap: var(--pad) }
-.mn-secao h3 { margin: 0 0 var(--item); font-size: var(--texto-sm); font-weight: 600; color: var(--texto-2) }
-.mn-lista { list-style: none; margin: 0; padding: 0 }
-.mn-proc { display: flex; align-items: center; gap: var(--icone); min-height: var(--linha); font-size: var(--texto-base); font-variant-numeric: tabular-nums }
-.mn-proc + .mn-proc { border-top: 1px solid var(--superficie-2) }
-.mn-nome { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--texto) }
-.mn-valor { flex: none; color: var(--texto-2); font-size: var(--texto-sm) }
-.mn-fim { flex: none; width: 88px; display: flex; justify-content: flex-end } /* a coluna do botão fica reservada: o valor não anda quando a linha não tem Encerrar */
-.mn-proc.confirmando { flex-wrap: wrap; padding: var(--icone) 0; background: none }
-.mn-pergunta { flex: 1 1 100%; color: var(--texto); font-size: var(--texto-sm) }
-.mn-acoes { display: flex; gap: var(--item); margin-left: auto }
-.mn-sim { background: var(--perigo); color: var(--fundo) }
-.mn-sim:disabled, .mn-acoes .btn:disabled { opacity: .5 }
-.mn-nada { margin: 0; color: var(--texto-2); font-size: var(--texto-sm) }
-.mn-proc.esq { gap: var(--pad) }
-.mn-proc.esq .barra { display: block; height: 10px }
