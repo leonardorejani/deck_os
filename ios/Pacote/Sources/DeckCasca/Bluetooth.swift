@@ -51,8 +51,11 @@ public final class GerenteBluetooth: @unchecked Sendable {
     private var geracao = 0
 
     #if canImport(CoreBluetooth)
-    public convenience init(cofre: Cofre, nomeDoIphone: String, log: @escaping @Sendable (String) -> Void = { _ in }) {
-        self.init(radio: RadioCentral(log: log), cofre: cofre, nomeDoIphone: nomeDoIphone, log: log)
+    /// Tudo que o Bluetooth anota vai também para o diário (Documents/bluetooth.log), além do `log` de quem criou.
+    public convenience init(cofre: Cofre, nomeDoIphone: String, diario: DiarioBluetooth = .padrao, log: @escaping @Sendable (String) -> Void = { _ in }) {
+        let dupla: @Sendable (String) -> Void = { log($0); diario.anotar($0) }
+        dupla("bluetooth: app aberto, diário iniciado")
+        self.init(radio: RadioCentral(log: dupla), cofre: cofre, nomeDoIphone: nomeDoIphone, log: dupla)
     }
     #endif
 
@@ -151,6 +154,8 @@ public final class GerenteBluetooth: @unchecked Sendable {
             var alvoAtual: String?
             var viaProcura = false
             tentativa += 1
+            radio.confiarNoNome(pareado.nomeMac)
+            log("bluetooth: tentativa \(tentativa) (id guardado \(pareado.idBluetooth.map { String($0.prefix(8)) } ?? "nenhum"), Mac pareado \"\(pareado.nomeMac)\", recusados \(recusados.count), rádio pronto=\(radio.pronto))")
             if let motivo = radio.indisponivel { situar(motivo) } else { situar("Procurando o Mac pelo Bluetooth. Tentativa \(tentativa).") }
             do {
                 let (id, fluxo, achadoPelaProcura) = try await conectarNoMac(pareado, excluindo: recusados)
@@ -160,6 +165,7 @@ public final class GerenteBluetooth: @unchecked Sendable {
                 do {
                     entrada = try await Task.detached { try EnlaceSeguro.entrar(fluxo, codigoAcesso: pareado.codigoAcesso) }.value
                 } catch {
+                    log("bluetooth: aperto de mão com \(id.prefix(8)) não passou: \(error)")
                     fluxo.fechar()
                     throw error
                 }
@@ -209,6 +215,7 @@ public final class GerenteBluetooth: @unchecked Sendable {
                 recusados = []
                 espera = Self.esperaSeNaoPareado
             } catch {
+                log("bluetooth: tentativa \(tentativa) falhou: \(error)")
                 espera = min(espera * 2, Self.esperaMaxima)
                 if let motivo = radio.indisponivel { situar(motivo) } else if !(error is CancellationError) {
                     situar("Não achei o Mac pelo Bluetooth. Tentando de novo. Tentativa \(tentativa).")
@@ -226,6 +233,7 @@ public final class GerenteBluetooth: @unchecked Sendable {
     private func conectarNoMac(_ pareado: Pareado, excluindo recusados: Set<String>) async throws -> (String, FluxoBytes, Bool) {
         if let id = pareado.idBluetooth {
             do { return (id, try await conectarComPrazo(id), false) } catch {
+                log("bluetooth: conexão direta no id guardado \(id.prefix(8)) falhou (\(error))")
                 // Sem o Mac no id guardado (endereço trocado, anúncio parado, fora de alcance): não fica esperando, procura o serviço.
                 if let motivo = radio.indisponivel { throw ErroPareamento.recusado(motivo) }
                 log("bluetooth: o Mac não respondeu no id guardado, procurando o serviço do Deck")
@@ -236,13 +244,16 @@ public final class GerenteBluetooth: @unchecked Sendable {
             return []
         }
         let prazo = Task { try? await Task.sleep(nanoseconds: UInt64(prazoProcura * 1_000_000_000)); busca.cancel() }
+        log("bluetooth: procurando o serviço do Deck por até \(Int(prazoProcura)) s")
         let achados = await busca.value
         prazo.cancel()
+        log("bluetooth: a procura terminou com \(achados.count) Mac(s): \(achados.map { "\($0.id.prefix(8)) \"\($0.nome)\" rssi=\($0.rssi)" })")
         guard !achados.isEmpty else { throw ErroPareamento.recusado("Nenhum Mac com o Deck por perto.") }
         let candidatos = achados.filter { !recusados.contains($0.id) }.sorted { $0.rssi > $1.rssi }
         guard let alvo = candidatos.first(where: { $0.id == pareado.idBluetooth }) ?? candidatos.first(where: { $0.nome == pareado.nomeMac }) ?? candidatos.first else {
             throw ErroSemCandidato.todosRecusaram
         }
+        log("bluetooth: escolhi \(alvo.id.prefix(8)) \"\(alvo.nome)\" para conectar")
         return (alvo.id, try await conectarComPrazo(alvo.id), true)
     }
 
