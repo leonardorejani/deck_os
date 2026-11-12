@@ -339,7 +339,7 @@ struct ArquivoDeInstalacao: Equatable, Sendable {
     var instaladoEm: Date?
 
     static var urlPadrao: URL {
-        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/Deck/renovacao.plist")
+        Variante.atual.pastaDeDados().appendingPathComponent("renovacao.plist")
     }
 
     static func ler(_ url: URL = urlPadrao) -> ArquivoDeInstalacao {
