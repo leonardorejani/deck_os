@@ -58,6 +58,7 @@ struct EsteMac: View {
                 }
             }
             GrupoSpotify(spotify: modelo.spotify)
+            GrupoMonitor(modelo: modelo)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .onAppear { abrirComMac.atualizar() }

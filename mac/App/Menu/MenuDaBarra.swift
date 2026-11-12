@@ -169,7 +169,7 @@ private struct BlocoLayout: View {
     var body: some View {
         BlocoMenu(rotulo: "Layout no iPhone") {
             HStack(spacing: Tema.Espaco.item) {
-                ForEach(["a", "b"], id: \.self) { c in
+                ForEach(["a", "b", "c"], id: \.self) { c in
                     Button { escolher(c) } label: {
                         VStack(spacing: Tema.Espaco.mini) {
                             MiniTela(composicao: c)
@@ -198,7 +198,7 @@ private struct MiniTela: View {
             let folga = Tema.Espaco.mini, vao = Tema.Espaco.micro
             let w = g.size.width - folga * 2, h = g.size.height - folga * 2
             Group {
-                if composicao == "a" { desenhoA(w, h, vao) } else { desenhoB(w, h, vao) }
+                if composicao == "a" { desenhoA(w, h, vao) } else if composicao == "c" { desenhoC(w, h, vao) } else { desenhoB(w, h, vao) }
             }
             .frame(width: w, height: h, alignment: .topLeading)
             .position(x: g.size.width / 2, y: g.size.height / 2)
@@ -225,6 +225,22 @@ private struct MiniTela: View {
                 caixa().frame(width: tecla)
             }
             .frame(height: fr * 1.1)
+        }
+    }
+
+    /// Relógio e mês: em cima o relógio à esquerda e o calendário à direita, embaixo a fileira de teclas.
+    private func desenhoC(_ w: CGFloat, _ h: CGFloat, _ vao: CGFloat) -> some View {
+        let fr = (h - vao) / 2.1
+        let col = (w - vao) / 2
+        let tecla = (w - vao * 6 - 2) / 6
+        return VStack(spacing: vao) {
+            HStack(spacing: vao) { caixa(Tema.Cor.texto3).frame(width: col); caixa().frame(width: col) }.frame(height: fr * 1.1)
+            HStack(spacing: vao) {
+                ForEach(0..<5, id: \.self) { _ in caixa().frame(width: tecla) }
+                caixa().frame(width: 2)
+                caixa().frame(width: tecla)
+            }
+            .frame(height: fr * 0.9)
         }
     }
 

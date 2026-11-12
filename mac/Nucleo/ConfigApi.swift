@@ -9,6 +9,7 @@ struct ConfigPublica: Codable, Equatable, Sendable {
     var contas: [ContaIA]
     var blocos: Blocos
     var whatsapp: ConfigWhatsApp
+    var monitor: ConfigMonitor
     var nomeMac: String
     var porta: Int
 }
@@ -16,7 +17,7 @@ struct ConfigPublica: Codable, Equatable, Sendable {
 extension Config {
     var publica: ConfigPublica {
         ConfigPublica(versao: versao, perfis: perfis, perfilAtivo: perfilAtivo, comp: comp, contas: contas,
-                      blocos: blocos, whatsapp: whatsapp, nomeMac: nomeMac, porta: porta)
+                      blocos: blocos, whatsapp: whatsapp, monitor: monitor, nomeMac: nomeMac, porta: porta)
     }
 
     /// Lê o corpo do PUT /api/config. Corpo sem alguma das chaves de uma config completa é recusado:
@@ -37,6 +38,8 @@ extension Config {
         // o padrão não pode apagar o que o usuário escolheu.
         var completa = recebida
         if json["whatsapp"] == nil { completa.whatsapp = atual.whatsapp }
+        // Mesmo caso do monitor (12/11/2026): painel velho não conhece a chave, e o padrão não apaga a escolha.
+        if json["monitor"] == nil { completa.monitor = atual.monitor }
         return aplicar(recebida: completa, sobre: atual)
     }
 

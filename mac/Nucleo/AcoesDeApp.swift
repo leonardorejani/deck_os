@@ -36,8 +36,11 @@ enum IdsDeAcao {
     static let calendarioHoje = "calendario-hoje"
     static let calendarioDia = "calendario-dia"
     static let abrirArquivo = "abrir-arquivo"
+    static let reuniaoMicrofone = "reuniao-microfone"
+    static let reuniaoCamera = "reuniao-camera"
 
-    static let todos: Set<String> = [mailCaixa, mailNovo, link, gmail, notasPasta, calendarioHoje, calendarioDia, abrirArquivo]
+    static let todos: Set<String> = [mailCaixa, mailNovo, link, gmail, notasPasta, calendarioHoje, calendarioDia, abrirArquivo,
+                                     reuniaoMicrofone, reuniaoCamera]
 }
 
 // MARK: - AppleScript
@@ -211,8 +214,18 @@ struct CatalogoDeAcoes: Sendable {
         default: break
         }
         if app.app.navegador { lista += [Self.link, Self.gmail] }
+        // Mutar e câmera: o Zoom, o Teams e os navegadores que o Deck sabe consultar (para a aba do Meet).
+        if Self.temControleDeReuniao(app.app) { lista += [Self.reuniaoMicrofone, Self.reuniaoCamera] }
         if lista.isEmpty, app.abreArquivos { lista = [Self.abrirArquivo] }
         return lista
+    }
+
+    static let reuniaoMicrofone = AcaoDisponivel(id: IdsDeAcao.reuniaoMicrofone, nome: "Mutar ou desmutar o microfone da reunião", entrada: "nenhuma")
+    static let reuniaoCamera = AcaoDisponivel(id: IdsDeAcao.reuniaoCamera, nome: "Ligar ou desligar a câmera da reunião", entrada: "nenhuma")
+
+    static func temControleDeReuniao(_ app: AppInstalado) -> Bool {
+        ControleDeReuniao.alvo(app: app.valor) != nil
+            && (NavegadorWeb.todos.contains { $0.idBundle == app.bundle } || ["us.zoom.xos", "com.microsoft.teams2", "com.microsoft.teams"].contains(app.bundle))
     }
 
     static let link = AcaoDisponivel(id: IdsDeAcao.link, nome: "Abrir um endereço", entrada: "texto",
@@ -299,6 +312,10 @@ extension ExecutorAcoes {
         case IdsDeAcao.calendarioDia:
             guard Roteador.dataValida(escolha) else { return "O dia da tecla \"\(tecla.nome)\" não é válido. Use AAAA-MM-DD" }
             return rodarScript(AppleScript.diaDoCalendario, [escolha], app: "Calendário", naoAchou: "Não consegui abrir o Calendário")
+        case IdsDeAcao.reuniaoMicrofone:
+            return controlarReuniao(tecla, .microfone)
+        case IdsDeAcao.reuniaoCamera:
+            return controlarReuniao(tecla, .camera)
         case IdsDeAcao.abrirArquivo:
             guard let caminho = Enderecos.caminho(escolha) else {
                 return "O caminho da tecla \"\(tecla.nome)\" precisa começar com / ou ~"

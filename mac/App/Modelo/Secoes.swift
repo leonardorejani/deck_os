@@ -121,7 +121,13 @@ enum TextosDoMenu {
         return iphone.map { "Sincronizado com o \($0.nome)" } ?? "Nenhum iPhone pareado"
     }
 
-    static func composicao(_ c: String) -> String { c == "a" ? "Relógio em cima" : "Deck 3 x 3" }
+    static func composicao(_ c: String) -> String {
+        switch c {
+        case "a": return "Relógio em cima"
+        case "c": return "Relógio e mês"
+        default: return "Deck 3 x 3"
+        }
+    }
 }
 
 /// Primeira vez do app: quem já tinha config.json (usa o Deck há tempo) não passa pela configuração

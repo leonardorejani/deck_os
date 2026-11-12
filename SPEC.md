@@ -37,7 +37,7 @@ do calendário vem do dado, `theme-color` é hex por regra da própria tatile).
 Deitado 932 x 430, área segura de 59 em cada lateral e 21 embaixo. Em pé 430 x 932, com 59 em
 cima e 34 embaixo. Ajusta a outros iPhones pela largura, mas é desenhada e conferida no 15 Pro Max.
 
-Tudo numa tela, sem navegação. As duas composições ficam: o Leonardo alterna nos Ajustes do Mac
+Tudo numa tela, sem navegação. As composições ficam: o Leonardo alterna pelo menu da barra do Mac
 (item 9a), e o iPhone só mostra.
 
 - **A, relógio em cima:** duas linhas que cruzam as colunas. Em cima, relógio e data à esquerda e
@@ -45,6 +45,10 @@ Tudo numa tela, sem navegação. As duas composições ficam: o Leonardo alterna
   as linhas na mesma régua (mesma letra, altura e separador). Depois, uma fileira de 6 teclas.
 - **B, deck ao lado:** à esquerda relógio, data, uso de IA numa linha, Spotify e sessões. À direita
   uma grade de 3 x 3 teclas.
+- **C, relógio e mês (12/11/2026):** à esquerda o relógio com as horas em cima e os minutos embaixo (as
+  mesmas placas do "relógio grande" da A, sem os dois pontos), à direita o calendário do mês de hoje com o dia
+  marcado, e embaixo a mesma fileira de teclas da A. Sem player, sem sessões e sem uso. Tocar no mês abre a
+  agenda. A e B continuam como estavam.
 
 **Teclas sempre centralizadas, carrossel quando passam de uma página.**
 - **A:** a fileira tem três partes: o carrossel de apps (5 por página), uma divisória e a tecla
@@ -75,6 +79,7 @@ da área segura com 4 ou com 12 teclas, nas duas composições).
 | Uso da semana | uma barra por conta, com o ícone do serviço: Claude `leo`, Claude `equipe` e Codex. Só o limite semanal (o Claude não tem mais a janela de 5 h, e o Codex só registra a semana: 5.694 de 5.694 registros conferidos em 10/11/2026). Ao lado, quando aquela conta renova ("sex 14h"), porque cada conta renova num dia. Amarelo a partir de 70%, vermelho a partir de 90%, sempre com o número | nada na v1 |
 | Spotify | capa, faixa, artista com o ícone do Spotify, tempo decorrido e total, anterior / tocar-pausar / próxima. Fundo com um brilho das duas cores dominantes da capa (o Mac tira as cores da arte e manda junto) | capa ou nome abre o player em tela cheia (seção 5). Botões controlam a música. **Arrastar a barra de tempo pula a música**: a área de arrasto é alta, mas fica numa linha só dela, abaixo dos botões. Nas pontas da barra, **aleatório** e **repetir** (verdes quando ligados), só quando o Mac manda o estado deles |
 | Sessões esperando | com o ícone do Claude: nome, pergunta e há quanto tempo espera (amarelo depois de 1 h), das 3 mais recentes | tocar em qualquer ponto do bloco (linha ou título) abre a tela de sessões, um cartão por sessão (seção 5). A linha é pequena demais para ser um alvo separado |
+| Monitor do Mac | uma linha pequena com processador, memória, bateria (some em Mac sem bateria) e rede (baixando e enviando). Nasce desligado. Nos Ajustes do Mac, "Este Mac", a pessoa liga o bloco e escolhe quais itens aparecem. Sem item escolhido o bloco some. Em A e B ele toma uma linha embaixo da data (o relógio cede a altura, e a B mostra uma sessão só), na C fica embaixo das placas | nada |
 | Teclas | ícone, nome, LED, selo de não lidas. Na Agenda, o horário do próximo compromisso centralizado no topo, só o texto, sem pílula. Toda tecla reserva no topo o espaço do selo, então os ícones ficam na mesma altura com ou sem selo | toque executa, segurar organiza |
 
 **Sem música tocando:** o player sai e as sessões crescem até o topo, ocupando o lugar dele (até 7
@@ -1004,6 +1009,33 @@ Teste do Deck 1.0 (12/11/2026, frente iphone-bugs), dito pelo Leonardo:
     com senha (qualquer esquema, não só http), par chave/valor em JSON com aspas e chave com underscore (`sk_live_...`). E
     "fácil de ler" inclui bloco de código com cerca (a cerca some e o comando fica como está), link, itálico, `__forte__` e
     citação sem a marcação.
+
+35. Mutar e ligar a câmera da reunião por tecla (12/11/2026). Palavras dele: "isso do controle em google meet é legal, pode fazer tb".
+    - Nova ação de tecla de app (não é tipo novo, aparece no editor como as outras): "Mutar ou desmutar o microfone da reunião" e
+      "Ligar ou desligar a câmera da reunião", para o Zoom, o Teams e os navegadores que o Deck já consulta (Safari, Chrome, Arc,
+      Brave e Edge, para o Meet). O Mac aperta o atalho do app: Meet Cmd+D e Cmd+E, Zoom Cmd+Shift+A e Cmd+Shift+V, Teams
+      Cmd+Shift+M e Cmd+Shift+O. No Meet, a aba da sala (meet.google.com/abc-defg-hij, não a página inicial) vem para a frente
+      antes. Precisa de Acessibilidade (para teclar) e, no Meet, da Automação do navegador (para achar a aba). Ambas são pedidas
+      pelo macOS na hora do uso (invariante 12).
+    - O Deck só ALTERNA. Ele não mostra se o microfone está mutado: Meet e Teams não entregam isso sem espiar a tela a cada
+      segundo (Acessibilidade) ou sem o navegador liberar JavaScript por Apple Events, e o Zoom só pela leitura do menu dele.
+      Nada disso é pedido em lista de cara, então a tecla não finge saber. Se o Leonardo quiser o estado, é uma decisão nova.
+    - Zoom e Teams só têm esses atalhos com a reunião rolando e a janela na frente. Fechado, a tecla avisa "O Zoom não está
+      aberto" e não abre o app só para mutar.
+
+36. Monitor do Mac, escolhendo o que aparece (12/11/2026). Palavras dele: "monitor é interessante, mas teriamos que ter como
+    configurar o que queremos que apareca na tela. nao tem mais espaco."
+    - Bloco novo e pequeno, desligado por padrão (quem já usa o Deck não ganha nada novo na tela). Nos Ajustes do Mac, em
+      "Este Mac", grupo "Monitor do Mac": uma chave para mostrar no iPhone e uma para cada item (processador, memória, bateria,
+      rede). Sem item ligado o bloco some. O Mac só mede o que está ligado.
+    - Estado: `Estado.monitor` com `itens` (o que desenhar) e as medidas. Taxa de processador e de rede precisa de duas
+      leituras, então a primeira mostra "-". Bateria some sozinha em Mac sem bateria. Memória é aproximada (ativa, fixa e
+      comprimida, como o Monitor de Atividade soma).
+
+37. Composição C, relógio e mês (12/11/2026). Pedido da frente meet-monitor-tela: relógio à esquerda com a hora em cima e os
+    minutos embaixo, e o calendário do mês à direita, escolhível como as composições que já existem. `comp` aceita "a", "b" e
+    "c". Escolhe-se no menu da barra do Mac, ao lado das outras. A configuração inicial (primeira vez) ainda mostra só A e B,
+    porque as fotos dela são das duas antigas.
 
 ## 14. Melhorias (10/11/2026)
 

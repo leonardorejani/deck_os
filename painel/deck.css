@@ -89,11 +89,11 @@ button.cartao { font: inherit; color: inherit; text-align: left; border: 0; curs
 .uso-nome > span { overflow: hidden; text-overflow: ellipsis }
 .uso-nome small { color: var(--texto-2); font-size: var(--texto-xs) }
 .medidor { display: grid; grid-template-columns: 1fr 36px; gap: var(--item); align-items: center; font-size: var(--texto-xs); color: var(--texto-2); font-variant-numeric: tabular-nums }
-.medidor .trilho, .uso-tira .mini, .progresso .trilho { height: 6px; border-radius: var(--raio-pilula); background: var(--superficie-2); overflow: hidden; display: block }
-.medidor .trilho i, .uso-tira .mini i, .progresso .trilho i { display: block; height: 100%; border-radius: var(--raio-pilula); background: var(--texto-2) }
+.medidor .trilho, .uso-tira .mini, .monitor-tira .mini, .progresso .trilho { height: 6px; border-radius: var(--raio-pilula); background: var(--superficie-2); overflow: hidden; display: block }
+.medidor .trilho i, .uso-tira .mini i, .monitor-tira .mini i, .progresso .trilho i { display: block; height: 100%; border-radius: var(--raio-pilula); background: var(--texto-2) }
 .medidor b { font-weight: 600; color: var(--texto); text-align: right }
-.medidor.alto .trilho i, .uso-tira .alto .mini i { background: var(--aviso) }
-.medidor.alto b, .uso-tira .alto, .uso-tira .alto b { color: var(--aviso) }
+.medidor.alto .trilho i, .uso-tira .alto .mini i, .monitor-tira .alto .mini i { background: var(--aviso) }
+.medidor.alto b, .uso-tira .alto, .uso-tira .alto b, .monitor-tira .alto, .monitor-tira .alto b { color: var(--aviso) }
 .medidor.cheio .trilho i { background: var(--perigo) }
 .medidor.cheio b { color: var(--perigo) }
 .uso-tira { display: flex; gap: var(--icone); flex-wrap: nowrap; overflow: hidden; font-size: var(--texto-xs); color: var(--texto-2); font-variant-numeric: tabular-nums; margin-top: var(--icone) }
@@ -203,6 +203,40 @@ button.cartao { font: inherit; color: inherit; text-align: left; border: 0; curs
 .comp-b .capa { --lado: 80px }
 .comp-b .faixa { font-size: var(--texto-base) }
 .comp-b .sessoes .sessao:nth-of-type(n+4) { display: none }
+
+/* ---------- Monitor do Mac (bloco pequeno, só aparece com ele ligado nos Ajustes do Mac) ---------- */
+.monitor-tira { display: flex; flex-wrap: wrap; gap: var(--item) var(--icone); font-size: var(--texto-xs); color: var(--texto-2); font-variant-numeric: tabular-nums; margin-top: var(--icone); min-width: 0 }
+.monitor-tira > span { display: inline-flex; align-items: center; gap: var(--item); white-space: nowrap }
+.monitor-tira .rot-m { display: inline-flex; align-items: center }
+.monitor-tira .rot-m svg { width: 12px; height: 12px }
+.monitor-tira .mini { width: 28px }
+.monitor-tira b { color: var(--texto); font-weight: 600 }
+.monitor-tira .cheio .mini i { background: var(--perigo) }
+.monitor-tira .cheio, .monitor-tira .cheio b { color: var(--perigo) }
+.vertical .monitor-tira { justify-content: center; flex-wrap: nowrap; gap: var(--icone); margin-top: var(--item) }
+.vertical :is(.comp-a, .comp-b).com-monitor:not(.relogio-grande) .placa { --h: 84px; --w: 59px } /* o monitor toma uma linha: as placas cedem a altura dela */
+.vertical .monitor-tira .mini { display: none } /* em pé o monitor é uma linha só, com o número */
+/* A e B não têm altura sobrando: o monitor vira uma linha só, sem as barrinhas, e o relógio cede o que ela toma */
+.monitor-tira { flex-wrap: nowrap; gap: var(--item); margin-top: var(--item); overflow: hidden }
+.monitor-tira .mini { display: none }
+.horizontal .comp-a:not(.comp-c).com-monitor:not(.relogio-grande) .placa { --h: 92px; --w: 64px }
+.horizontal .comp-b.com-monitor:not(.relogio-grande) .placa { --h: 84px; --w: 58px }
+.horizontal .comp-b.com-monitor:not(.relogio-grande) .sessoes .sessao ~ .sessao { display: none } /* a linha do monitor toma o lugar da segunda sessão: melhor uma inteira que duas cortadas */
+.monitor-tira > span { gap: 4px }
+.horizontal .comp-a.comp-c.relogio-grande .relogio-linha { grid-template-rows: auto minmax(0, 1fr) auto } /* na C o monitor tem a linha dele embaixo das placas, e elas cedem a altura dela */
+.horizontal .comp-c.com-monitor { --placa-h: 98px }
+
+/* ---------- Composição C: relógio à esquerda (horas sobre minutos) e o mês à direita ---------- */
+/* Usa a grade e a fileira de teclas da A, com o relógio no desenho do "relógio grande" (deck.js marca sem-musica, sem-sessoes e sem-uso). */
+.comp-c .mes-c { grid-area: 1 / 2 / 3 / 3; display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: var(--item); align-content: stretch; border: 0; font: inherit; color: var(--texto); text-align: center; cursor: pointer }
+.comp-c .mes-c-nome { font-size: var(--texto-xl); font-weight: 700; color: var(--cal-vermelho); text-transform: uppercase; text-align: left; line-height: 1.2 }
+.comp-c .sb-semana { font-size: var(--texto-xs); color: var(--texto-2) }
+.comp-c .mes-c-dias { display: grid; grid-template-columns: repeat(7, 1fr); grid-auto-rows: minmax(0, 1fr); align-items: center; justify-items: center; font-size: var(--texto-sm); font-weight: 600; font-variant-numeric: tabular-nums; min-height: 0 }
+.comp-c .mes-c-dias span { display: grid; place-items: center; min-width: 28px; height: 28px; border-radius: 50% }
+.comp-c .mes-c-dias .fds { color: var(--texto-2) }
+.comp-c .mes-c-dias .hoje { background: var(--cal-vermelho); color: var(--destaque-bloco-texto) }
+.vertical .comp-c .mes-c-dias { grid-auto-rows: 30px }
+.vertical .comp-c.relogio-grande.sem-uso.sem-sessoes.sem-musica { --placa-h: 84px } /* o mês divide a coluna com o relógio: as placas não podem ter os 200 px da A sem nada ao lado */
 
 /* ---------- Em pé ---------- */
 .vertical .comp-a, .vertical .comp-b { display: flex; flex-direction: column; gap: var(--grade); padding-top: var(--item) }
