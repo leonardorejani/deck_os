@@ -12,7 +12,7 @@ struct ErroChaveiro: Error, Equatable { var codigo: OSStatus }
 
 /// O Chaveiro do Mac (Security, kSecClassGenericPassword). Um item por conta do Deck.
 struct Chaveiro: CofreDeToken {
-    var servico = "com.leonardorejani.deck.token-claude"
+    var servico = Variante.atual.servicoDoChaveiro("token-claude")
 
     private func consulta(_ conta: String) -> [String: Any] {
         [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: servico, kSecAttrAccount as String: conta]

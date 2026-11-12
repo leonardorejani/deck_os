@@ -212,7 +212,7 @@ final class JanelaDePareamento: @unchecked Sendable {
 /// O log do Deck em ~/Library/Logs/Deck/deck.log (o app não tem terminal). Guarda só o que o núcleo escreve
 /// sobre o cabo e o Bluetooth, que nunca leva código de acesso. Passou de 512 KB, o arquivo velho vira deck.log.1.
 final class LogDoDeck: @unchecked Sendable {
-    static let padrao = LogDoDeck(arquivo: FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/Deck/deck.log"))
+    static let padrao = LogDoDeck(arquivo: Variante.atual.pastaDeLog().appendingPathComponent("deck.log"))
 
     private let arquivo: URL
     private let limite: Int

@@ -897,6 +897,18 @@ Ajustes de UX (11/11/2026, teste do Leonardo no iPhone):
       para travar), e a saída do perfil (banner) só aparece se o comando falhar, pela última linha como antes.
     - Comando que não existe de verdade (status 127) avisa "Comando não encontrado: <nome>". Só a tecla de comando muda:
       os comandos internos do Deck (osascript, open, shortcuts) seguem no zsh puro, de propósito.
+32. Deck Bancada (12/11/2026). Pedido da frente deck-bancada: testar as telas do Mac sem tocar no Deck instalado (decisão da
+    frente, sem citação dele). É o mesmo app do Mac com outro nome e identificador (`com.leonardorejani.deck.bancada`), ícone com a faixa laranja "BANCADA" e a barra de
+    menus com a diagonal pintada. Fica em `~/Applications/Deck Bancada.app`, instalado por `scripts/bancada.sh`, que
+    nunca abre o app. Decidido:
+    - Dados próprios: config e certificados em `~/Library/Application Support/Deck Bancada/`, log em
+      `~/Library/Logs/Deck Bancada/`, porta 4791 e serviços de Chaveiro com o prefixo `com.leonardorejani.deck.bancada.`.
+      Nunca lê nem grava os itens do Deck real, então nunca pede a senha dele.
+    - Primeira abertura: copia o `config.json` do Deck real (só leitura) com a porta trocada para 4791. Se a bancada já
+      tem config, não mexe. Os certificados não vêm junto, a bancada cria os dela.
+    - Sem iPhone e sem rede: nada de cabo, Bluetooth nem renovação do app do iPhone, e o servidor escuta só no
+      loopback, então não aparece para outros aparelhos.
+    - Código em `mac/Nucleo/Variante.swift`. Testes: `mac/Testes/VarianteTestes.swift` e `scripts/teste/bancada.test.sh`.
 
 33. Spotify fechou e abriu de novo, o player volta (12/11/2026). Palavras dele: "Quando o spotify fechou no pc ele sumiu do
     app, mas quando foi reaberto nao apareceu de volta. mesmo dando play".

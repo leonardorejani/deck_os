@@ -50,6 +50,7 @@ struct PedidosDoMac: PedidosDeAcesso {
     }
 
     func pedir(_ acesso: AcessoMac) async -> EstadoDoAcesso {
+        if (acesso == .bluetooth || acesso == .redeLocal) && !Variante.atual.pedeBluetoothERedeLocal { return .naoPedido }
         switch acesso {
         case .calendarios:
             let loja = EKEventStore()

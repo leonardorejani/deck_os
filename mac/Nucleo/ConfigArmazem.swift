@@ -6,8 +6,7 @@ struct ArmazemConfig {
     var nomeMac: String
 
     static var urlPadrao: URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/Deck/config.json")
+        Variante.atual.pastaDeDados().appendingPathComponent("config.json")
     }
 
     init(url: URL = ArmazemConfig.urlPadrao, nomeMac: String = "Mac") {
