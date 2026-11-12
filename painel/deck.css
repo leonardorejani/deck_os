@@ -306,18 +306,30 @@ button.cartao { font: inherit; color: inherit; text-align: left; border: 0; curs
 .mensagens p small { display: block; color: var(--texto-2); font-size: var(--texto-xs) }
 .mensagens .btn { justify-self: start }
 
-/* sessões (folha): um cartão por sessão, e a sessão aberta com a pergunta inteira */
+/* sessões (folha): um cartão por sessão, e a sessão aberta com o pedido em destaque e o contexto embaixo */
 .grade-sessoes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--grade) }
 .vertical .grade-sessoes { grid-template-columns: minmax(0, 1fr) }
-.cartao-sessao { display: grid; gap: var(--micro-gap); align-content: start; min-width: 0; font: inherit; color: inherit; text-align: left; background: var(--superficie); box-shadow: var(--sombra-1); border: 0; border-radius: var(--raio-card); padding: var(--pad); cursor: pointer; transition: scale var(--mov-rapido) var(--curva-move) }
+.cartao-sessao { position: relative; display: grid; gap: var(--micro-gap); align-content: start; min-width: 0; font: inherit; color: inherit; text-align: left; background: var(--superficie); box-shadow: var(--sombra-1); border: 0; border-radius: var(--raio-card); padding: var(--pad) calc(var(--pad) + var(--item)) var(--pad) calc(var(--pad) + var(--item)); cursor: pointer; overflow: hidden; transition: scale var(--mov-rapido) var(--curva-move) }
+.cartao-sessao::before { content: ""; position: absolute; inset: var(--pad) auto var(--pad) 0; width: 4px; border-radius: 0 var(--raio-pilula) var(--raio-pilula) 0; background: var(--destaque) }
+.cartao-sessao.velha::before { background: var(--aviso) }
 .cartao-sessao:active { scale: .98 }
-.cartao-sessao b { font-size: var(--texto-base); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
-.cartao-sessao small { color: var(--texto-2); font-size: var(--texto-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
-.cartao-sessao p { overflow-wrap: anywhere; margin: var(--item) 0 0; color: var(--texto-2); font-size: var(--texto-sm); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden }
-.detalhe-sessao { background: var(--superficie); border-radius: var(--raio-card); padding: var(--pad) }
-.detalhe-sessao .pergunta { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; font-size: var(--texto-md); line-height: 1.5 }
-.detalhe-sessao .btn { margin-top: var(--pad) }
-.detalhe-sessao .nota-sessao { margin: var(--pad) 0 0; color: var(--texto-2); font-size: var(--texto-sm) }
+.cartao-sessao b { font-size: var(--texto-md); line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.cartao-sessao small { color: var(--texto-2); font-size: var(--texto-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums }
+.cartao-sessao.velha small { color: var(--aviso) }
+.cartao-sessao p { overflow-wrap: anywhere; margin: var(--item) 0 0; color: var(--texto); font-size: var(--texto-sm); line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden }
+.detalhe-sessao { display: grid; gap: var(--secao); padding-bottom: var(--secao) }
+.detalhe-sessao .rotulo { display: block; margin-bottom: var(--item); color: var(--texto-2); font-size: var(--texto-xs); font-weight: 600; letter-spacing: .04em; text-transform: uppercase }
+.detalhe-sessao .pede { background: var(--destaque-suave); border-radius: var(--raio-card); padding: var(--pad) var(--pad) var(--pad) calc(var(--pad) + var(--item)); position: relative; overflow: hidden }
+.detalhe-sessao .pede::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 4px; background: var(--destaque) }
+.detalhe-sessao .pede .rotulo { color: var(--destaque) }
+.detalhe-sessao .pergunta { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; font-size: var(--texto-md); font-weight: 600; line-height: 1.5 }
+.detalhe-sessao .sugestao { margin-top: var(--pad); padding-top: var(--pad); border-top: 1px solid var(--borda) }
+.detalhe-sessao .sugestao p { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; font-size: var(--texto-sm); line-height: 1.5; color: var(--texto) }
+.detalhe-sessao .btn { justify-self: stretch }
+.detalhe-sessao .contexto { background: var(--superficie); border-radius: var(--raio-card); padding: var(--pad) }
+.detalhe-sessao .texto-contexto { display: grid; gap: var(--icone) }
+.detalhe-sessao .texto-contexto p { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; font-size: var(--texto-sm); line-height: 1.55; color: var(--texto) }
+.detalhe-sessao .nota-sessao { margin: 0; color: var(--texto-2); font-size: var(--texto-sm); text-align: center }
 #f-sessoes > footer { border-top: 0; padding: var(--item) 0 calc(var(--item) + var(--seguro-baixo)) }
 #f-sessoes.detalhe .corpo { padding-bottom: 0 }
 

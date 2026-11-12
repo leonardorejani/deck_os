@@ -105,19 +105,14 @@ enum LogicaTeclas {
 
 /// Texto da combinação ("ctrl+opt+cmd+k") e o nome que cada peça mostra no gravador.
 enum CombinacaoEmTexto {
-    static let nomesDosModificadores: [String: String] = ["ctrl": "⌃ control", "opt": "⌥ option", "cmd": "⌘ command", "shift": "⇧ shift"]
+    static let nomesDosModificadores: [String: String] = ["ctrl": "⌃ control", "opt": "⌥ option", "cmd": "⌘ command", "shift": "⇧ shift", "fn": "fn"]
 
     static func pecas(_ valor: String) -> [String] {
         valor.split(separator: "+").map { String($0) }.map { nomesDosModificadores[$0] ?? $0.uppercased() }
     }
 
-    /// Nome da tecla a partir do código virtual do macOS, o inverso de `Teclas.codigos` (o primeiro nome em inglês).
-    static func nome(doCodigo codigo: UInt16) -> String? {
-        let preferidos = ["return", "left", "right", "down", "up", "space"]
-        let candidatos = Teclas.codigos.filter { $0.value == codigo }.map(\.key)
-        if let p = preferidos.first(where: candidatos.contains) { return p }
-        return candidatos.min { ($0.count, $0) < ($1.count, $1) }
-    }
+    /// Nome da tecla a partir do código virtual do macOS (mora no núcleo, junto da tabela de códigos).
+    static func nome(doCodigo codigo: UInt16) -> String? { Teclas.nome(doCodigo: codigo) }
 
     enum Resultado: Equatable {
         case cancelou
@@ -132,9 +127,13 @@ enum CombinacaoEmTexto {
         if codigo == 53 { return .cancelou }
         let somenteModificador: Set<UInt16> = [54, 55, 56, 57, 58, 59, 60, 61, 62, 63]
         if somenteModificador.contains(codigo) { return .ignorar }
-        let mods = [controle ? "ctrl" : nil, opcao ? "opt" : nil, comando ? "cmd" : nil, shift ? "shift" : nil].compactMap { $0 }
-        if mods.isEmpty { return .faltaControle }
-        guard let base = nome(doCodigo: codigo) else { return .ignorar }
-        return .gravou((mods + [base]).joined(separator: "+"))
+        if !controle && !opcao && !comando && !shift { return .faltaControle }
+        var mods: Modificadores = []
+        if controle { mods.insert(.controle) }
+        if opcao { mods.insert(.opcao) }
+        if comando { mods.insert(.comando) }
+        if shift { mods.insert(.shift) }
+        guard let base = nome(doCodigo: codigo), let texto = Teclas.escrever(modificadores: mods, tecla: base) else { return .ignorar }
+        return .gravou(texto)
     }
 }

@@ -16,12 +16,16 @@ struct ExecutorAcoes: Sendable {
     let limiteSegundos: Int
     /// Com a origem do WhatsApp em "web", a tecla do WhatsApp abre o WhatsApp Web em vez do app. Nil: sempre o app.
     let whatsappWeb: (@Sendable () -> AberturaWhatsApp)?
+    /// Shell em que a tecla de comando roda (o de login do usuário, com o perfil dele carregado).
+    let shellDoUsuario: @Sendable () -> String
 
     init(shell: Executor,
          temAcessibilidade: @escaping @Sendable () -> Bool = { AcoesSistema.temAcessibilidade() },
          enviarTecla: @escaping @Sendable (Combinacao) -> Void = { AcoesSistema.enviar($0) },
          limiteSegundos: Int = ExecutorAcoes.limitePadrao,
-         whatsappWeb: (@Sendable () -> AberturaWhatsApp)? = nil) {
+         whatsappWeb: (@Sendable () -> AberturaWhatsApp)? = nil,
+         shellDoUsuario: @escaping @Sendable () -> String = { Shell.doUsuario() }) {
+        self.shellDoUsuario = shellDoUsuario
         self.limiteSegundos = limiteSegundos
         self.whatsappWeb = whatsappWeb
         self.shell = shell
@@ -59,11 +63,29 @@ struct ExecutorAcoes: Sendable {
     }
 
     private func rodarComando(_ linha: String) -> String? {
-        let r = shell.rodar(Shell.limitado(linha, segundos: limiteSegundos))
+        let r = shell.rodar(Shell.limitadoNoPerfil(linha, segundos: limiteSegundos, shell: shellDoUsuario()))
         if r.status == 0 { return nil }
+        if r.status == 127 { return Self.erroComandoInexistente(r.saida) }
         if r.status == Self.statusTempoEsgotado { return "O comando demorou mais de \(limiteSegundos) segundos e foi interrompido" }
         let ultima = Self.ultimaLinha(r.saida)
         return ultima.isEmpty ? "O comando falhou" : "O comando falhou: \(ultima)"
+    }
+
+    /// 127 é "comando não encontrado" em qualquer shell. Extrai o nome da mensagem do zsh/bash/fish.
+    static func erroComandoInexistente(_ saida: String) -> String {
+        let ultima = ultimaLinha(saida)
+        let marca = "command not found"
+        guard ultima.localizedCaseInsensitiveContains(marca) else {
+            return ultima.isEmpty ? "O comando falhou" : "O comando falhou: \(ultima)"
+        }
+        // zsh: "zsh:1: command not found: mudar". bash: "bash: mudar: command not found". fish: "fish: Unknown command: mudar".
+        var nome = ""
+        if let r = ultima.range(of: marca + ":", options: .caseInsensitive) {
+            nome = String(ultima[r.upperBound...]).trimmingCharacters(in: .whitespaces)
+        } else if let r = ultima.range(of: ": " + marca, options: .caseInsensitive) {
+            nome = String(ultima[..<r.lowerBound]).split(separator: ":").last.map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
+        }
+        return nome.isEmpty ? "Comando não encontrado" : "Comando não encontrado: \(nome)"
     }
 
     private func rodarAtalho(_ nome: String) -> String? {
