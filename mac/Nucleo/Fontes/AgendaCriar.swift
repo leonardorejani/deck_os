@@ -157,7 +157,7 @@ struct NovoCompromisso: Equatable, Sendable {
         return (i, i.addingTimeInterval(3600))
     }
 
-    /// Quando o alerta toca. Sempre uma data absoluta, para valer igual no evento e no lembrete.
+    /// Quando o alerta toca, como data. Vale para o lembrete, que não tem alarme relativo.
     func dataDoAlerta(fuso: TimeZone = .current) -> Date? {
         guard let alertaMin, let d = datas(fuso: fuso) else { return nil }
         if diaTodo {
@@ -166,6 +166,13 @@ struct NovoCompromisso: Equatable, Sendable {
             return nove.addingTimeInterval(-Double(alertaMin) * 60)
         }
         return d.inicio.addingTimeInterval(-Double(alertaMin) * 60)
+    }
+
+    /// O mesmo alerta, em segundos a partir do início do evento (negativo = antes). No evento o Calendário
+    /// mostra "15 minutos antes" e o alerta acompanha o horário se a pessoa mudar o evento depois.
+    func deslocamentoDoAlerta(fuso: TimeZone = .current) -> TimeInterval? {
+        guard let a = dataDoAlerta(fuso: fuso), let d = datas(fuso: fuso) else { return nil }
+        return a.timeIntervalSince(d.inicio)
     }
 }
 
@@ -263,7 +270,7 @@ struct CriadorEventKit: CriadorDeAgenda {
                 e.isAllDay = novo.diaTodo
                 e.startDate = datas.inicio
                 e.endDate = datas.fim
-                if let a = novo.dataDoAlerta() { e.addAlarm(EKAlarm(absoluteDate: a)) }
+                if let o = novo.deslocamentoDoAlerta() { e.addAlarm(EKAlarm(relativeOffset: o)) }
                 try loja.save(e, span: .thisEvent, commit: true)
             }
             return .success(())

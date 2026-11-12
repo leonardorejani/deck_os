@@ -918,6 +918,9 @@ Lembretes, podendo marcar um padrão guardado na config (também ajustável no M
 deixa de ser só leitura, e o Deck passa a gravar nela, só pela rota autenticada de criar e só o que a pessoa pediu
 (nunca altera nem apaga evento existente). O Deck passa a pedir acesso aos Lembretes (full access), na hora em que a
 pessoa escolhe Lembretes pela primeira vez.
+Correções (12/11/2026): o alerta do evento é gravado como alarme relativo ao início ("15 minutos antes", que acompanha o
+evento se o horário mudar), e só o lembrete usa data fixa. O acompanhamento do pedido de acesso aos Lembretes continua
+até a pessoa responder, porque o Mac só devolve "pedindo" na chamada que abriu a janela.
 
 ## 14. Melhorias (10/11/2026)
 

@@ -117,6 +117,14 @@ final class AgendaCriarTestes: XCTestCase {
         XCTAssertNil(sem.dataDoAlerta(fuso: utc))
     }
 
+    func testAlertaDoEventoEhRelativoAoInicio() throws {
+        let n = try ler("{\(base),\"alertaMin\":15}").get()
+        XCTAssertEqual(n.deslocamentoDoAlerta(fuso: utc), -900)
+        let t = try ler(#"{"titulo":"x","dia":"2026-11-14","diaTodo":true,"alertaMin":1440,"destino":{"tipo":"calendario","id":"a"}}"#).get()
+        XCTAssertEqual(t.deslocamentoDoAlerta(fuso: utc), 9 * 3600 - 1440 * 60)
+        XCTAssertNil(try ler("{\(base)}").get().deslocamentoDoAlerta(fuso: utc))
+    }
+
     // MARK: Config
 
     func testConfigGuardaOPadraoELeConfigAntigaSemEle() throws {

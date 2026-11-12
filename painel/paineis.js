@@ -333,8 +333,9 @@ function pintarDestinos() {
   let h = '', aviso = '';
   if (d.calendarios.length) h += `<optgroup label="Calendário">${d.calendarios.map(x => opcao(x, 'calendario')).join('')}</optgroup>`;
   if (d.listas.length) h += `<optgroup label="Lembretes">${d.listas.map(x => opcao(x, 'lembretes')).join('')}</optgroup>`;
-  if (d.permissaoLembretes === 'pedir') h += '<optgroup label="Lembretes"><option value="pedir">Liberar os Lembretes no Mac</option></optgroup>';
-  if (d.permissaoLembretes === 'pedindo') aviso = 'Aceite o pedido de acesso aos Lembretes na tela do Mac.';
+  const esperando = esperandoLembretes(d);
+  if (d.permissaoLembretes === 'pedir' && !esperando) h += '<optgroup label="Lembretes"><option value="pedir">Liberar os Lembretes no Mac</option></optgroup>';
+  if (esperando) aviso = 'Aceite o pedido de acesso aos Lembretes na tela do Mac.';
   if (d.permissaoCalendario !== 'liberado' && !d.calendarios.length) aviso = d.permissaoCalendario === 'recusado' ? 'O Deck está sem acesso ao Calendário. No Mac: Ajustes do Sistema > Privacidade.' : 'Aceite o pedido de acesso ao Calendário na tela do Mac.';
   const antes = sel.value;
   sel.innerHTML = h || '<option value="">Nenhum lugar disponível</option>';
@@ -345,14 +346,16 @@ function pintarDestinos() {
   sel.value = escolha ?? sel.options[0].value;
   pintarPadrao();
   if (aviso) mensagemNovo(aviso); else if (!$('#nc-msg').classList.contains('erro')) mensagemNovo('');
-  if (d.permissaoLembretes === 'pedindo' || d.permissaoCalendario === 'pedindo') esperarAcesso();
+  if (esperando || d.permissaoCalendario === 'pedindo') esperarAcesso();
 }
+/* o Mac só devolve "pedindo" na chamada que abriu a janela. Nas seguintes ele ainda diz "pedir" até a pessoa responder, então depois de pedir "pedir" também é "esperando" */
+function esperandoLembretes(d) { return d.permissaoLembretes === 'pedindo' || (d.permissaoLembretes === 'pedir' && Date.now() < fo.pediuAte) }
 /* depois de pedir o acesso, olha de 2 em 2 s até a pessoa responder no Mac (no máximo 1 minuto) */
 function esperarAcesso() {
   if (fo.espera) return;
   fo.ate = Date.now() + 60000;
   fo.espera = setInterval(() => {
-    if (!fo.aberto || Date.now() > fo.ate) { clearInterval(fo.espera); fo.espera = null; return }
+    if (!fo.aberto || Date.now() > fo.ate) { clearInterval(fo.espera); fo.espera = null; if (fo.aberto) pintarDestinos(); return }
     carregarDestinos(false);
   }, 2000);
 }
@@ -361,7 +364,7 @@ async function carregarDestinos(pedirAcesso) {
     const d = await canal.agendaDestinos(pedirAcesso);
     if (!fo.aberto) return;
     fo.antigo = false; fo.destinos = d;
-    if (fo.espera && d.permissaoLembretes !== 'pedindo' && d.permissaoCalendario !== 'pedindo') { clearInterval(fo.espera); fo.espera = null }
+    if (fo.espera && !esperandoLembretes(d) && d.permissaoCalendario !== 'pedindo') { clearInterval(fo.espera); fo.espera = null }
     pintarDestinos();
   } catch (e) {
     if (!fo.aberto) return;
@@ -371,7 +374,7 @@ async function carregarDestinos(pedirAcesso) {
   }
 }
 function abrirFormNovo() {
-  fo.aberto = true; fo.destinos = null; fo.antigo = false; fo.enviando = false; fo.todo = false; fo.querLista = false;
+  fo.aberto = true; fo.pediuAte = 0; fo.destinos = null; fo.antigo = false; fo.enviando = false; fo.todo = false; fo.querLista = false;
   const hoje = mesmoDia(ag.dia, new Date(V.ref)), h = hoje ? Math.min(new Date(V.ref).getHours() + 1, 23) : 9;
   $('#nc-titulo').value = ''; $('#nc-dia').value = dataIso(ag.dia);
   $('#nc-inicio').value = pad2(h) + ':00'; $('#nc-fim').value = h < 23 ? pad2(h + 1) + ':00' : '23:59';
@@ -420,7 +423,7 @@ $('#ca-form').addEventListener('click', e => {
 $('#nc-todo').addEventListener('change', e => { fo.todo = e.target.checked; pintarTipoNovo() });
 $('#nc-destino').addEventListener('change', e => {
   mensagemNovo('');
-  if (e.target.value === 'pedir') { fo.querLista = true; mensagemNovo('Aceite o pedido de acesso na tela do Mac.'); carregarDestinos(true); return }
+  if (e.target.value === 'pedir') { fo.querLista = true; fo.pediuAte = Date.now() + 60000; mensagemNovo('Aceite o pedido de acesso na tela do Mac.'); carregarDestinos(true); return }
   pintarPadrao();
 });
 

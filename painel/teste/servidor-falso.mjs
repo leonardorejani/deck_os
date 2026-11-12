@@ -304,12 +304,15 @@ async function api(req, res, url) {
   if (rota === '/api/agenda/destinos' && m === 'GET') {
     if (c.agendaCriar === 'antigo') return json(res, 404, { erro: 'Essa rota não existe.' });
     if (lembretesAcesso === null) lembretesAcesso = c.agendaCriar === 'lembretes-pedir' ? 'pedir' : 'liberado';
-    if (url.searchParams.get('pedir') === '1') { cont.destinosPedidos++; if (lembretesAcesso === 'pedir') { lembretesAcesso = 'pedindo'; liberarEm = Date.now() + 1200 } }
-    if (lembretesAcesso === 'pedindo' && Date.now() >= liberarEm) lembretesAcesso = 'liberado';
+    // Como o Mac real: só a chamada com ?pedir=1 que abre a janela devolve "pedindo". Enquanto a janela está aberta as outras devolvem "pedir".
+    let devolve = lembretesAcesso;
+    if (url.searchParams.get('pedir') === '1') { cont.destinosPedidos++; if (lembretesAcesso === 'pedir') { lembretesAcesso = 'pedindo'; liberarEm = Date.now() + 4500; devolve = 'pedindo' } }
+    if (lembretesAcesso === 'pedindo' && Date.now() >= liberarEm) lembretesAcesso = devolve = 'liberado';
+    else if (devolve === 'pedindo' && url.searchParams.get('pedir') !== '1') devolve = 'pedir';
     return json(res, 200, {
       calendarios: [{ id: 'cal-trab', nome: X('Trabalho'), cor: AZUL, conta: 'iCloud' }, { id: 'cal-pes', nome: X('Pessoal'), cor: ROSA, conta: 'iCloud' }],
-      listas: lembretesAcesso === 'liberado' ? [{ id: 'lis-compras', nome: X('Compras'), cor: VERDE }, { id: 'lis-tarefas', nome: X('Tarefas'), cor: AMARELO }] : [],
-      permissaoCalendario: 'liberado', permissaoLembretes: lembretesAcesso, padrao: padraoAgenda });
+      listas: devolve === 'liberado' ? [{ id: 'lis-compras', nome: X('Compras'), cor: VERDE }, { id: 'lis-tarefas', nome: X('Tarefas'), cor: AMARELO }] : [],
+      permissaoCalendario: 'liberado', permissaoLembretes: devolve, padrao: padraoAgenda });
   }
   if (rota === '/api/agenda/criar' && m === 'POST') {
     if (c.agendaCriar === 'antigo') return json(res, 404, { erro: 'Essa rota não existe.' });

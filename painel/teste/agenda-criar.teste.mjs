@@ -99,6 +99,8 @@ export default async function (h) {
   await p.selectOption('#nc-destino', 'pedir');
   h.ok(await h.ate(async () => (await h.contadores()).destinosPedidos === 1), 'escolher essa opção pede o acesso no Mac');
   h.ok((await texto(p, '#nc-msg')).includes('Aceite o pedido'), 'e o formulário manda aceitar na tela do Mac');
+  await h.dormir(3500); /* o Mac real devolve "pedir" nas chamadas seguintes: o acompanhamento não pode parar com a janela aberta */
+  h.ok((await texto(p, '#nc-msg')).includes('Aceite o pedido') && await p.evaluate(() => !document.querySelector('#nc-destino option[value="pedir"]')), 'com a janela ainda aberta no Mac o aviso continua e o pedido não some');
   h.ok(await h.espera(p, () => !!document.querySelector('#nc-destino option[value="lembretes:lis-compras"]'), undefined, 9000), 'quando o Mac libera, as listas dos Lembretes aparecem sozinhas');
   h.ok(await p.evaluate(() => document.querySelector('#nc-destino').value) === 'lembretes:lis-compras', 'e a primeira lista já fica escolhida');
   await p.fill('#nc-titulo', 'Comprar pão'); await p.check('#nc-todo'); await p.click('#nc-salvar');
