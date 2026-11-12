@@ -18,6 +18,8 @@
      sessoes()                 -> [Sessao]
      abrirSessao(id)           -> {ok, como, app}  traz o terminal da sessão para a frente no Mac (como: "terminal" ou "pasta")
      entrarNaReuniao(link)     -> {ok: true}       abre no Mac o link de reunião do evento (Meet, Zoom ou Teams)
+     agendaDestinos(pedir?)    -> {calendarios, listas, permissaoCalendario, permissaoLembretes, padrao}  onde dá para salvar um compromisso (404 em Mac antigo). pedir=true abre no Mac o pedido de acesso aos Lembretes
+     criarCompromisso(dados)   -> {ok, padraoSalvo}  cria no Calendário ou nos Lembretes do Mac: {titulo, dia, diaTodo, inicio, fim, destino: {tipo, id}, alertaMin, padrao}
      capaUrl(capaId)           -> endereço da imagem da capa
      apps()                    -> [{nome, valor, bundle, navegador}]  os apps instalados no Mac (404 em Mac antigo)
      acoesDoApp(bundle)        -> {bundle, acoes: [Acao]}  o que o app oferece além de abrir (ler as contas do Mail pode levar uns 8 s)
@@ -91,6 +93,8 @@ function criarCanalHttps() {
     sessoes: () => pedir('GET', '/api/sessoes'),
     abrirSessao: id => pedir('POST', '/api/sessoes/' + encodeURIComponent(id) + '/abrir'),
     entrarNaReuniao: link => pedir('POST', '/api/reuniao/entrar', { link }),
+    agendaDestinos: pedirAcesso => pedir('GET', '/api/agenda/destinos' + (pedirAcesso ? '?pedir=1' : '')),
+    criarCompromisso: dados => pedir('POST', '/api/agenda/criar', dados, 15000), // o Mac grava pelo EventKit, que pode demorar com a conta na nuvem
     apps: () => pedir('GET', '/api/apps'),
     acoesDoApp: bundle => pedir('GET', `/api/apps/${encodeURIComponent(bundle)}/acoes`, undefined, 15000), // o Mac lê a lista de dentro do app, e o macOS pode pedir permissão no meio
     appIconeUrl: bundle => `/api/apps/${encodeURIComponent(bundle)}/icone?codigo=${encodeURIComponent(codigo || '')}`,

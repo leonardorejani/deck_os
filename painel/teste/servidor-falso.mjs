@@ -46,6 +46,7 @@ const padrao = () => ({
   atrasoAcao: 0,             // ms de espera antes de o Mac fazer uma tecla (POST /api/botao) ou um comando do Spotify
   spotifyRecusa: '',         // todo comando do Spotify é recusado (422) com esse motivo
   album: 'Artista Exemplo (Deluxe)', repetir: false, aleatorio: false,
+  agendaCriar: 'normal',     // normal | antigo (Mac sem as rotas de criar: 404) | lembretes-pedir (Lembretes ainda sem acesso: o pedido abre no Mac) | recusa (o Mac recusa o compromisso, 409)
   reunioes: false,           // os eventos de Meet, Zoom e Teams chegam com o link da sala (Evento.link)
   reuniaoRecusa: '',         // POST /api/reuniao/entrar falha (422) com esse motivo
   sessaoAbre: 'terminal',    // o que "Abrir no Mac" de uma sessão fez: terminal (trouxe o app do terminal) | pasta (abriu o Terminal na pasta)
@@ -61,13 +62,14 @@ const padrao = () => ({
 });
 let c = padrao();
 let T0 = Date.now(); // as sessões esperam desde um instante fixo (o Mac real manda sempre o mesmo `desde` até a sessão mudar)
-let cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, whatsapp: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [] };
+let cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, whatsapp: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], criados: [], destinosPedidos: 0 };
 let posicaoBase = { s: 132, desde: Date.now() };
 let perfilAtivo = 'trabalho';
+let criadosAgenda = [], padraoAgenda = null, lembretesAcesso = null, liberarEm = 0; // o que o iPhone criou na agenda, o destino padrão e o acesso aos Lembretes
 let codigoAtual = CODIGO, codigoAnterior = null; // rodízio: o atual, e o anterior que ainda vale (a folga de 10 min)
 let parearGasto = false, parearErros = 0; // o código de 6 dígitos serve uma vez e aguenta 5 erros
 let gravada = null; // o que o iPhone gravou: perfis e blocos, como o Mac guardaria no config.json
-const zerar = () => { parearGasto = false; parearErros = 0; codigoAtual = CODIGO; codigoAnterior = null; T0 = Date.now(); gravada = null; c = padrao(); cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, whatsapp: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [] }; posicaoBase = { s: 132, desde: Date.now() }; perfilAtivo = 'trabalho' };
+const zerar = () => { parearGasto = false; parearErros = 0; codigoAtual = CODIGO; codigoAnterior = null; T0 = Date.now(); gravada = null; c = padrao(); cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, whatsapp: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], criados: [], destinosPedidos: 0 }; posicaoBase = { s: 132, desde: Date.now() }; perfilAtivo = 'trabalho'; criadosAgenda = []; padraoAgenda = null; lembretesAcesso = null };
 
 // com xss ligado, todo texto que a página mostra chega como HTML que tenta executar código
 const X = t => c.xss ? `"><img src=x onerror="window.__xss=(window.__xss||0)+1">${t}` : t;
@@ -127,6 +129,8 @@ function eventosDoDia(d) {
   if (dow === 0) { E(9, 0, 'Escola dominical', AMARELO, 'Igreja', 'Sala 2'); E(19, 0, 'Culto', AMARELO, 'Igreja', 'Templo') }
   const avulsos = { 3: [14, 0, 'Revisão do projeto', AZUL, 'Trabalho', c.reunioes ? 'https://us02web.zoom.us/j/81234567890?pwd=abc123' : '', false, 'https://us02web.zoom.us/j/81234567890?pwd=abc123'], 10: [16, 0, 'Dentista', ROSA, 'Pessoal'], 12: [12, 30, 'Almoço com Rafael', VERDE, 'Trabalho'], 15: [0, 0, 'Aniversário da Ana', ROSA, 'Pessoal', '', true], 21: [15, 0, 'Gravação do podcast', AZUL, 'Trabalho', '', false, 'https://teams.microsoft.com/l/meetup-join/19%3ameeting_abc'], 27: [18, 0, 'Entrega do cliente', AZUL, 'Trabalho'] };
   if (avulsos[dia]) E(...avulsos[dia]);
+  const chaveDia = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  for (const n of criadosAgenda) if (n.dia === chaveDia) { const [h, mi] = (n.inicio || '00:00').split(':').map(Number); E(h, mi, n.titulo, VERDE, n.calendario, '', !!n.diaTodo) }
   if (c.agenda === 'muitas' && mesmoDiaF(d, new Date(Date.now() + 86400000))) for (let i = 0; i < 14; i++) E(7 + i, 0, 'Compromisso ' + (i + 1), AZUL, 'Trabalho', 'Sala ' + (i + 1));
   return ev;
 }
@@ -296,6 +300,26 @@ async function api(req, res, url) {
     if (acao === 'pausar') { c.spotify = 'pausado'; posicaoBase = { s: agora, desde: Date.now() } }
     if (acao === 'posicao') posicaoBase = { s: +url.searchParams.get('s'), desde: Date.now() };
     return json(res, 200, { ok: true });
+  }
+  if (rota === '/api/agenda/destinos' && m === 'GET') {
+    if (c.agendaCriar === 'antigo') return json(res, 404, { erro: 'Essa rota não existe.' });
+    if (lembretesAcesso === null) lembretesAcesso = c.agendaCriar === 'lembretes-pedir' ? 'pedir' : 'liberado';
+    if (url.searchParams.get('pedir') === '1') { cont.destinosPedidos++; if (lembretesAcesso === 'pedir') { lembretesAcesso = 'pedindo'; liberarEm = Date.now() + 1200 } }
+    if (lembretesAcesso === 'pedindo' && Date.now() >= liberarEm) lembretesAcesso = 'liberado';
+    return json(res, 200, {
+      calendarios: [{ id: 'cal-trab', nome: X('Trabalho'), cor: AZUL, conta: 'iCloud' }, { id: 'cal-pes', nome: X('Pessoal'), cor: ROSA, conta: 'iCloud' }],
+      listas: lembretesAcesso === 'liberado' ? [{ id: 'lis-compras', nome: X('Compras'), cor: VERDE }, { id: 'lis-tarefas', nome: X('Tarefas'), cor: AMARELO }] : [],
+      permissaoCalendario: 'liberado', permissaoLembretes: lembretesAcesso, padrao: padraoAgenda });
+  }
+  if (rota === '/api/agenda/criar' && m === 'POST') {
+    if (c.agendaCriar === 'antigo') return json(res, 404, { erro: 'Essa rota não existe.' });
+    const n = await lerCorpo(req);
+    if (!n.titulo || !n.dia || !n.destino) return json(res, 400, { erro: 'Dê um título ao compromisso.' });
+    if (c.agendaCriar === 'recusa') return json(res, 409, { erro: 'O Deck está sem acesso ao Calendário. No Mac: Ajustes do Sistema > Privacidade.' });
+    cont.criados.push(n);
+    if (n.destino.tipo === 'calendario') criadosAgenda.push({ ...n, calendario: n.destino.id === 'cal-pes' ? 'Pessoal' : 'Trabalho' });
+    if (n.padrao) padraoAgenda = n.destino;
+    return json(res, 200, { ok: true, padraoSalvo: !!n.padrao });
   }
   if (rota === '/api/reuniao/entrar' && m === 'POST') {
     const link = String((await lerCorpo(req)).link || '');

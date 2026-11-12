@@ -57,6 +57,7 @@ struct EsteMac: View {
                     }
                 }
             }
+            GrupoAgenda(modelo: modelo)
             GrupoSpotify(spotify: modelo.spotify)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
