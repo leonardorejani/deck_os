@@ -514,7 +514,7 @@ uma linha e "Excluir tecla" (⌘Z desfaz). Embaixo, dois passos numerados:
    - Teclado: "Clique aqui e aperte as teclas", que grava do teclado de verdade (Esc cancela, exige
      uma tecla de controle), com exemplos prontos.
      Embaixo, "Montar escolhendo as teclas": modificadores e a tecla em botões, para o atalho que outro
-     app (CleanShot, Raycast) já usa e que o gravador não consegue pegar (decisão 32 da seção 13).
+     app (CleanShot, Raycast) já usa e que o gravador não consegue pegar (decisão 33 da seção 13).
    - Comando: caixa em fonte de código, "Testar agora" e comandos prontos (apagar tela, abrir
      Downloads, silenciar, esvaziar Lixeira).
 
