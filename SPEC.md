@@ -910,6 +910,29 @@ Ajustes de UX (11/11/2026, teste do Leonardo no iPhone):
       loopback, então não aparece para outros aparelhos.
     - Código em `mac/Nucleo/Variante.swift`. Testes: `mac/Testes/VarianteTestes.swift` e `scripts/teste/bancada.test.sh`.
 
+33. Conexões e uma fonte de verdade por estado (12/11/2026, frente mac-conexoes). Palavras dele: "pode manter a conexão
+    com spotify entao se a pessoa quiser conectar essas opções aparecem nos controles", "quando ia parear pelo celular
+    aparecia um código nada a ver e às vezes era o mesmo do PWA", "os ícones demoram e só aparecem ao alternar de perfil",
+    "quando clico em liberar (botão azul) ele leva o app pra baixo de tudo ao invés de só liberar e manter o app na frente",
+    "mostra nenhum iPhone pareado mas estou conectado" e "temos muitas coisas dentro do app que estão se contradizendo. Coisas
+    funcionando mas diz que não, conexões que aparecem desconectadas. Tem que ver o app e painel inteiros." Decidido:
+    - "Conectar iPhone" vira "Conexões", com o método no topo: Cabo e Bluetooth, WhatsApp e PWA (Wi-Fi). Cada método mostra
+      só o que é dele. O Spotify (login opcional) e o WhatsApp saíram de Este Mac. O Spotify fica num grupo à parte no fim
+      de Conexões, porque não é um jeito de conectar o iPhone (decisão minha, a confirmar com ele). WhatsApp tem a escolha
+      de origem de sempre e o espaço reservado "Conectar pelo QR", sem ação até a frente do QR existir.
+    - Um código por tela: o pedido de Bluetooth mostra o código de confirmação (igual nas duas telas), e o cartão "Código do
+      cabo" só aparece quando não há pedido na tela. O código do cabo é o mesmo do PWA por construção (o iPhone prova ao Mac
+      que o conhece, `ProvaCabo.modoCodigo`), então ele só existe com o método aberto e nunca ao lado de outro código.
+    - Fonte única de "tem iPhone": `ModeloApp.iphoneAtivo` (cabo ou Bluetooth primeiro, depois Wi-Fi), usada pelo cabeçalho,
+      pelo menu, por Conexões e pela configuração inicial. "Falando agora" é o `visto` (última resposta boa da API, pelo Wi-Fi,
+      cabo ou Bluetooth) dentro de 30 s, senão o texto diz "fora de alcance". Resposta boa pelo Wi-Fi sem registro cria o
+      iPhone (o Mac reabriu): estar falando é estar conectado.
+    - Sobre: sem o título "Sobre o Deck" em cima e sem as linhas Mac, iPhone e Licença (a licença fica só no texto do grupo).
+    - Teclas: a lista de apps carrega ao abrir o Deck e o ícone observa a lista (antes só aparecia ao trocar de perfil).
+    - Permissões: terminado o pedido, o Deck volta para a frente. Se foi preciso abrir os Ajustes do Sistema, o Deck olha a
+      permissão a cada segundo (até 3 minutos) e volta quando ela muda.
+    - Nome deste Mac: o campo passou de 170 para 280 pt.
+
 Nada em aberto que trave a fase 1. Falta só confirmar, na construção, o link que abre uma sessão
 específica no app do Claude do iPhone (se não existir, cai no "mostra a pergunta").
 

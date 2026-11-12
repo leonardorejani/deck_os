@@ -5,7 +5,7 @@ Pré-requisito: Deck.app instalado em Aplicativos pelo `dist/Deck-1.0.dmg` e abe
 
 ## PWA, pelo Wi-Fi
 
-1. No Mac, abra o Deck > Ajustes > Conectar iPhone. Leia o QR com a câmera do iPhone.
+1. No Mac, abra o Deck > Ajustes > Conexões. Leia o QR com a câmera do iPhone.
 2. Siga a tela do certificado: Baixar certificado, Ajustes > Perfil Transferido > Instalar, e confie nele em Ajustes > Geral > Sobre > Ajustes de Confiança de Certificados. Volte ao Safari e toque em Continuar. O painel tem que abrir com dados reais.
 3. Compartilhar > Adicionar à Tela de Início. Abra pelo ícone novo: tem que ficar em tela cheia, sem barra do Safari.
 4. Deite o iPhone e deixe uns minutos sem tocar. A tela tem que continuar acesa (Wake Lock) e o relógio deslocar 1 a 2 px de tempos em tempos.
@@ -20,7 +20,7 @@ Pré-requisito: Deck.app instalado em Aplicativos pelo `dist/Deck-1.0.dmg` e abe
 10. Toque numa tecla: o iPhone tem que vibrar de leve e a ação rodar no Mac.
 11. Ligue o cabo e destrave o iPhone. O aviso de 3 segundos tem que dizer "Pelo cabo", sem o painel piscar nem perder o estado.
 12. Puxe o cabo no meio, com o painel aberto. Em até uns segundos o aviso diz "Pelo Bluetooth" e o painel segue mostrando dado novo.
-13. Em Ajustes > Conectar iPhone, confira "Último canal", a versão do app e a data da próxima renovação (5 dias depois da instalação).
+13. Em Ajustes > Conexões, confira "Último canal", a versão do app e a data da próxima renovação (5 dias depois da instalação).
 
 ## Anote
 

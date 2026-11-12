@@ -49,7 +49,14 @@ struct PedidosDoMac: PedidosDeAcesso {
         }
     }
 
+    /// O macOS põe a janelinha dele (ou os Ajustes do Sistema) na frente do Deck: terminado o pedido, o Deck volta.
     func pedir(_ acesso: AcessoMac) async -> EstadoDoAcesso {
+        let r = await pedirSemFoco(acesso)
+        FocoDoDeck.trazer()
+        return r
+    }
+
+    private func pedirSemFoco(_ acesso: AcessoMac) async -> EstadoDoAcesso {
         if (acesso == .bluetooth || acesso == .redeLocal) && !Variante.atual.pedeBluetoothERedeLocal { return .naoPedido }
         switch acesso {
         case .calendarios:
@@ -87,8 +94,11 @@ struct PedidosDoMac: PedidosDeAcesso {
         }
     }
 
+    /// Abre a página certa dos Ajustes do Sistema e traz o Deck de volta quando a permissão mudar lá.
     func abrirAjustes(_ acesso: AcessoMac) {
         NSWorkspace.shared.open(acesso.enderecoDosAjustes)
+        let defaults = defaults
+        FocoDoDeck.vigiar { VerificadorVivo(defaults: defaults).ler(acesso)?.situacao }
     }
 
     /// Nome da página de Privacidade e Segurança de cada acesso.

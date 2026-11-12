@@ -34,6 +34,7 @@ enum LeitorDeApps {
                          NSHomeDirectory() + "/Applications"]
     /// O Finder mora fora das pastas de aplicativos.
     static let extras = ["/System/Library/CoreServices/Finder.app"]
+    static let pastasDoSistema = ["/System/Library/CoreServices"]
     /// Quando o Spotlight ainda não sabe o que a pessoa mais abre.
     static let padraoMaisUsados = ["Safari", "Calendar", "Notes", "Terminal", "Finder", "Mail", "Music", "Spotify", "WhatsApp", "Messages"]
     static let quantosMaisUsados = 8
@@ -91,6 +92,9 @@ final class CatalogoDeApps: ObservableObject {
     @Published private(set) var atalhos: [String]?
     private var carregou = false
 
+    /// O catálogo do app: carrega ao abrir o Deck e é o que os Ajustes usam, para os ícones das teclas já estarem prontos.
+    static let compartilhado = CatalogoDeApps()
+
     init() {}
 
     /// Lista pronta (as fotos e os testes).
@@ -106,14 +110,17 @@ final class CatalogoDeApps: ObservableObject {
         carregou = true
         Task.detached(priority: .userInitiated) { [weak self] in
             let todos = LeitorDeApps.ler()
+            // A lista sai antes dos "mais usados" (o Spotlight demora): os ícones das teclas só precisam dela.
+            await self?.recebeuTodos(todos)
             let mais = LeitorDeApps.maisUsados(todos) { a in a.caminhoDoIcone.map(LeitorDeApps.usos) ?? 0 }
-            await self?.recebeuApps(todos, mais)
+            await self?.recebeuMaisUsados(mais)
             let r = ExecutorShell().rodar("shortcuts list")
             await self?.recebeuAtalhos(r.status == 0 ? LeitorDeApps.atalhos(daSaida: r.saida) : [])
         }
     }
 
-    private func recebeuApps(_ todos: [AppDoMac], _ mais: [AppDoMac]) { apps = todos; maisUsados = mais }
+    private func recebeuTodos(_ todos: [AppDoMac]) { apps = todos }
+    private func recebeuMaisUsados(_ mais: [AppDoMac]) { maisUsados = mais }
     private func recebeuAtalhos(_ l: [String]) { atalhos = l }
 
     func app(_ valor: String) -> AppDoMac? { apps.first { $0.valor == valor } ?? maisUsados.first { $0.valor == valor } }

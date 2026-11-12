@@ -1,10 +1,11 @@
 import SwiftUI
 import AppKit
 
-/// Seção "Conectar iPhone" dos Ajustes, igual ao protótipo (prototipo/mac.js, TELAS.iphone e parearHTML):
-/// os aparelhos pareados e o cartão de parear com o QR, o código curto e o endereço, com os três
-/// passos embaixo. O código curto vem do Pareamento do núcleo e é trocado pelo código de acesso longo
-/// quando o iPhone o digita.
+/// Seção "Conexões" dos Ajustes (antes "Conectar iPhone"). No topo, o método (Cabo e Bluetooth, WhatsApp ou PWA pelo
+/// Wi-Fi) e embaixo só o que é daquele método. O Spotify, que é um login à parte, fica no fim, sempre à mão.
+/// O que diz se há iPhone e se ele está falando é sempre `modelo.iphoneAtivo` (uma fonte só, a mesma do cabeçalho,
+/// do menu e do Sobre). O código curto do PWA vem do Pareamento do núcleo e é trocado pelo código de acesso longo
+/// quando o iPhone o digita. Cada tela mostra um código só: o do pedido de Bluetooth, ou o do cabo, ou o do PWA.
 struct ConectarIphone: View {
     @ObservedObject var modelo: ModeloApp
     @StateObject private var codigo = CodigoDePareamento()
@@ -27,44 +28,35 @@ struct ConectarIphone: View {
         ParearIphone.endereco(nomeMac: modelo.config.nomeMac, porta: porta, nomeDoServidor: nomeNaRede)
     }
 
+    /// O código curto só existe enquanto uma tela que o mostra está aberta (cabo, sem pedido de Bluetooth, e PWA).
+    private var precisaDeCodigo: Bool {
+        switch modelo.metodoDeConexao {
+        case .pwa: return true
+        case .cabo: return modelo.pedidoBluetooth == nil && modelo.nativo == nil
+        case .whatsapp: return false
+        }
+    }
+
+    private func acertarCodigo() {
+        if precisaDeCodigo { codigo.iniciar(modelo.pareamento, fixo: codigoFixo) } else { codigo.parar() }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: Tema.Espaco.secao) {
-            if modelo.iphone != nil || modelo.nativo != nil {
-                GrupoDeAjuste(titulo: "Aparelhos", nota: nil) {
-                    LinhasDeAjuste {
-                        if let iphone = modelo.iphone {
-                            LinhaDeAjuste(titulo: iphone.nome, apoio: TextosDeAjuste.conexao(iphone)) {
-                                BotaoDeAjuste(texto: "Desconectar", estilo: .secundario) { modelo.desconectarIphone() }
-                            }
-                        }
-                        if let nativo = modelo.nativo {
-                            LinhaDeAjuste(titulo: nativo.nome, apoio: TextosDoNativo.aparelhoNativo(nativo), divisoria: modelo.iphone != nil) {
-                                BotaoDeAjuste(texto: "Desconectar", estilo: .secundario) { modelo.desconectarNativo() }
-                            }
-                        }
-                    }
-                }
+            SeletorDeMetodo(escolhido: modelo.metodoDeConexao, aoVivo: aoVivoPorMetodo) { modelo.metodoDeConexao = $0 }
+            switch modelo.metodoDeConexao {
+            case .cabo: MetodoCaboEBluetooth(modelo: modelo, codigo: ParearIphone.codigoEmGrupos(codigo.codigo))
+            case .whatsapp: MetodoWhatsApp(modelo: modelo)
+            case .pwa: metodoPwa
             }
-            GrupoDoAppNativo(modelo: modelo)
-            GrupoDeAjuste(titulo: modelo.iphone != nil ? "Parear outro iPhone pelo Wi-Fi" : "Parear um iPhone pelo Wi-Fi",
-                          nota: TextosDeAjuste.notaDoWifi) {
-                if case .falhou(let motivo) = modelo.servidor {
-                    CartaoServidorFalhou(motivo: motivo) { modelo.tentarServidorDeNovo() }
-                } else {
-                    CartaoDeParear(codigo: ParearIphone.codigoEmGrupos(codigo.codigo), endereco: endereco,
-                                   textoDoQr: ParearIphone.textoDoQr(endereco: endereco, codigo: codigo.codigo)) {
-                        copiar(endereco)
-                        modelo.avisar("Endereço copiado")
-                    }
-                    PassosDeParear().padding(.vertical, Tema.Espaco.item)
-                }
-                // Discreto, no fim do grupo: tira o acesso de todos os iPhones de uma vez.
-                BotaoDeAjuste(texto: "Desconectar iPhones", estilo: .perigo) { confirmando = true }
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-            }
+            GrupoSpotify(spotify: modelo.spotify)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .onAppear { codigo.iniciar(modelo.pareamento, fixo: codigoFixo) }
+        .onAppear { acertarCodigo() }
+        .onChange(of: modelo.metodoDeConexao) { _ in acertarCodigo() }
+        .onChange(of: precisaDeCodigo) { _ in acertarCodigo() }
+        // Um pedido de Bluetooth chegou com outro método aberto: leva a pessoa para onde ele aparece.
+        .onChange(of: modelo.pedidoBluetooth) { novo in if novo != nil { modelo.metodoDeConexao = .cabo } }
         .onDisappear { codigo.parar() }
         // O Bluetooth só aceita pedido de pareamento com esta tela aberta: a janela vale 60 s e a tela a renova.
         .task {
@@ -82,6 +74,86 @@ struct ConectarIphone: View {
         .task(id: modelo.servidor) {
             guard case .ligado = modelo.servidor else { return }
             nomeNaRede = await Task.detached { try? GeradorCertificado().lerRede().nome }.value
+        }
+    }
+
+    /// O ponto verde de cada método: só quando há aparelho daquele método falando agora (mesma fonte do cabeçalho).
+    private var aoVivoPorMetodo: Set<MetodoDeConexao> {
+        let agora = modelo.agora
+        var r = Set<MetodoDeConexao>()
+        if let n = modelo.nativo, IphonePareado(nome: n.nome, canal: n.canal, visto: n.visto).aoVivo(agora: agora) { r.insert(.cabo) }
+        if let i = modelo.iphone, i.aoVivo(agora: agora) { r.insert(.pwa) }
+        return r
+    }
+
+    @ViewBuilder private var metodoPwa: some View {
+        if let iphone = modelo.iphone {
+            GrupoDeAjuste(titulo: "Aparelho", nota: nil) {
+                LinhasDeAjuste {
+                    LinhaDeAjuste(titulo: iphone.nome, apoio: TextosDeAjuste.conexao(iphone, agora: modelo.agora)) {
+                        BotaoDeAjuste(texto: "Desconectar", estilo: .secundario) { modelo.desconectarIphone() }
+                    }
+                }
+            }
+        }
+        GrupoDeAjuste(titulo: modelo.iphone != nil ? "Parear outro iPhone pelo Wi-Fi" : "Parear um iPhone pelo Wi-Fi",
+                      nota: TextosDeAjuste.notaDoWifi) {
+            if case .falhou(let motivo) = modelo.servidor {
+                CartaoServidorFalhou(motivo: motivo) { modelo.tentarServidorDeNovo() }
+            } else {
+                CartaoDeParear(codigo: ParearIphone.codigoEmGrupos(codigo.codigo), endereco: endereco,
+                               textoDoQr: ParearIphone.textoDoQr(endereco: endereco, codigo: codigo.codigo)) {
+                    copiar(endereco)
+                    modelo.avisar("Endereço copiado")
+                }
+                PassosDeParear().padding(.vertical, Tema.Espaco.item)
+            }
+            // Discreto, no fim do grupo: tira o acesso de todos os iPhones de uma vez.
+            BotaoDeAjuste(texto: "Desconectar iPhones", estilo: .perigo) { confirmando = true }
+                .frame(maxWidth: .infinity, alignment: .trailing)
+        }
+    }
+}
+
+/// O seletor do topo: um segmento por método, o escolhido em destaque e um ponto verde no que está falando agora.
+struct SeletorDeMetodo: View {
+    var escolhido: MetodoDeConexao
+    var aoVivo: Set<MetodoDeConexao>
+    var escolher: (MetodoDeConexao) -> Void
+
+    var body: some View {
+        HStack(spacing: Tema.Espaco.fino) {
+            ForEach(MetodoDeConexao.allCases) { m in Segmento(metodo: m, selecionado: m == escolhido, aoVivo: aoVivo.contains(m)) { escolher(m) } }
+        }
+        .padding(Tema.Espaco.fino)
+        .frame(maxWidth: .infinity)
+        .superficie(raio: Tema.Raio.normal)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Método de conexão")
+    }
+
+    private struct Segmento: View {
+        var metodo: MetodoDeConexao
+        var selecionado: Bool
+        var aoVivo: Bool
+        var acao: () -> Void
+
+        var body: some View {
+            let forma = RoundedRectangle(cornerRadius: Tema.Raio.sm, style: .continuous)
+            Button(action: acao) {
+                HStack(spacing: Tema.Espaco.item) {
+                    Text(metodo.rotulo).font(.system(size: Tema.Texto.sm, weight: selecionado ? .semibold : .regular))
+                    if aoVivo { Ponto(ligado: true).accessibilityLabel("falando agora") }
+                }
+                .foregroundColor(selecionado ? Tema.Cor.texto : Tema.Cor.texto2)
+                .frame(maxWidth: .infinity, minHeight: Tema.Espaco.alvoSm)
+                .background {
+                    if selecionado { ZStack { forma.fill(Tema.Cor.anel).padding(-1); forma.fill(Tema.Cor.superficie2) } }
+                }
+                .contentShape(forma)
+            }
+            .buttonStyle(.plain)
+            .accessibilityAddTraits(selecionado ? .isSelected : [])
         }
     }
 }
@@ -223,11 +295,14 @@ struct PassoDeParear: View {
 enum TextosDeAjuste {
     /// Explica o que o Wi-Fi (PWA) tem a menos que o app nativo. Cada diferença existe no código:
     /// cabo e Bluetooth só na casca nativa (SPEC 13, item 9), e a tela acesa é da casca (painel/pwa.js só pede o Wake Lock no Safari).
-    static let notaDoWifi = "Pelo Wi-Fi o iPhone usa o Deck como app da Tela de Início (PWA), que é limitado. Só funciona com o iPhone na mesma rede do Mac, não conecta por cabo nem por Bluetooth, deixa de atualizar quando o iPhone sai do Wi-Fi e a tela pode apagar sozinha. Para ter tudo isso, use o app no iPhone, acima. Nada sai da sua rede."
+    static let notaDoWifi = "Pelo Wi-Fi o iPhone usa o Deck como app da Tela de Início (PWA), e por isso funcionam menos coisas. Só funciona com o iPhone na mesma rede do Mac, não conecta por cabo nem por Bluetooth, deixa de atualizar quando o iPhone sai do Wi-Fi e a tela pode apagar sozinha. Para ter tudo isso, use o app no iPhone, em Cabo e Bluetooth. Nada sai da sua rede."
 
     /// "Safari, pelo Wi-Fi desde 09:12" (sem a hora quando não se sabe). Um aparelho por forma de conexão.
-    static func conexao(_ iphone: IphonePareado) -> String {
-        let base = "\(iphone.canal == .wifi ? "Safari" : "App nativo"), \(iphone.canal.texto)"
+    /// Sem falar com o Mac faz mais de 30 s, diz que está fora de alcance em vez de fingir que está conectado.
+    static func conexao(_ iphone: IphonePareado, agora: Date = Date()) -> String {
+        let quem = iphone.canal == .wifi ? "Safari" : "App nativo"
+        guard iphone.aoVivo(agora: agora) else { return "\(quem), pareado e fora de alcance agora" }
+        let base = "\(quem), \(iphone.canal.texto)"
         guard let desde = iphone.desde else { return base }
         let f = DateFormatter()
         f.locale = Locale(identifier: "pt_BR")

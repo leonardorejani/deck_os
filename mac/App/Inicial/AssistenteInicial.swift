@@ -82,8 +82,8 @@ final class AssistenteInicial: ObservableObject {
 
     // MARK: Iphone
 
-    var iphone: IphonePareado? { modelo.iphone }
-    var iphoneConectado: Bool { modelo.iphone != nil }
+    var iphone: IphonePareado? { modelo.iphoneAtivo }
+    var iphoneConectado: Bool { modelo.iphoneAtivo != nil }
     var codigoEmGrupos: String { EnderecoDoMac.codigoEmGrupos(codigo) }
 
     /// O que o QR leva: endereço, código de pareamento e link do certificado.
