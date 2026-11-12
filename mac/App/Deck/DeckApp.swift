@@ -97,14 +97,19 @@ struct DeckApp: App {
     }
 }
 
-/// O desenho da barra de menus: as quatro teclas do ícone, a primeira cheia, numa cor só (o macOS
-/// pede ícone de uma cor ali e o pinta de acordo com o fundo).
+/// O desenho da barra de menus: as quatro teclas do ícone, a primeira cheia. O Deck de verdade é template de uma cor
+/// só (o macOS o pinta de acordo com o fundo). A bancada não é template, para a cor aparecer: as quatro teclas em
+/// laranja, as duas da diagonal cheias, e uma bolinha laranja com "B" no canto, bem diferente do Deck de verdade.
 enum GlifoDaBarra {
     static let imagem: NSImage = {
+        let bancada = Variante.atual == .bancada
         let lado: CGFloat = 17
-        let img = NSImage(size: NSSize(width: lado, height: lado), flipped: true) { _ in
+        let largura: CGFloat = bancada ? 24 : 17
+        let laranja = NSColor(srgbRed: 1.0, green: 0.55, blue: 0.1, alpha: 1)
+        let img = NSImage(size: NSSize(width: largura, height: lado), flipped: true) { _ in
             let k = lado / 18
-            NSColor.black.setFill(); NSColor.black.setStroke()
+            let tinta = bancada ? laranja : NSColor.black
+            tinta.setFill(); tinta.setStroke()
             func quadro(_ x: CGFloat, _ y: CGFloat, cheio: Bool) {
                 let r = NSRect(x: x * k, y: y * k, width: 6 * k, height: 6 * k)
                 if cheio {
@@ -115,12 +120,20 @@ enum GlifoDaBarra {
                     c.stroke()
                 }
             }
-            // A bancada pinta a diagonal (1ª e 4ª teclas) para não se confundir com o Deck de verdade na barra.
-            let bancada = Variante.atual == .bancada
             quadro(2, 2, cheio: true); quadro(10, 2, cheio: false); quadro(2, 10, cheio: false); quadro(10, 10, cheio: bancada)
+            if bancada {
+                let d: CGFloat = 12
+                let disco = NSRect(x: largura - d, y: lado - d, width: d, height: d)
+                laranja.setFill()
+                NSBezierPath(ovalIn: disco).fill()
+                let letra = NSAttributedString(string: "B", attributes: [
+                    .font: NSFont.systemFont(ofSize: 9, weight: .heavy), .foregroundColor: NSColor.black])
+                let t = letra.size()
+                letra.draw(at: NSPoint(x: disco.midX - t.width / 2, y: disco.midY - t.height / 2))
+            }
             return true
         }
-        img.isTemplate = true
+        img.isTemplate = !bancada
         return img
     }()
 }

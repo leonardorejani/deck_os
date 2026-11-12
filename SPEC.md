@@ -943,6 +943,9 @@ Ajustes de UX (11/11/2026, teste do Leonardo no iPhone):
     - Sem iPhone e sem rede: nada de cabo, Bluetooth nem renovação do app do iPhone, e o servidor escuta só no
       loopback, então não aparece para outros aparelhos.
     - Código em `mac/Nucleo/Variante.swift`. Testes: `mac/Testes/VarianteTestes.swift` e `scripts/teste/bancada.test.sh`.
+    - Ícone da barra de menus (12/11/2026, "tem 2 instalado, qual uso?"): a bancada aparece em laranja, fora do modo
+      template, com as quatro teclas e uma bolinha laranja com "B" no canto. O Deck de verdade segue monocromático e
+      igual. O topo do menu da bancada diz "Deck Bancada (teste)".
 33. Gravar atalho de teclado que outro app já usa (12/11/2026). Palavras dele: "uso o CleanShot com os mesmos comandos do
     Mac, tentei configurar as teclas com as combinações mas ele sempre ativava o atalho ao invés de salvar o atalho."
     - Causa: o atalho global do outro app dispara antes de a tecla chegar ao Deck, então o gravador (monitor local do
