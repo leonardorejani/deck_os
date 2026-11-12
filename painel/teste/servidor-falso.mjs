@@ -65,6 +65,8 @@ const padrao = () => ({
   comFoco: false,            // o perfil ganha uma tecla de comando com liga e desliga (sem comando de conferir: o Mac guarda o estado)
   comControles: false,       // o perfil ganha a tecla Controles (abre a tela dos controles do Mac no iPhone)
   controles: 'tudo',         // tudo | sem-brilho (Mac sem tela interna nem luz no teclado) | nada (não oferece nada) | antigo (Mac sem a rota: 404) | erro (500) | recusa (os pedidos de escrita falham com 422)
+  comReuniao: false,         // o perfil ganha as teclas Mutar (microfone) e Câmera do Meet no navegador, e o estado delas chega em `reuniao`
+  reuniaoEstado: { mic: 'ligado', cam: 'desligado' }, // ligado | desligado | desconhecido | sem-reuniao (o que o Mac leu). null: Mac antigo, não manda `reuniao`
   comMonitorApp: false,      // o perfil ganha a tecla do app Monitor de Atividade (abre a tela do monitor no iPhone)
   ctVolume: 30, ctMudo: false, ctBrilho: 60, ctTeclado: 20, ctAtraso: 0,
   spotifyModos: 'sim',       // sim | sem (Mac antigo: o estado não traz álbum, repetir nem aleatório)
@@ -91,6 +93,7 @@ function perfisConfig() {
     T('calendario', 'Agenda', 'app', 'Calendar', { icone: 'Calendar' }),
     T('apagar', 'Apagar tela', 'comando', 'pmset displaysleepnow', { icone: 'svg:tela' }),
   ];
+  if (c.comReuniao) trabalho.push(T('mic', 'Mutar', 'app', 'Google Meet', { icone: 'svg:video', acao: { id: 'reuniao-microfone' } }), T('cam', 'Câmera', 'app', 'Google Meet', { icone: 'svg:video', acao: { id: 'reuniao-camera' } }));
   if (c.comMonitorApp) trabalho.push(T('monitor', 'Monitor', 'app', 'Activity Monitor', { icone: 'Activity Monitor' }));
   if (c.comFoco) trabalho.push(T('foco', 'Mudar foco', 'comando', 'foco jogo', { icone: 'svg:tela', desligar: 'foco trabalho' }));
   if (c.comControles) trabalho.push(T('controles', 'Controles', 'app', 'Controles', { icone: 'svg:controles' }));
@@ -230,6 +233,7 @@ function estado() {
     agenda: c.agenda === 'sem' ? { permissao: false, proximo: null }
       : { permissao: true, proximo: c.agenda === 'vazia' ? null : { titulo: X('Reunião de produto'), inicio: new Date(Date.now() + 2 * 3600000).toISOString(), diaTodo: false, calendario: X('Trabalho'), cor: X('#60A5FA'), local: X('Google Meet') } },
     acesas: c.acesas, selos, avisos: [],
+    ...(c.comReuniao && c.reuniaoEstado ? { reuniao: { mic: c.reuniaoEstado.mic, cam: c.reuniaoEstado.cam } } : {}),
   };
 }
 
@@ -302,6 +306,8 @@ async function api(req, res, url) {
     if (!tecla) return json(res, 404, { erro: 'Essa tecla não existe mais no Mac.' });
     if (c.falha) return json(res, 500, { erro: 'O Mac não deixou: ligue a Acessibilidade para o Deck nos Ajustes do Sistema.' });
     cont.botoes.push(id);
+    // o Mac aperta o atalho do app e a leitura seguinte já traz o estado novo
+    if ((id === 'mic' || id === 'cam') && c.reuniaoEstado) { const v = c.reuniaoEstado[id]; if (v === 'ligado' || v === 'desligado') c.reuniaoEstado[id] = v === 'ligado' ? 'desligado' : 'ligado' }
     if (id === 'acordado') c.acesas = c.acesas.includes(id) ? [] : [id];
     if (tecla.desligar) c.acesas = c.acesas.includes(id) ? c.acesas.filter(x => x !== id) : [...c.acesas, id]; // o Mac guarda o estado da tecla liga e desliga
     return json(res, 200, { ok: true });

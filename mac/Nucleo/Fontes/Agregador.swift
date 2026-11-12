@@ -71,6 +71,8 @@ struct Fontes: Sendable {
     var acesas: @Sendable ([Tecla]) -> [String]
     /// O monitor do Mac, só dos itens que a pessoa deixou ligados. Fonte de fora (teste antigo) não precisa trazer.
     var monitor: @Sendable (ConfigMonitor, Date) -> Leitura<EstadoMonitor?> = { _, _ in Leitura(valor: nil, aviso: nil) }
+    /// O microfone e a câmera da reunião, por id das teclas que controlam isso. Só é chamada com tecla dessas no perfil.
+    var reuniao: @Sendable ([Tecla]) -> Leitura<[String: EstadoDeReuniao]> = { _ in Leitura(valor: [:], aviso: nil) }
 
     /// As fontes de verdade deste Mac. `casa` é a pasta do usuário.
     /// `origemWhatsApp` é quem decide entre o banco do app e o WhatsApp Web: o roteador passa o mesmo
@@ -106,7 +108,8 @@ struct Fontes: Sendable {
             capa: { spotify.capa() },
             agenda: { agenda.ler($0) },
             acesas: { TeclasAcesas.ler($0, executor: executor) },
-            monitor: { c, agora in Leitura(valor: monitor.ler(c, agora: agora), aviso: nil) }
+            monitor: { c, agora in Leitura(valor: monitor.ler(c, agora: agora), aviso: nil) },
+            reuniao: { LeitorDeReuniao(executor: executor).ler($0) }
         )
     }
 }
@@ -120,6 +123,8 @@ final class Agregador: @unchecked Sendable {
     private let cacheWhatsApp = Cache<Int, Leitura<WhatsAppDados?>>(validade: 5)
     private let cacheAgenda = Cache<Int, Leitura<ResumoAgenda?>>(validade: 10)
     private let cacheMonitor = Cache<ConfigMonitor, Leitura<EstadoMonitor?>>(validade: 3)
+    /// Curto: a tecla tem que acompanhar o toque. A leitura mexe com o navegador, então não vai a cada pedido de 1 s.
+    private let cacheReuniao = Cache<[Tecla], Leitura<[String: EstadoDeReuniao]>>(validade: 1.5)
 
     /// Quanto o estado espera pelas fontes. Passou disso, a fonte que não respondeu entra com o
     /// último valor que deu certo (ou vazia), e o iPhone não fica sem painel por causa de uma só.
@@ -146,6 +151,7 @@ final class Agregador: @unchecked Sendable {
         private var acesas: [String]?
         private var selo: Int?
         private var monitor: Leitura<EstadoMonitor?>?
+        private var reuniao: Leitura<[String: EstadoDeReuniao]>?
         func gravar(_ f: (Colheita) -> Void) { trava.lock(); f(self); trava.unlock() }
         func guardar(sessoes v: Leitura<[Sessao]>) { gravar { $0.sessoes = v } }
         func guardar(uso v: Leitura<[UsoConta]>) { gravar { $0.uso = v } }
@@ -155,11 +161,12 @@ final class Agregador: @unchecked Sendable {
         func guardar(acesas v: [String]) { gravar { $0.acesas = v } }
         func guardar(selo v: Int?) { gravar { $0.selo = v } }
         func guardar(monitor v: Leitura<EstadoMonitor?>) { gravar { $0.monitor = v } }
+        func guardar(reuniao v: Leitura<[String: EstadoDeReuniao]>) { gravar { $0.reuniao = v } }
         /// Cópia do que já chegou. Fonte lenta ainda escreve depois do limite, então ninguém lê o
         /// objeto vivo: cada campo nil é uma fonte que não respondeu a tempo.
-        func foto() -> (Leitura<[Sessao]>?, Leitura<[UsoConta]>?, Leitura<WhatsAppDados?>?, Leitura<EstadoSpotify?>?, Leitura<ResumoAgenda?>?, [String]?, Int?, Leitura<EstadoMonitor?>?) {
+        func foto() -> (Leitura<[Sessao]>?, Leitura<[UsoConta]>?, Leitura<WhatsAppDados?>?, Leitura<EstadoSpotify?>?, Leitura<ResumoAgenda?>?, [String]?, Int?, Leitura<EstadoMonitor?>?, Leitura<[String: EstadoDeReuniao]>?) {
             trava.lock(); defer { trava.unlock() }
-            return (sessoes, uso, whatsapp, spotify, agenda, acesas, selo, monitor)
+            return (sessoes, uso, whatsapp, spotify, agenda, acesas, selo, monitor, reuniao)
         }
     }
 
@@ -199,10 +206,15 @@ final class Agregador: @unchecked Sendable {
             em { c.guardar(monitor: self.cacheMonitor.obterAgil(chave: config.monitor, agora: agora, padrao: Leitura(valor: nil, aviso: nil), paciencia: p) { self.fontes.monitor(config.monitor, agora) }) }
         }
         em { c.guardar(acesas: self.fontes.acesas(teclas)) }
+        // Só lê quando o perfil tem tecla de microfone ou de câmera da reunião: sem ela o Mac nem encosta no navegador.
+        let teclasDeReuniao = teclas.filter { LeitorDeReuniao.item(da: $0) != nil }
+        if !teclasDeReuniao.isEmpty {
+            em { c.guardar(reuniao: self.cacheReuniao.obterAgil(chave: teclasDeReuniao, agora: agora, padrao: Leitura(valor: [:], aviso: nil), paciencia: p) { self.fontes.reuniao(teclasDeReuniao) }) }
+        }
         _ = grupo.wait(timeout: .now() + limite)
 
         // O que não chegou a tempo cai no último valor bom de cada cache (vazio se nunca houve).
-        let (fs, fu, fw, fp, fa, fz, fselo, fm) = c.foto()
+        let (fs, fu, fw, fp, fa, fz, fselo, fm, fr) = c.foto()
         let leituraSessoes = fs ?? cacheSessoes.ultimo() ?? vazioSessoes
         let leituraUso = fu ?? cacheUso.ultimo() ?? vazioUso
         let leituraWhats = fw ?? cacheWhatsApp.ultimo() ?? vazioWhats
@@ -217,6 +229,8 @@ final class Agregador: @unchecked Sendable {
         if b.uso { avisar(leituraUso.aviso) }
         if b.spotify { avisar(leituraSpotify.aviso) }
         if b.agenda { avisar(leituraAgenda.aviso) }
+        let leituraReuniao = teclasDeReuniao.isEmpty ? nil : fr ?? cacheReuniao.ultimo()
+        avisar(leituraReuniao?.aviso)
 
         // WhatsApp: se o banco não abre, o selo do Dock ainda dá o total (sem separar conversas).
         var resumoWhats: ResumoWhatsApp?
@@ -243,7 +257,8 @@ final class Agregador: @unchecked Sendable {
             agora: Datas.iso(agora), nomeMac: config.nomeMac, perfilAtivo: config.perfilAtivo, comp: config.comp, blocos: b,
             spotify: leituraSpotify.valor, uso: leituraUso.valor, sessoes: FonteSessoes.semContexto(leituraSessoes.valor), whatsapp: resumoWhats,
             agenda: leituraAgenda.valor, acesas: acesas, selos: selos, avisos: avisos,
-            monitor: b.monitor && config.monitor.algum ? (fm ?? cacheMonitor.ultimo())?.valor : nil
+            monitor: b.monitor && config.monitor.algum ? (fm ?? cacheMonitor.ultimo())?.valor : nil,
+            reuniao: leituraReuniao?.valor
         )
     }
 
