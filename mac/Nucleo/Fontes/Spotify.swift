@@ -124,6 +124,10 @@ final class FonteSpotify: @unchecked Sendable {
     private var falhouId: String?
     private var baixando: String?
     private var uriDaFaixa: String?
+    private var ultimoEstado: EstadoSpotify?
+    private var ultimoEstadoEm: Date?
+    /// Quanto tempo a última faixa segue valendo quando uma leitura estoura o limite (Mac acordando, Spotify ocupado).
+    static let validadeDaUltimaFaixa: TimeInterval = 30
 
     /// `baixar` e `pixels` entram de fora para o teste não precisar de rede nem de ImageIO.
     init(executor: any Executor,
@@ -151,18 +155,24 @@ final class FonteSpotify: @unchecked Sendable {
     func ler(agora: Date = Date()) -> Leitura<EstadoSpotify?> {
         // Fechado: nada de AppleScript. Some o player e, quando ele abrir de novo, a próxima leitura já o traz.
         guard aberto() else {
-            trava.lock(); uriDaFaixa = nil; trava.unlock()
+            trava.lock(); uriDaFaixa = nil; ultimoEstado = nil; trava.unlock()
             return Leitura(valor: nil, aviso: nil)
         }
         let r = executor.rodar(Shell.limitado(Self.comando, segundos: Self.limiteDaLeitura))
         // Estourou o tempo (142 do vigia): o Spotify ainda não atende. Sem aviso, e a próxima leitura tenta de novo.
+        // Com ele aberto e tocando é só uma leitura lenta: segue a última faixa por um tempo curto (comportamento
+        // aprovado do painel). Passou da validade sem resposta, o player sai.
         if r.status == 142 {
-            trava.lock(); uriDaFaixa = nil; trava.unlock()
+            trava.lock(); defer { trava.unlock() }
+            if let e = ultimoEstado, let em = ultimoEstadoEm, agora.timeIntervalSince(em) <= Self.validadeDaUltimaFaixa {
+                return Leitura(valor: e, aviso: nil)
+            }
+            uriDaFaixa = nil; ultimoEstado = nil
             return Leitura(valor: nil, aviso: nil)
         }
         let saida = r.saida.trimmingCharacters(in: .whitespacesAndNewlines)
         if r.status == 0, saida == "fechado" || saida == "parado" {
-            trava.lock(); uriDaFaixa = nil; trava.unlock()
+            trava.lock(); uriDaFaixa = nil; ultimoEstado = nil; trava.unlock()
             return Leitura(valor: nil, aviso: nil)
         }
         guard r.status == 0, let f = Self.parse(r.saida) else {
@@ -173,11 +183,13 @@ final class FonteSpotify: @unchecked Sendable {
         trava.lock()
         let cores = capaAtual == id ? coresAtuais : []
         uriDaFaixa = f.uri
-        trava.unlock()
-        return Leitura(valor: EstadoSpotify(tocando: f.tocando, faixa: f.faixa, artista: f.artista,
+        let estado = EstadoSpotify(tocando: f.tocando, faixa: f.faixa, artista: f.artista,
                                             posicao: f.posicao, duracao: f.duracao, capaId: id, cores: cores,
                                             album: f.album, repetir: f.repetir, aleatorio: f.aleatorio,
-                                            volume: f.volume, volumeMac: f.volumeMac), aviso: nil)
+                                            volume: f.volume, volumeMac: f.volumeMac)
+        ultimoEstado = estado; ultimoEstadoEm = agora
+        trava.unlock()
+        return Leitura(valor: estado, aviso: nil)
     }
 
     /// Baixa a arte e tira as cores só quando ela muda. Se o download falha, tenta de novo em 30 s,

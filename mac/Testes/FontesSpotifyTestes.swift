@@ -233,6 +233,33 @@ final class FontesSpotifyTestes: XCTestCase {
         XCTAssertEqual(f.ler().valor?.faixa, "Faixa")
     }
 
+    func testLeituraLentaComSpotifyTocandoSegueAUltimaFaixaPorUmTempo() {
+        // Defeito: o 142 virava nil e o player sumia do iPhone por uma leitura lenta passageira.
+        let ex = ExecutorMutavel("playing\tFaixa\tArtista\t3\t200000\t")
+        let f = FonteSpotify(executor: ex, aberto: { true })
+        let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+        XCTAssertEqual(f.ler(agora: t0).valor?.faixa, "Faixa")
+        ex.status = 142
+        let lenta = f.ler(agora: t0.addingTimeInterval(5))
+        XCTAssertEqual(lenta.valor?.faixa, "Faixa", "leitura lenta passageira não derruba o player")
+        XCTAssertNil(lenta.aviso)
+        let velha = f.ler(agora: t0.addingTimeInterval(FonteSpotify.validadeDaUltimaFaixa + 1))
+        XCTAssertNil(velha.valor, "sem resposta além da validade o player sai")
+        XCTAssertNil(velha.aviso)
+    }
+
+    func testFecharOuPararLimpaAUltimaFaixaAntesDoTempoLimite() {
+        let ex = ExecutorMutavel("playing\tFaixa\tArtista\t3\t200000\t")
+        let chave = Chave(); chave.aberto = true
+        let f = FonteSpotify(executor: ex, aberto: { chave.aberto })
+        XCTAssertNotNil(f.ler().valor)
+        chave.aberto = false
+        XCTAssertNil(f.ler().valor)
+        chave.aberto = true
+        ex.status = 142
+        XCTAssertNil(f.ler().valor, "fechou e abriu: a faixa velha não ressuscita")
+    }
+
     func testLeituraVaiDentroDoVigiaComTempoLimite() {
         let ex = ExecutorFalso([("osascript", SaidaShell(status: 0, saida: "paused\tA\tB\t1\t100\t"))])
         _ = FonteSpotify(executor: ex, aberto: { true }).ler()
