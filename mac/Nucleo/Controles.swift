@@ -18,6 +18,14 @@ struct EstadoControles: Codable, Equatable, Sendable {
     var teclado: Int? = nil
 }
 
+extension EstadoControles {
+    /// Só as barras que a pessoa deixou ligadas (o mudo vai junto com o volume).
+    func somente(_ c: ConfigControles) -> EstadoControles {
+        EstadoControles(volume: c.volume ? volume : nil, mudo: c.volume ? mudo : nil,
+                        brilho: c.brilho ? brilho : nil, teclado: c.teclado ? teclado : nil)
+    }
+}
+
 protocol ControlesDoMac: Sendable {
     func estado() -> EstadoControles
     /// De 0 a 100. Erro em texto, ou nil se deu certo.

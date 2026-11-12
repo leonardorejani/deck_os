@@ -199,12 +199,14 @@ function horaDoEvento(ev) {
   const dia = dias <= 0 ? '' : dias === 1 ? 'amanhã' : d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '');
   return ev.diaTodo ? dia || 'hoje' : (dia + ' ' + hh).trim();
 }
+// tecla que acende: a que tem comando de conferir (`estado`) ou liga e desliga (`desligar`, o Mac guarda o estado)
+const acendeTecla = t => !!(t.estado || t.desligar);
 // o que muda na tecla a cada estado: acesa, selo (WhatsApp, "!" da Agenda) e horário da Agenda
 function infoTecla(t) {
   const cal = painelDe(t) === 'calendario';
   const selo = V.selos[t.id] ?? (cal && V.agenda && V.agenda.permissao === false ? '!' : null);
   const prox = cal && !selo && V.agenda?.proximo ? V.agenda.proximo : null;
-  return { acesa: !!t.estado && V.acesas.includes(t.id), selo, hora: prox ? horaDoEvento(prox) : null, titulo: prox?.titulo };
+  return { acesa: acendeTecla(t) && V.acesas.includes(t.id), selo, hora: prox ? horaDoEvento(prox) : null, titulo: prox?.titulo };
 }
 function extraTecla(t, i) {
   const seloTxt = i.selo == null ? '' : /^\d+$/.test(i.selo) && +i.selo > 99 ? '99+' : i.selo;
@@ -214,7 +216,7 @@ function extraTecla(t, i) {
 }
 function teclaHTML(t) {
   const i = infoTecla(t);
-  return `<button class="tecla depende ${i.acesa ? 'acesa' : ''}" data-id="${esc(t.id)}" ${t.estado ? `aria-pressed="${i.acesa}"` : ''}>
+  return `<button class="tecla depende ${i.acesa ? 'acesa' : ''}" data-id="${esc(t.id)}" ${acendeTecla(t) ? `aria-pressed="${i.acesa}"` : ''}>
     <span class="editar" aria-hidden="true">${SVG.lapis}</span>
     ${iconeDaTecla(t)}<span class="nome">${esc(t.nome)}</span><span class="led" aria-hidden="true"></span>${extraTecla(t, i)}
     </button>`;
@@ -236,7 +238,7 @@ const porPagina = () => V.comp === 'b' ? (posicao === 'vertical' ? 6 : 9) : posi
 
 /* ---------- desenho ---------- */
 // o que, se mudar, obriga a refazer a tela inteira
-const chaveLayout = () => JSON.stringify([posicao, V.comp, monitorItens(), !!V.carregando, V.blocos.sessoes !== false, usoVisivel().length > 0, V.perfilAtivo, V.perfis, V.teclas.map(t => [t.id, t.nome, t.tipo, t.valor, t.icone, !!t.estado]), appsMac.versao]);
+const chaveLayout = () => JSON.stringify([posicao, V.comp, monitorItens(), !!V.carregando, V.blocos.sessoes !== false, usoVisivel().length > 0, V.perfilAtivo, V.perfis, V.teclas.map(t => [t.id, t.nome, t.tipo, t.valor, t.icone, acendeTecla(t)]), appsMac.versao]);
 const chaveTeclas = () => JSON.stringify(V.teclas.map(t => { const i = infoTecla(t); return [i.acesa, i.selo, i.hora] }));
 const chavePlayer = () => { const s = V.spotify; return s ? JSON.stringify([s.faixa, s.artista, s.album, s.capaId, s.cores, s.duracao, temModos(s), conectado(s)]) : null };
 
@@ -323,7 +325,7 @@ function pintarTeclas() {
     const el = $(`.tecla[data-id="${CSS.escape(t.id)}"]`); if (!el) continue;
     const i = infoTecla(t);
     el.classList.toggle('acesa', i.acesa);
-    if (t.estado) el.setAttribute('aria-pressed', String(i.acesa));
+    if (acendeTecla(t)) el.setAttribute('aria-pressed', String(i.acesa));
     $$('.selo, .hora-tecla', el).forEach(x => x.remove());
     el.insertAdjacentHTML('beforeend', extraTecla(t, i));
   }
@@ -456,7 +458,7 @@ async function executar(id) {
   // resposta otimista: a tecla acende (ou pisca) e o aviso aparece no toque. Se o Mac recusar, volta e o aviso vira o erro
   const el = $(`.tecla[data-id="${CSS.escape(id)}"]`), quer = !V.acesas.includes(id);
   el?.classList.add('piscando'); setTimeout(() => el?.classList.remove('piscando'), 400);
-  if (t.estado) { otmTeclas[id] = { acesa: quer, ate: performance.now() + JANELA_OTM }; V = vistaReal(); atualizar(); avisar(`${t.nome}: ${quer ? 'ligado' : 'desligado'}`) }
+  if (acendeTecla(t)) { otmTeclas[id] = { acesa: quer, ate: performance.now() + JANELA_OTM }; V = vistaReal(); atualizar(); avisar(`${t.nome}: ${quer ? 'ligado' : 'desligado'}`) }
   else avisar(t.tipo === 'app' ? `Abrindo ${t.nome} no Mac` : `${t.nome}: feito`);
   try { await canal.botao(id); atualizarJa() }
   catch (e) { delete otmTeclas[id]; el?.classList.remove('piscando'); if (V) { V = vistaReal(); atualizar() } tratarErro(e) }
@@ -698,6 +700,9 @@ tela.addEventListener('touchmove', e => {
   const t = e.touches[0], dx = t.clientX - puxar.x, dy = t.clientY - puxar.y, f = puxar.f;
   if (!puxar.seguindo) {
     if (Math.abs(dx) > 10 && Math.abs(dx) >= Math.abs(dy) || dy < -10) { puxar = null; return } // para o lado ou para cima: não é fechar
+    // No iPhone a rolagem nativa começa nos primeiros pixels e, depois dela, o touchmove não é mais cancelável: o gesto é cancelado
+    // já no primeiro movimento para baixo (a lista está no topo, então não há o que rolar para esse lado)
+    if (dy > 0 && dy > Math.abs(dx) && e.cancelable) e.preventDefault();
     if (dy < 10 || dy < Math.abs(dx) * 1.5) return;
     puxar.seguindo = true; f.style.transition = 'none';
   }

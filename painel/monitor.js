@@ -1,6 +1,6 @@
 /* Monitor de Atividade no iPhone: a tecla do app abre esta tela. Uma grade de cartões com o que o Mac mede (V.monitor, que o Mac
    já manda no estado): CPU, GPU, memória, bateria, rede, disco disponível, energia, ventoinhas e dispositivos conectados. Só
-   aparece o que a pessoa deixou ligado nos Ajustes do Mac e o que o Mac conseguiu ler (medida ausente some, não vira "-").
+   aparece o que a pessoa deixou ligado na tecla do Monitor, nos Ajustes do Mac, e o que o Mac conseguiu ler (medida ausente some, não vira "-").
    O cartão não é refeito a cada segundo: os mesmos elementos são atualizados, e o número conta do valor antigo ao novo
    (tatile, movimento, regra 9: 600 ms, ease-out cúbico, algarismos de largura fixa).
    Usa as peças de deck.js (V, folhaAberta, semAcesso, offline, monitorItens, velocidade, nivel, nivelBateria) e util.js (SVG, esc). */
@@ -100,10 +100,10 @@ function pintarMonitor() {
   let chave, aviso = '';
   if (!V?.monitor || !ligado) {
     chave = 'vazio:' + (V?.blocos?.monitor ? 'sem-item' : 'desligado');
-    aviso = avisoVazio(V?.blocos?.monitor ? 'Nenhum item ligado' : 'O monitor está desligado', 'Para ver o uso do Mac aqui, ligue o Monitor do Mac em Ajustes, Este Mac.');
+    aviso = avisoVazio(V?.blocos?.monitor ? 'Nenhum item ligado' : 'O monitor está desligado', 'Para ver o uso do Mac aqui, ligue o monitor na tecla Monitor de Atividade, nos Ajustes do Deck no Mac.');
   } else if (!cartoes.length) {
     chave = 'vazio:sem-leitura';
-    aviso = avisoVazio('O Mac não conseguiu ler os itens', 'Os itens ligados em Ajustes, Este Mac, não estão disponíveis neste Mac agora.');
+    aviso = avisoVazio('O Mac não conseguiu ler os itens', 'Os itens ligados na tecla Monitor de Atividade, nos Ajustes do Deck no Mac, não estão disponíveis neste Mac agora.');
   } else chave = 'grade:' + cartoes.map(c => c.k).join(',');
   // a grade só é refeita quando a lista de cartões muda. No resto do tempo os mesmos elementos são atualizados no lugar
   const refez = chave !== mn.chave;

@@ -235,30 +235,6 @@ const TIPOS_MAC = {
 };
 const NOMES_KBD = { ctrl: '⌃ control', opt: '⌥ option', cmd: '⌘ command', shift: '⇧ shift', fn: 'fn' };
 // montar a combinação escolhendo as teclas na tela (atalho que outro app já usa e o gravador não alcança). Mesma ordem do Mac
-const MODS_MONTAGEM = [['ctrl', '⌃ control'], ['opt', '⌥ option'], ['cmd', '⌘ command'], ['shift', '⇧ shift'], ['fn', 'fn']];
-const ORDEM_MODS = ['fn', 'ctrl', 'opt', 'cmd', 'shift'];
-const GRUPOS_TECLAS = {
-  'Letras': [...'abcdefghijklmnopqrstuvwxyz'].map(c => [c, c.toUpperCase()]),
-  'Números': [...'1234567890'].map(c => [c, c]),
-  'F1 a F12': Array.from({ length: 12 }, (_, i) => ['f' + (i + 1), 'F' + (i + 1)]),
-  'Setas': [['left', '←'], ['up', '↑'], ['down', '↓'], ['right', '→'], ['home', 'Home'], ['end', 'End'], ['pageup', 'Page Up'], ['pagedown', 'Page Down']],
-  'Outras': [['space', 'Espaço'], ['return', 'Return'], ['tab', 'Tab'], ['delete', 'Delete'], ['esc', 'Esc'], ...[...'-=[];\',./\\`'].map(c => [c, c])],
-};
-const montagemDe = t => M.montagem?.id === t.id ? M.montagem : (() => { const p = (t.valor || '').split('+').filter(Boolean); return { id: t.id, mods: p.filter(k => ORDEM_MODS.includes(k)), tecla: p.find(k => !ORDEM_MODS.includes(k)) || '' } })();
-const valorDaMontagem = m => m.mods.length && m.tecla ? [...ORDEM_MODS.filter(k => m.mods.includes(k)), m.tecla].join('+') : '';
-const faltaMontagem = m => !m.mods.length && !m.tecla ? 'Ligue pelo menos um modificador e escolha a tecla.' : !m.mods.length ? 'Ligue pelo menos um modificador.' : !m.tecla ? 'Escolha a tecla.' : '';
-function montagemHTML(t) {
-  const m = montagemDe(t), g = M.grupoTeclas || 'Letras';
-  return `<h5 class="titulinho">Montar escolhendo as teclas</h5>
-    <div class="chips">${MODS_MONTAGEM.map(([k, n]) => `<button class="chip" data-mod="${k}" aria-pressed="${m.mods.includes(k)}">${n}</button>`).join('')}</div>
-    <div class="chips">${Object.keys(GRUPOS_TECLAS).map(n => `<button class="chip" data-grupo="${n}" aria-pressed="${n === g}">${n}</button>`).join('')}</div>
-    <div class="chips pequenos">${GRUPOS_TECLAS[g].map(([k, r]) => `<button class="chip" data-tk="${esc(k)}" aria-pressed="${m.tecla === k}">${esc(r)}</button>`).join('')}</div>
-    <span class="ajuda">${faltaMontagem(m) || 'Pronto, a combinação já está gravada na tecla.'}</span>`;
-}
-function aplicarMontagem(m) {
-  const v = valorDaMontagem(m);
-  if (v) { M.montagem = null; mudarTecla('valor', v, true) } else { M.montagem = m; pintar() }
-}
 // todos os apps da pasta Aplicativos (de mentira). Os com ícone vêm de APPS, o resto ganha a inicial
 const TODOS_APPS = [...APPS.map(a => a.nome), 'Ableton Live', 'App Store', 'Arc', 'Atalhos', 'Calculadora', 'Contatos', 'Discord', 'FaceTime', 'Figma', 'Final Cut Pro', 'Fotos', 'GarageBand', 'Google Chrome', 'Lembretes', 'Logic Pro', 'Mail', 'Mapas', 'Mensagens', 'Música', 'Notion', 'OBS', 'Obsidian', 'Prévia', 'ProPresenter', 'Slack', 'Ajustes do Sistema', 'Visual Studio Code', 'Xcode', 'Zoom'].sort((a, b) => a.localeCompare(b, 'pt-BR'));
 const ATALHOS = ['Hora do Dia', 'Modo Ensaio', 'Ligar Luzes', 'Enviar Mensagem', 'Iniciar Gravação', 'Foco: Trabalho', 'Converter Imagem', 'Dividir Conta'];
@@ -283,7 +259,7 @@ function acaoHTML(t) {
   if (t.tipo === 'app') return { tit: 'Qual app abre', html: busca(`Buscar entre ${TODOS_APPS.length} apps`) + '<span class="ajuda">WhatsApp e Calendário abrem a lista no próprio iPhone, com "Abrir no Mac" dentro.</span>' };
   if (t.tipo === 'atalho') return { tit: 'Qual atalho do app Atalhos roda', html: busca('Buscar atalho') + '<span class="ajuda">São as automações que você monta no app Atalhos da Apple (ícone de raio no Mac). Criou uma nova lá, ela aparece aqui sozinha.</span>' };
   if (t.tipo === 'tecla') return { tit: 'Qual combinação', html: `<button class="gravador ${M.ouvindo ? 'ouvindo' : ''}" data-gravar>${M.ouvindo ? 'Aperte a combinação no teclado. Esc cancela' : t.valor ? t.valor.split('+').map(k => `<kbd>${esc(NOMES_KBD[k] || k.toUpperCase())}</kbd>`).join('') : 'Clique aqui e aperte as teclas'}</button>
-      <span class="ajuda">Serve para atalho de qualquer app, mesmo em segundo plano. Exemplos:</span><div class="chips">${EX_TECLAS.map(([v, d]) => `<button class="chip" data-ex-tecla="${v}">${d}</button>`).join('')}</div>${montagemHTML(t)}` };
+      <span class="ajuda">Serve para atalho de qualquer app, mesmo em segundo plano. Exemplos:</span><div class="chips">${EX_TECLAS.map(([v, d]) => `<button class="chip" data-ex-tecla="${v}">${d}</button>`).join('')}</div>` };
   if (t.tipo === 'comando') return { tit: 'Qual comando', html: `<textarea id="m-valor" data-campo="valor" spellcheck="false" placeholder="ex.: open ~/Downloads">${esc(t.valor)}</textarea><div class="rodape-ed"><span class="teste-saida" id="saida"></span><button class="btn secundario" data-acao="testar">Testar agora</button></div>
       <span class="ajuda">Roda no zsh do Mac. Prontos para usar:</span><div class="chips">${EX_COMANDOS.map(([n, v]) => `<button class="chip" data-ex-cmd="${esc(v)}" data-ex-nome="${esc(n)}">${n}</button>`).join('')}</div>` };
   return { tit: '', html: '' };
@@ -491,10 +467,7 @@ corpo.addEventListener('click', e => {
   if (e.target.closest('[data-nova]')) { const t = { id: 't' + Date.now(), nome: 'Nova tecla', tipo: 'app', valor: '', icone: '' }; teclas.push(t); M.sel = t.id; M.pag = Math.floor((teclas.length - 1) / porPaginaMac()); M.busca = ''; gravar(); pintar(); $('#m-nome')?.select(); return }
   const tp = e.target.closest('[data-tipo]'); if (tp) { const t = tecla(M.sel); if (t.tipo !== tp.dataset.tipo) { t.tipo = tp.dataset.tipo; t.valor = ''; if (t.tipo === 'tecla') pedirPerm('acess') } M.ouvindo = false; M.busca = ''; gravar(); pintar(); return }
   const at = e.target.closest('[data-atalho]'); if (at) { const t = tecla(M.sel); if (!t.nome || t.nome === 'Nova tecla') t.nome = at.dataset.atalho; t.valor = at.dataset.atalho; gravar(); pintar(); return }
-  const md = e.target.closest('[data-mod]'); if (md) { const m = { ...montagemDe(tecla(M.sel)) }; m.mods = m.mods.includes(md.dataset.mod) ? m.mods.filter(k => k !== md.dataset.mod) : [...m.mods, md.dataset.mod]; M.ouvindo = false; aplicarMontagem(m); return }
-  const gp = e.target.closest('[data-grupo]'); if (gp) { M.grupoTeclas = gp.dataset.grupo; pintar(); return }
-  const tk = e.target.closest('[data-tk]'); if (tk) { M.ouvindo = false; aplicarMontagem({ ...montagemDe(tecla(M.sel)), tecla: tk.dataset.tk }); return }
-  const et = e.target.closest('[data-ex-tecla]'); if (et) { M.montagem = null; mudarTecla('valor', et.dataset.exTecla, true); return }
+  const et = e.target.closest('[data-ex-tecla]'); if (et) { mudarTecla('valor', et.dataset.exTecla, true); return }
   const ec = e.target.closest('[data-ex-cmd]'); if (ec) { const t = tecla(M.sel); if (!t.nome || t.nome === 'Nova tecla') t.nome = ec.dataset.exNome; mudarTecla('valor', ec.dataset.exCmd, true); return }
   const ap = e.target.closest('[data-app]'); if (ap) { const t = tecla(M.sel); if (!t.nome || t.nome === 'Nova tecla' || TODOS_APPS.includes(t.nome)) t.nome = ap.dataset.app; t.valor = t.icone = ap.dataset.app; gravar(); pintar(); avisar(`${ap.dataset.app} escolhido`); return }
   const ic = e.target.closest('[data-ic]'); if (ic) { mudarTecla('icone', ic.dataset.ic, true); return }

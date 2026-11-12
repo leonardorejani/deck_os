@@ -20,6 +20,9 @@ struct Tecla: Codable, Equatable, Sendable {
     /// Só no tipo "app": abre o app numa coisa específica (a caixa de entrada de uma conta do Mail, um
     /// endereço no navegador...). Sem ele a tecla só abre o app. O catálogo vem de GET /api/apps/<bundle>/acoes.
     var acao: AcaoDeApp? = nil
+    /// Só no tipo "comando": com ele a tecla vira liga e desliga. `valor` é o comando para ligar e este é o para desligar.
+    /// O `estado` (opcional) confere se está ligado (sai 0 = ligado). Sem `estado`, o Deck guarda o último estado que ele mesmo pôs.
+    var desligar: String? = nil
 }
 
 /// O que a tecla de app faz além de abrir o app. `id` é o da ação no catálogo do Mac (AcoesDeApp.swift) e
@@ -77,6 +80,14 @@ struct ConfigMonitor: Codable, Equatable, Sendable {
     }
 }
 
+/// Quais controles a tela "Controles do Mac" mostra no iPhone (volume, brilho e luz do teclado). Todos ligados de fábrica.
+struct ConfigControles: Codable, Equatable, Sendable {
+    var volume = true
+    var brilho = true
+    var teclado = true
+    var algum: Bool { volume || brilho || teclado }
+}
+
 /// De onde o Deck lê as não lidas do WhatsApp.
 struct ConfigWhatsApp: Codable, Equatable, Sendable {
     /// "auto" (o Deck descobre), "app" (banco do WhatsApp do Mac), "web" (aba do WhatsApp Web) ou "qr"
@@ -116,6 +127,8 @@ struct Config: Codable, Equatable, Sendable {
     var whatsapp = ConfigWhatsApp()
     /// Itens do monitor do Mac. Só aparece no iPhone com `blocos.monitor` ligado.
     var monitor = ConfigMonitor()
+    /// Barras que a tela Controles do Mac mostra no iPhone.
+    var controles = ConfigControles()
     var nomeMac: String
     var porta = 4777
     /// Código longo da API (20 letras). Sem ele nada é lido nem executado. Troca sozinho a cada 24 h
