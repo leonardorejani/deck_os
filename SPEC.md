@@ -280,7 +280,7 @@ contas que o dono adicionar em User Management (até 25): quem não estiver na l
 | Spotify fechado | o player sai e as sessões ocupam o espaço (animado, item 3) |
 | Spotify pausado | capa a meia luz, botão de tocar |
 | Agenda sem permissão | selo "!" na tecla, e a folha explica onde liberar no Mac |
-| Agenda vazia | "Nada nos próximos 30 dias" |
+| Agenda vazia | "Nada neste mês a partir deste dia" |
 | Nenhuma sessão esperando | ícone do Claude, "Tudo respondido" e "Nenhuma sessão do Claude esperando você" |
 | Spotify fechado e nenhuma sessão | as sessões ocupam o espaço mostrando "Tudo respondido" |
 | Uso sem medição recente | barra cinza com "-" |
@@ -987,8 +987,10 @@ Teste do Deck 1.0 (12/11/2026, frente iphone-bugs), dito pelo Leonardo:
   passa disso. Trocar de mês (seta ou arrasto) recarrega grade e lista, e o dia escolhido vira hoje (no mês de hoje) ou o dia 1.
 - "Quando arrasto e seguro pra mudar de mês ele buga": o mês arrastado fica recortado na coluna dele, sem passar por
   cima da lista.
-- "Às vezes quando arrasto as cenas de teclas ele buga e aparece o risco acima": soltar o dedo fora da tela deixava o
-  fantasma da tecla e a tecla apagada. O arrasto agora termina em qualquer lugar onde o dedo solte.
+- "Às vezes quando arrasto as cenas de teclas ele buga e aparece o risco acima": a linha roxa NÃO foi reproduzida (o painel
+  não tem elemento roxo, e o indicador de páginas e o LED ficam no lugar durante e depois do arrasto, coberto por teste).
+  O que se achou e corrigiu: soltar o dedo fora da tela deixava o fantasma da tecla e a tecla apagada, e o arrasto agora
+  termina em qualquer lugar onde o dedo solte. Pendente: um print do risco, para achar a causa se ele continuar.
 - Telas abertas (player, relógio, agenda, WhatsApp, sessões, editor): além do X, arrastar de cima para baixo fecha. A tela
   acompanha o dedo e volta se soltar cedo. Lista que ainda rola para cima, barra de tempo, volume e campo de texto
   ficam com o gesto deles.

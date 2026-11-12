@@ -234,11 +234,22 @@ async function lerAgenda(mes, lista, silencio) {
     ag.erro = msgErro(e); if (silencio && ag.lista) { if (!falhou) avisar(ag.erro, { erro: true }) } else pintarCal();
   }
 }
+/* O trecho de dias que o evento cobre. Sem fim (Mac antigo) é um dia só. O fim que cai à meia-noite pertence ao dia anterior */
+const diaDe = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+function trechoDoEvento(e) {
+  const i = new Date(e.inicio); if (isNaN(i)) return null;
+  let f = e.fim ? new Date(e.fim) : i; if (isNaN(f) || f < i) f = i; if (f > i) f = new Date(f - 1000);
+  return { i, a: diaDe(i), z: diaDe(f) };
+}
 function pintarCal() {
   const hoje = new Date(V.ref), m = ag.mes;
   $('#ca-titulo').textContent = m.toLocaleDateString('pt-BR', { month: 'long' }) + (m.getFullYear() !== hoje.getFullYear() ? ' ' + m.getFullYear() : '');
   const dias = new Date(m.getFullYear(), m.getMonth() + 1, 0).getDate(), temEv = new Map();
-  for (const e of ag.mesEv || []) { const d = new Date(e.inicio); if (!isNaN(d)) temEv.set(d.getDate(), (temEv.get(d.getDate()) || 0) + 1) }
+  const m1 = new Date(m.getFullYear(), m.getMonth(), 1), m2 = new Date(m.getFullYear(), m.getMonth(), dias);
+  for (const e of ag.mesEv || []) { // o evento de vários dias pinta cada dia do mês que ele cobre
+    const t = trechoDoEvento(e); if (!t) continue;
+    for (let d = new Date(Math.max(t.a, m1)); d <= Math.min(t.z, m2); d.setDate(d.getDate() + 1)) temEv.set(d.getDate(), (temEv.get(d.getDate()) || 0) + 1);
+  }
   let h = '<span></span>'.repeat(new Date(m.getFullYear(), m.getMonth(), 1).getDay());
   for (let n = 1; n <= dias; n++) {
     const d = new Date(m.getFullYear(), m.getMonth(), n), dow = d.getDay(), tem = temEv.get(n) || 0;
@@ -253,11 +264,14 @@ function pintarListaCal() {
   if (!ag.lista) { el.setAttribute('aria-busy', String(!ag.erro)); if (ag.erro) el.innerHTML = erroLista(ag.erro, 0); else if (!el.querySelector('.esq-lista')) el.innerHTML = esqueletoCal(); return }
   el.setAttribute('aria-busy', 'false');
   const agora = new Date(V.ref), grupos = new Map();
+  const m1 = new Date(ag.mes.getFullYear(), ag.mes.getMonth(), 1), m2 = new Date(ag.mes.getFullYear(), ag.mes.getMonth() + 1, 0), dia0 = diaDe(ag.dia);
   for (const e of ag.lista) {
-    const d = new Date(e.inicio); if (isNaN(d)) continue;
-    if (d.getFullYear() !== ag.mes.getFullYear() || d.getMonth() !== ag.mes.getMonth()) continue; // a lista é só do mês que está na tela
-    if (mesmoDia(d, agora) && !e.diaTodo && d < agora) continue; // o que já passou hoje não entra
-    const k = dataIso(d); if (!grupos.has(k)) grupos.set(k, { d, ev: [] }); grupos.get(k).ev.push({ ...e, d });
+    const t = trechoDoEvento(e); if (!t) continue;
+    // aparece no primeiro dia visível: o do início, ou o dia tocado/1º do mês quando o evento já vinha de antes. Nunca fora do mês na tela
+    const primeiro = new Date(Math.max(t.a, dia0, m1)); if (primeiro > Math.min(t.z, m2)) continue;
+    const continua = primeiro > t.a;
+    if (!continua && mesmoDia(t.i, agora) && !e.diaTodo && t.i < agora) continue; // o que já passou hoje não entra
+    const k = dataIso(primeiro); if (!grupos.has(k)) grupos.set(k, { d: primeiro, ev: [] }); grupos.get(k).ev.push({ ...e, d: t.i, continua });
   }
   let h = '';
   for (const [k, g] of [...grupos].sort((a, b) => a[0] < b[0] ? -1 : 1)) {
@@ -265,7 +279,7 @@ function pintarListaCal() {
     h += `<section class="grupo-data"><h3>${nomeDia(g.d)}</h3>` + g.ev.map((e, j) => {
       const id = k + '#' + j, aberto = ag.aberto === id, cor = /^#[0-9a-f]{6}$/i.test(e.cor || '') ? e.cor : 'var(--texto-3)';
       const reuniao = reuniaoDe(e), local = reuniao && e.local && e.local.includes(reuniao.url) ? reuniao.nome : e.local; // o endereço da sala não vira o "local" da linha
-      return `<button class="ev-linha" data-ev="${esc(id)}" aria-expanded="${aberto}"><time>${e.diaTodo ? 'dia todo' : hhmm(e.d)}</time><i style="background:${cor}"></i><span class="tx"><b>${esc(e.titulo)}</b><span>${esc(e.calendario || '')}${local ? ', ' + esc(local) : ''}</span></span></button>`
+      return `<button class="ev-linha" data-ev="${esc(id)}" aria-expanded="${aberto}"><time>${e.diaTodo ? 'dia todo' : e.continua ? 'continua' : hhmm(e.d)}</time><i style="background:${cor}"></i><span class="tx"><b>${esc(e.titulo)}</b><span>${esc(e.calendario || '')}${local ? ', ' + esc(local) : ''}</span></span></button>`
         + (aberto ? `<div class="ev-detalhe">${reuniao ? `<button class="btn primario" data-ev-reuniao="${esc(reuniao.url)}" aria-label="Entrar na reunião (${esc(reuniao.nome)}), abre no Mac">Entrar na reunião</button>` : ''}<button class="btn secundario pequeno" data-ev-mac>Abrir no Calendário do Mac</button></div>` : '');
     }).join('') + '</section>';
   }

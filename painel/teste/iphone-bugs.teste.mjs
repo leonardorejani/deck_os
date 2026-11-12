@@ -20,8 +20,8 @@ export default async function (h) {
   await h.espera(p, () => document.querySelectorAll('#ca-lista .ev-linha').length > 0);
   const hoje = new Date(), diasDoMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).getDate();
   const fimDoMes = new Date(hoje.getFullYear(), hoje.getMonth(), diasDoMes);
-  // toca no primeiro dia depois de hoje, para a lista começar nele e cobrir só o resto do mês
-  const dia = Math.min(hoje.getDate() + 1, diasDoMes), alvo = new Date(hoje.getFullYear(), hoje.getMonth(), dia);
+  // toca no dia 1: o Mac de mentira tem eventos o mês todo, então a lista nunca fica vazia, seja qual for a data de hoje
+  const dia = 1, alvo = new Date(hoje.getFullYear(), hoje.getMonth(), dia);
   await p.click(`#ca-grade .sb-dia[data-dia="${iso(alvo)}"]`); await h.dormir(500);
   let c = await h.contadores();
   h.ok(c.agenda.at(-1) === `${iso(alvo)}|${diasDoMes - dia + 1}`, `tocar no dia pede só até o fim do mês (${c.agenda.at(-1)})`);
@@ -40,6 +40,19 @@ export default async function (h) {
   t = await titulos(p); const nomeProx = prox.toLocaleDateString('pt-BR', { month: 'long' });
   h.ok(t.length > 0 && t.every(x => x.endsWith(' de ' + nomeProx)), `depois de trocar, a lista é toda de ${nomeProx} (${t.join(' | ')})`);
   h.ok(await p.evaluate(() => document.querySelectorAll('#ca-grade .sb-dia.sel').length === 1), 'o dia escolhido acompanha o mês novo');
+
+  // evento de vários dias que começou no mês anterior: continua na lista deste mês e pinta só os dias que cobre
+  const ult = new Date(prox.getFullYear(), prox.getMonth(), 0).getDate(), nomeProx2 = prox.getMonth();
+  const viagem = await p.evaluate(({ a, m }) => {
+    const ini = new Date(a, m, 0, 0, 0, 0), fim = new Date(a, m, 2, 23, 59, 59); // do último dia do mês anterior ao dia 2 deste
+    const e = { titulo: 'Viagem longa', inicio: ini.toISOString(), fim: fim.toISOString(), diaTodo: true, calendario: 'X', cor: '#60A5FA' };
+    ag.mesEv = [e]; ag.lista = [e]; pintarCal();
+    const dias = [...document.querySelectorAll('#ca-grade .sb-dia.tem')].map(x => Number(x.textContent));
+    const lista = [...document.querySelectorAll('#ca-lista .ev-linha')].map(x => x.textContent);
+    return { dias, lista, grupos: [...document.querySelectorAll('#ca-lista .grupo-data h3')].map(x => x.textContent) };
+  }, { a: prox.getFullYear(), m: nomeProx2 });
+  h.ok(viagem.lista.length === 1 && viagem.lista[0].includes('Viagem longa') && viagem.lista[0].includes('dia todo'), `evento que vinha do mês anterior continua na lista (${viagem.lista.join('|')})`);
+  h.ok(JSON.stringify(viagem.dias) === '[1,2]', `a grade pinta só os dias do mês que o evento cobre, nunca o ${ult} (${viagem.dias})`);
 
   /* 2. mês arrastado: fica dentro da coluna dele, a lista não é coberta */
   await p.click('#ca-ant'); await h.dormir(600);
@@ -60,6 +73,27 @@ export default async function (h) {
   const rastro = await p.evaluate(() => ({ fantasma: document.querySelectorAll('.fantasma').length, apagadas: document.querySelectorAll('.tecla.arrastando').length }));
   h.ok(rastro.fantasma === 0 && rastro.apagadas === 0, `soltar fora da tela termina o arrasto sem rastro (${JSON.stringify(rastro)})`);
   await ctxG.close();
+
+  /* 3b. arrastar as páginas do carrossel (cenas de teclas) com o dedo: o indicador de páginas nunca sai do divisor,
+     o carrossel não rola na vertical e nada sobra depois de soltar. Investigação do "risco acima da tecla": nenhum elemento
+     do painel fica fora do lugar durante nem depois do arrasto */
+  await h.cenario({ teclas: 'muitas' });
+  const ctxC = await h.novoContexto({ hasTouch: true });
+  p = await h.pagina({ ctx: ctxC }); await h.espera(p, () => document.querySelectorAll('.paginas .pagina').length === 3);
+  const cdp = await ctxC.newCDPSession(p), bp = await p.locator('.paginas').boundingBox(), x0 = bp.x + bp.width * .8, y0 = bp.y + bp.height / 2;
+  const fora = [];
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: x0, y: y0 }] });
+  for (let i = 1; i <= 12; i++) {
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x0 - i * 40, y: y0 + i * 2 }] }); await p.waitForTimeout(30);
+    const r = await p.evaluate(() => { const d = document.querySelector('.divisor').getBoundingClientRect(), i = document.querySelector('.indicador').getBoundingClientRect(), pg = document.querySelector('.paginas');
+      return { dentro: i.left >= d.left - 1 && i.right <= d.right + 1 && i.top >= d.top - 1 && i.bottom <= d.bottom + 1, vert: pg.scrollTop, sobras: document.querySelectorAll('.fantasma, .tecla.arrastando, .tecla.segurando').length } });
+    if (!r.dentro || r.vert !== 0 || r.sobras) fora.push(JSON.stringify(r));
+  }
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }); await h.dormir(600);
+  h.ok(fora.length === 0, `arrastando as páginas: indicador dentro do divisor, sem rolar na vertical e sem sobras (${fora.join(' ')})`);
+  const fim = await p.evaluate(() => ({ sobras: document.querySelectorAll('.fantasma, .tecla.arrastando, .tecla.segurando, .organizando').length, vert: document.querySelector('.paginas').scrollTop, scrollY: scrollY }));
+  h.ok(fim.sobras === 0 && fim.vert === 0 && fim.scrollY === 0, `depois de soltar não sobra nada na tela (${JSON.stringify(fim)})`);
+  await ctxC.close(); await h.cenario({ teclas: 'poucas' });
 
   /* 4. puxar de cima para baixo fecha a tela aberta, e soltar cedo devolve */
   const ctx = await h.novoContexto({ hasTouch: true });
