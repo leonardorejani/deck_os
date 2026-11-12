@@ -30,7 +30,7 @@ enum Agenda {
         let local = e.local?.trimmingCharacters(in: .whitespacesAndNewlines)
         return Evento(titulo: e.titulo, inicio: Datas.iso(e.inicio, fuso: fuso), diaTodo: e.diaTodo,
                       calendario: e.calendario, cor: Cor.hex(r: e.cor.r, g: e.cor.g, b: e.cor.b),
-                      local: (local?.isEmpty ?? true) ? nil : local, link: e.link)
+                      local: (local?.isEmpty ?? true) ? nil : local, link: e.link, fim: Datas.iso(e.fim, fuso: fuso))
     }
 
     /// O próximo é o primeiro que ainda não terminou, na ordem do início.

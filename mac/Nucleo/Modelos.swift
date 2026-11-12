@@ -183,6 +183,9 @@ struct Evento: Codable, Equatable, Sendable {
     /// Link de reunião de vídeo (Meet, Zoom ou Teams) achado no evento. Ausente em Mac antigo e em evento sem reunião:
     /// o painel só mostra "Entrar na reunião" quando ele vem.
     var link: String? = nil
+    /// ISO 8601 do fim. Ausente em Mac antigo: o painel trata como evento de um dia só. Vem para o evento de vários dias
+    /// (viagem, feriado prolongado) aparecer em todos os dias e meses que cobre.
+    var fim: String? = nil
 }
 
 struct ResumoAgenda: Codable, Equatable, Sendable {

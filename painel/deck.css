@@ -437,6 +437,8 @@ button.cartao { font: inherit; color: inherit; text-align: left; border: 0; curs
 .folha.calendario { grid-template-rows: minmax(0, 1fr) }
 .fechar-cal { position: absolute; top: var(--pad); right: var(--seguro-dir); z-index: 2 }
 .cal-corpo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--secao); min-height: 0; padding: var(--pad) 0 var(--seguro-baixo) }
+/* janela do mês: o mês arrastado segue o dedo só dentro da coluna dele, sem passar por cima (nem por baixo) da lista */
+.mes-janela { display: grid; grid-template-rows: minmax(0, 1fr); min-width: 0; min-height: 0; overflow: hidden }
 .mes-sb { display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: var(--item); min-height: 0; touch-action: pan-y; transition: opacity var(--mov-padrao) var(--curva-move), translate var(--mov-padrao) var(--curva-move) }
 .mes-sb.saindo-esq { opacity: 0; translate: calc(-1 * var(--margem)) 0; transition-duration: var(--mov-sai-rapido) }
 .mes-sb.saindo-dir { opacity: 0; translate: var(--margem) 0; transition-duration: var(--mov-sai-rapido) }
