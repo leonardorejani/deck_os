@@ -895,6 +895,22 @@ ficam sem medição". Decisão: o Deck mede o uso pelo token de `claude setup-to
 o escopo `user:profile` e o token de setup-token só tem `user:inference` (403). Conta da troca de contas sem
 medição do autoswitch passa a ser medida pelo token do perfil (type oauth_token). A leitura fica em cache de 5 min.
 
+Teste do Deck 1.0 (12/11/2026, frente iphone-bugs), dito pelo Leonardo:
+- "Mesmo com conta de IA configurada no Mac, no app não aparece nenhum dado. Uso e renovação não aparecem." Causa: o
+  Mac mede por token só na tela Uso das IAs, e o estado que vai ao iPhone lia apenas o `measure.json` do autoswitch.
+  Decisão: o estado soma o uso medido por token ao que vem dos arquivos (só preenche conta sem número, medição boa de
+  arquivo não é trocada).
+- "Clico dia 26/nov e ele mostra sexta 25 de dezembro (Natal) na direita. Só pode mostrar os daquele mês, mudou de mês
+  mudou todos os feriados/compromissos." Decisão: a lista da Agenda vai do dia tocado até o fim do mês na tela e nunca
+  passa disso. Trocar de mês (seta ou arrasto) recarrega grade e lista, e o dia escolhido vira hoje (no mês de hoje) ou o dia 1.
+- "Quando arrasto e seguro pra mudar de mês ele buga": o mês arrastado fica recortado na coluna dele, sem passar por
+  cima da lista.
+- "Às vezes quando arrasto as cenas de teclas ele buga e aparece o risco acima": soltar o dedo fora da tela deixava o
+  fantasma da tecla e a tecla apagada. O arrasto agora termina em qualquer lugar onde o dedo solte.
+- Telas abertas (player, relógio, agenda, WhatsApp, sessões, editor): além do X, arrastar de cima para baixo fecha. A tela
+  acompanha o dedo e volta se soltar cedo. Lista que ainda rola para cima, barra de tempo, volume e campo de texto
+  ficam com o gesto deles.
+
 ## 14. Melhorias (10/11/2026)
 
 Feitas no protótipo em 10/11/2026: 14.1 a 14.9 e 14.14, marcadas com **(feito)**. As outras

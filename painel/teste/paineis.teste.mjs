@@ -124,7 +124,7 @@ export default async function (h) {
   h.ok(await h.espera(p, () => document.querySelectorAll('#ca-grade .sb-dia.tem').length > 0), 'tocar na tecla da Agenda abre o mês com pontos nos dias com evento');
   c = await h.contadores();
   h.ok(c.botoes.length === 0 && await aberta(p, '#f-cal'), 'a tecla abre a agenda no iPhone, sem mandar nada ao Mac');
-  h.ok(c.agenda.includes(`${iso(mes0)}|${diasDoMes}`) && c.agenda.includes(`${iso(hoje)}|30`), `pede agenda(1º do mês, dias do mês) e agenda(hoje, 30) (${c.agenda.join(' ')})`);
+  h.ok(c.agenda.includes(`${iso(mes0)}|${diasDoMes}`) && c.agenda.includes(`${iso(hoje)}|${diasDoMes - hoje.getDate() + 1}`), `pede agenda(1º do mês, dias do mês) e agenda(hoje, dias até o fim do mês) (${c.agenda.join(' ')})`);
   const esperados = new Set(); // dias com evento neste mês, pela mesma regra do Mac de mentira
   for (let d = 1; d <= diasDoMes; d++) { const dow = new Date(hoje.getFullYear(), hoje.getMonth(), d).getDay(); if (dow === 0 || dow === 2 || dow === 4 || AVULSOS.includes(d)) esperados.add(d) }
   const tem = await p.evaluate(() => [...document.querySelectorAll('#ca-grade .sb-dia.tem')].map(x => +x.textContent));
@@ -139,7 +139,7 @@ export default async function (h) {
   await p.click('#ca-prox'); await h.dormir(500);
   const prox = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 1);
   c = await h.contadores();
-  h.ok(await texto(p, '#ca-titulo') !== titulo0 && c.agenda.length === n0 + 1 && c.agenda[n0] === `${iso(prox)}|${new Date(prox.getFullYear(), prox.getMonth() + 1, 0).getDate()}`, `a seta troca o mês e pede só a agenda do mês novo (${c.agenda[n0]})`);
+  h.ok(await texto(p, '#ca-titulo') !== titulo0 && c.agenda.length === n0 + 2 && c.agenda.slice(n0).sort().join() === [`${iso(prox)}|${new Date(prox.getFullYear(), prox.getMonth() + 1, 0).getDate()}`, `${iso(prox)}|${new Date(prox.getFullYear(), prox.getMonth() + 1, 0).getDate()}`].join(), `a seta troca o mês e recarrega a agenda do mês novo (grade e lista) (${c.agenda.slice(n0).join(' ')})`);
   h.ok(await p.evaluate(() => document.querySelector('.sb-dia.hoje') === null), 'em outro mês, o "hoje" não aparece');
   await p.click('#ca-ant'); await h.dormir(500);
   h.ok(await texto(p, '#ca-titulo') === titulo0, 'a seta de trás volta ao mês de hoje');
@@ -160,7 +160,7 @@ export default async function (h) {
   const nomeEsperado = `${alvo.getDate()} de ${alvo.toLocaleDateString('pt-BR', { month: 'long' })}`;
   h.ok(await h.espera(p, n => document.querySelector('#ca-lista h3')?.textContent.endsWith(n), nomeEsperado, 3000), `tocar no dia ${nomeEsperado} pede a lista dele e ela começa nele (${await texto(p, '#ca-lista h3')})`);
   c = await h.contadores();
-  h.ok(c.agenda.at(-1) === `${iso(alvo)}|30`, `pede agenda(dia tocado, 30) (${c.agenda.at(-1)})`);
+  h.ok(c.agenda.at(-1) === `${iso(alvo)}|${new Date(alvo.getFullYear(), alvo.getMonth() + 1, 0).getDate() - alvo.getDate() + 1}`, `pede agenda(dia tocado, dias até o fim do mês) (${c.agenda.at(-1)})`);
   h.ok(await p.evaluate(() => document.querySelectorAll('#ca-grade .sb-dia.sel').length === 1), 'o dia tocado fica marcado');
   // tocar no evento abre "Abrir no Calendário do Mac"
   await p.click('#ca-lista .ev-linha');
@@ -186,7 +186,7 @@ export default async function (h) {
   await h.cenario({ agenda: 'vazia' });
   p = await h.pagina(); await pronta(h, p);
   await p.click('.tecla[data-id="calendario"]');
-  h.ok(await h.espera(p, () => document.querySelector('#ca-lista')?.textContent.includes('Nada nos próximos 30 dias')), 'agenda vazia: "Nada nos próximos 30 dias"');
+  h.ok(await h.espera(p, () => document.querySelector('#ca-lista')?.textContent.includes('Nada neste mês a partir deste dia')), 'agenda vazia: "Nada neste mês a partir deste dia"');
   h.ok(await p.evaluate(() => document.querySelectorAll('#ca-grade .sb-dia.tem').length === 0 && document.querySelectorAll('#ca-grade .sb-dia').length >= 28), 'agenda vazia: o mês aparece sem pontos');
   await h.foto(p, 'agenda-vazia');
   await p.context().close();
