@@ -44,8 +44,8 @@ const icApp = n => (APPS.find(a => a.nome === n) || {}).ic;
 // ícone do serviço: o do app oficial (Claude, Codex, Spotify)
 const IC_SERVICO = { Claude: 'icones/claude.png', Codex: 'icones/codex.png', Spotify: 'icones/spotify.png' };
 const icServico = n => IC_SERVICO[n] ? `<img class="ic-mini" src="${IC_SERVICO[n]}" alt="">` : `<span class="ic-mini svg" aria-hidden="true">${SVG.terminal}</span>`;
-// teclas de app que abrem uma lista no próprio iPhone (WhatsApp, Calendário, Mail e Controles)
-const PAINEL_DO_APP = { WhatsApp: 'whatsapp', Calendar: 'calendario', Mail: 'mail', [CONTROLES_DO_MAC.valor]: 'controles' };
+// teclas de app que abrem uma lista no próprio iPhone (WhatsApp, Calendário, Mail, Monitor de Atividade e Controles)
+const PAINEL_DO_APP = { WhatsApp: 'whatsapp', Calendar: 'calendario', Mail: 'mail', 'Activity Monitor': 'monitor', [CONTROLES_DO_MAC.valor]: 'controles' };
 // tecla com ação (abrir a caixa de entrada, o dia da agenda) vai pro Mac: a lista do iPhone é só da tecla sem ação
 const painelDe = t => t.tipo === 'app' && !t.acao ? PAINEL_DO_APP[t.valor] : undefined;
 

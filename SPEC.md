@@ -1148,6 +1148,26 @@ Teste do Deck 1.0 (12/11/2026, frente iphone-bugs), dito pelo Leonardo:
     minutos embaixo, e o calendário do mês à direita, escolhível como as composições que já existem. `comp` aceita "a", "b" e
     "c". Escolhe-se no menu da barra do Mac, ao lado das outras. A configuração inicial (primeira vez) ainda mostra só A e B,
     porque as fotos dela são das duas antigas.
+38. Tela de fábrica do Monitor de Atividade no iPhone (12/11/2026). Palavras dele: "podemos deixar alguns apps com funções
+    predefinidas como é o WhatsApp e o calendário, criar uma visualização pro Monitor, como configurações de fábrica do app".
+    - A tecla do app **Monitor de Atividade** (no editor de tecla é o app `Activity Monitor` da lista, como o Mail e a Agenda)
+      abre uma tela no iPhone, sem mandar nada ao Mac. Tecla com ação vai para o Mac, como nas outras.
+    - Em cima, os mesmos dados do bloco do monitor (`Estado.monitor`, a mesma fonte, sem leitura nova) em tamanho grande, só
+      os itens que a pessoa deixou ligados nos Ajustes do Mac. Com o bloco desligado a tela diz onde ligar (Ajustes, Este Mac)
+      e mostra só os processos. A tela repinta a cada segundo e acompanha o estado.
+    - Embaixo, duas listas: os 5 que mais usam o **processador** e os 5 que mais usam a **memória**, relidas a cada 3 s
+      (`GET /api/processos` devolve `cpu` e `memoria`, cada processo com `pid`, `nome`, `cpu`, `memoria` em bytes e
+      `podeEncerrar`). O processador vem do `ps` (média recente, não o instante do Monitor de Atividade) e a memória é a
+      residente. O `ps` da própria medição e o app do Deck não entram na lista.
+    - **Encerrar** sempre pergunta antes ("Encerrar X? O que não foi salvo nele pode ser perdido.", Cancelar ou Encerrar),
+      e a lista não é relida enquanto a pergunta está na tela. `POST /api/processos/<pid>/encerrar?nome=<nome>` manda
+      SIGTERM (o programa pode salvar antes, nunca SIGKILL). O Mac confere de novo na hora: o pid tem de ainda ser o
+      programa de nome igual (pid reaproveitado não é fechado), ser do mesmo usuário e não ser `launchd`, `kernel_task`,
+      `loginwindow`, `WindowServer`, o Deck ou o pid 1. O botão só aparece onde `podeEncerrar` é verdadeiro.
+    - Toque que não se perde (12/11/2026, achado na verificação). Os cartões e as listas se repintam em partes separadas.
+      Com o dedo em cima da tela (e uns 400 ms depois) a lista espera, porque o monitor muda quase a cada segundo e repintar
+      destruía o botão antes do dedo subir. Os cartões continuam andando. O toque do próprio dedo repinta na hora.
+
 35. WhatsApp por QR, aparelho conectado (12/11/2026). Palavras dele: "vamos seguir com o QR code". Decidido:
     - Uma quarta origem do WhatsApp, `whatsapp.origem` = `qr`, ao lado de `auto`, `app` e `web`. Nasce DESLIGADA: o
       `auto` nunca escolhe `qr`, só a pessoa liga, em Ajustes > Este Mac > WhatsApp > Aparelho conectado (QR).

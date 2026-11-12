@@ -223,7 +223,7 @@ enum Ligacao {
             reunioes: AbridorDeReuniao(shell: executor), criadorDeAgenda: criadorDeAgenda ?? Self.criadorPadrao(),
             abridorDeSessao: AbridorDeSessaoNoMac(raiz: URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".claude/jobs"), shell: executor),
             apps: apps ?? AppsDoMac(pastaDeCache: AppsDoMac.pastaDeCachePadrao(), executor: executor),
-            controles: ControlesReais(executor: executor),
+            controles: ControlesReais(executor: executor), processos: ProcessosReais(executor: executor),
             mail: mail ?? LeitorDeMail(executor: executor))
     }
 

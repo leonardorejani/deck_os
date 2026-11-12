@@ -82,6 +82,8 @@
     entrarNaReuniao: link => pedir('POST', '/api/reuniao/entrar', undefined, { link }),
     controles: () => pedir('GET', '/api/controles'),
     controle: (item, v) => pedir('POST', '/api/controles/' + encodeURIComponent(item), { v: String(v) }),
+    processos: () => pedir('GET', '/api/processos'),
+    encerrarProcesso: (pid, nome) => pedir('POST', '/api/processos/' + encodeURIComponent(pid) + '/encerrar', { nome }),
     agendaDestinos: pedirAcesso => pedir('GET', '/api/agenda/destinos', pedirAcesso ? { pedir: '1' } : undefined),
     criarCompromisso: dados => pedir('POST', '/api/agenda/criar', undefined, dados, 15000),
     apps: () => pedir('GET', '/api/apps'),

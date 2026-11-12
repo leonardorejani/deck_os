@@ -1,4 +1,4 @@
-/* Painéis de tela inteira (SPEC, seção 5): WhatsApp, Agenda, Sessões e Mail. Mesmas folhas do protótipo,
+/* Painéis de tela inteira (SPEC, seção 5): WhatsApp, Agenda, Sessões, Mail, Controles e Monitor. Mesmas folhas do protótipo,
    com a lista vindo do Mac pelo canal. Usa as peças de deck.js (V, canal, avisar, abrirFolha...). */
 
 const iniciais = n => String(n).split(' ').filter(Boolean).slice(0, 2).map(p => p[0]).join('').toUpperCase();
@@ -13,7 +13,7 @@ const reduzido = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 const teclaDoPainel = {};
 function abrirPainel(qual, idTecla) {
   if (idTecla) teclaDoPainel[qual] = idTecla;
-  if (qual === 'whatsapp') abrirWhats(); else if (qual === 'calendario') abrirCal(); else if (qual === 'sessoes') abrirSessoes(); else if (qual === 'mail') abrirMail(); else if (qual === 'controles') abrirControles();
+  if (qual === 'whatsapp') abrirWhats(); else if (qual === 'calendario') abrirCal(); else if (qual === 'sessoes') abrirSessoes(); else if (qual === 'mail') abrirMail(); else if (qual === 'controles') abrirControles(); else if (qual === 'monitor') abrirMonitor();
 }
 async function abrirNoMac(qual, texto) {
   const id = V.teclas.some(t => t.id === teclaDoPainel[qual]) ? teclaDoPainel[qual] : V.teclas.find(t => painelDe(t) === qual)?.id;
