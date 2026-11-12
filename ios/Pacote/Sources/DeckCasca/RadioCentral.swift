@@ -28,11 +28,17 @@ protocol RadioBle: Sendable {
     /// Os Macs com Deck no ar, a cada mudança. Cancelar a tarefa para a procura.
     func procurar() -> AsyncStream<[AnuncioBle]>
     /// Conecta no Mac e devolve o fio (serviço achado e resposta assinada). O texto do erro é o que a pessoa lê.
-    func conectar(id: String) async throws -> FluxoBytes
+    func conectar(id: String, prazo: TimeInterval) async throws -> FluxoBytes
     /// Por que o rádio não serve agora (desligado, sem permissão), ou nil.
     var indisponivel: String? { get }
     /// O rádio está ligado, liberado e pronto para procurar.
     var pronto: Bool { get }
+}
+
+extension RadioBle {
+    /// Tempo limite padrão para o Mac responder à conexão.
+    static var prazoDeConexao: TimeInterval { 15 }
+    func conectar(id: String) async throws -> FluxoBytes { try await conectar(id: id, prazo: Self.prazoDeConexao) }
 }
 
 #if canImport(CoreBluetooth)
@@ -56,7 +62,6 @@ final class RadioCentral: NSObject, RadioBle, CBCentralManagerDelegate, CBPeriph
         init(_ p: CBPeripheral) { peripheral = p }
     }
 
-    static let prazoDeConexao: TimeInterval = 15
     /// Um Mac que sumiu do ar há mais que isso sai da lista.
     static let validadeDoAnuncio: TimeInterval = 6
 
@@ -200,13 +205,13 @@ final class RadioCentral: NSObject, RadioBle, CBCentralManagerDelegate, CBPeriph
 
     // MARK: Conexão
 
-    func conectar(id: String) async throws -> FluxoBytes {
+    func conectar(id: String, prazo: TimeInterval) async throws -> FluxoBytes {
         try await withCheckedThrowingContinuation { (c: CheckedContinuation<FluxoBytes, Error>) in
-            fila.async { [self] in abrir(id, c) }
+            fila.async { [self] in abrir(id, prazo, c) }
         }
     }
 
-    private func abrir(_ id: String, _ c: CheckedContinuation<FluxoBytes, Error>) {
+    private func abrir(_ id: String, _ prazo: TimeInterval, _ c: CheckedContinuation<FluxoBytes, Error>) {
         let gerente = garantir()
         if let motivo = motivoDeIndisponivel(gerente.state) { return c.resume(throwing: ErroPareamento.recusado(motivo)) }
         guard let uuid = UUID(uuidString: id),
@@ -219,7 +224,7 @@ final class RadioCentral: NSObject, RadioBle, CBCentralManagerDelegate, CBPeriph
         conexoes[id] = conexao
         p.delegate = self
         gerente.connect(p)
-        fila.asyncAfter(deadline: .now() + Self.prazoDeConexao) { [weak self, weak conexao] in
+        fila.asyncAfter(deadline: .now() + prazo) { [weak self, weak conexao] in
             guard let self, let conexao, conexao.continuacao != nil else { return }
             falhar(conexao, "O Mac não respondeu. Confira se ele está perto e com o Deck aberto.")
         }

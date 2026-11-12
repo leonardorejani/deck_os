@@ -519,6 +519,8 @@ uma linha e "Excluir tecla" (⌘Z desfaz). Embaixo, dois passos numerados:
    - Atalho: busca na lista do app Atalhos.
    - Teclado: "Clique aqui e aperte as teclas", que grava do teclado de verdade (Esc cancela, exige
      uma tecla de controle), com exemplos prontos.
+     Embaixo, "Montar escolhendo as teclas": modificadores e a tecla em botões, para o atalho que outro
+     app (CleanShot, Raycast) já usa e que o gravador não consegue pegar (decisão 33 da seção 13).
    - Comando: caixa em fonte de código, "Testar agora" e comandos prontos (apagar tela, abrir
      Downloads, silenciar, esvaziar Lixeira).
 
@@ -915,6 +917,56 @@ Ajustes de UX (11/11/2026, teste do Leonardo no iPhone):
     - Sem iPhone e sem rede: nada de cabo, Bluetooth nem renovação do app do iPhone, e o servidor escuta só no
       loopback, então não aparece para outros aparelhos.
     - Código em `mac/Nucleo/Variante.swift`. Testes: `mac/Testes/VarianteTestes.swift` e `scripts/teste/bancada.test.sh`.
+33. Gravar atalho de teclado que outro app já usa (12/11/2026). Palavras dele: "uso o CleanShot com os mesmos comandos do
+    Mac, tentei configurar as teclas com as combinações mas ele sempre ativava o atalho ao invés de salvar o atalho."
+    - Causa: o atalho global do outro app dispara antes de a tecla chegar ao Deck, então o gravador (monitor local do
+      AppKit) nunca via a combinação.
+    - Na tecla do tipo Teclado, além de "Clique aqui e aperte as teclas", existe "Montar escolhendo as teclas":
+      modificadores (⌃ ⌥ ⌘ ⇧ e fn) ligados e desligados em botões, e a tecla escolhida numa lista por grupo (Letras,
+      Números, F1 a F12, Setas, Outras). Não aperta nada. A combinação só vai para a tecla quando está completa
+      (pelo menos um modificador e uma tecla). Incompleta, a que já estava gravada continua valendo no iPhone e a tela
+      diz o que falta.
+    - Gravando, o Deck captura a tecla antes dos atalhos de outros apps (CGEventTap de sessão), só enquanto grava e só
+      com a Acessibilidade liberada. O tap engole o teclado do sistema inteiro, então desliga sozinho ao parar, quando
+      o Deck sai da frente e depois de 30 s. Sem Acessibilidade cai no monitor local, e a tela avisa que, se o atalho
+      abrir outro app, é para montar escolhendo as teclas.
+    - Ao usar a tecla, o Deck posta a tecla descendo e subindo no HID, com os modificadores nos dois eventos.
+
+34. Spotify fechou e abriu de novo, o player volta (12/11/2026). Palavras dele: "Quando o spotify fechou no pc ele sumiu do
+    app, mas quando foi reaberto nao apareceu de volta. mesmo dando play".
+    - Causa: a leitura do Spotify rodava o `osascript` sem tempo limite. Um Spotify que acabou de abrir (ou está fechando)
+      pode não atender o evento por minutos, e essa leitura pendurada segurava o cache do estado: todo pedido seguinte
+      recebia o último valor (sem player) e a leitura boa nunca entrava.
+    - Agora: quem diz se o Spotify está aberto é o sistema (`NSRunningApplication`, bundle `com.spotify.client`), antes de
+      qualquer AppleScript, então fechado o `osascript` nem roda (falar com o app por AppleScript pode abri-lo). A leitura
+      roda no vigia com limite de 4 s: estourou, sem aviso, e a próxima leitura tenta de novo. Com o app aberto e tocando
+      é só uma leitura lenta (Mac acordando), então o player segue com a última faixa por até 30 s e só sai depois disso.
+      Fechado (ou sem faixa) o player sai na hora.
+      O ciclo fechado, abrindo, tocando tem teste (`FontesSpotifyTestes`).
+
+33. Bluetooth que não reconecta depois de tirar o cabo (12/11/2026). Palavras dele: "desconectei do cabo e ele tenta
+    buscar o mesmo Mac pelo Bluetooth mas não conecta nunca e o painel não atualiza."
+    - Evidência: o Bluetooth pareou e funcionou (12:58 UTC), caiu às 13:20 e o log do Mac ficou 3 horas sem nenhum evento de
+      Bluetooth, inclusive quando o cabo caiu (16:15). Nenhuma tentativa chegou ao Mac.
+    - Causa no iPhone: depois de pareado o app só conectava no id guardado (`retrievePeripherals`/`connect`). O connect do
+      iOS não falha, só espera. Se o Mac trocou de endereço (o macOS anuncia com endereço que muda) ou parou de anunciar, o
+      id nunca respondia, e o app nunca olhava o ar por outro id. A tela ficava em "Procurando pelo cabo e pelo
+      Bluetooth" fixo, sem dizer nada de cada tentativa.
+    - Causa no Mac: nada religava o anúncio depois de uma queda. O macOS pode parar o anúncio sem avisar o app (conexão
+      que acabou, rádio reiniciado), e o Deck só anunciava de novo se o estado do rádio mudasse. Sem log, ninguém via.
+    - Agora, no iPhone: a conexão direta no id guardado tem tempo limite de 6 s (garantido no gerente, além do do rádio).
+      Estourou, procura o serviço do Deck no ar por até 8 s e conecta no que achar, preferindo o id guardado, depois o nome
+      do Mac e por fim o sinal mais forte. Conectou, guarda o id novo. Um Mac de vizinho que recusa na procura não conta
+      para esquecer o pareamento (só o Mac conhecido recusando conta). O Bluetooth segue tentando com o cabo plugado, para a
+      troca não ter buraco.
+    - Agora, na tela de conexão: o app diz o que o Bluetooth está fazendo a cada tentativa ("Procurando o Mac pelo Bluetooth.
+      Tentativa 3.", "Não achei o Mac pelo Bluetooth. Tentando de novo.", ou o motivo do rádio: desligado, sem permissão),
+      e limpa ao conectar. Só aparece na tela "Mac desconectado": com cabo ou Bluetooth servindo a página não recebe nada.
+    - Agora, no Mac: um vigia (`VigiaDoAnuncio`) confere se o Mac ainda anuncia a cada 15 s e depois de cada sessão que
+      acaba ou iPhone que sai, e anuncia de novo. Serviço que não chegou a ser publicado é publicado de novo. Tudo vai para o
+      log (estado do rádio, "iPhone saiu", "o anúncio tinha parado (...). Anunciando de novo.", pedido de iPhone sem sessão).
+    - Precisa atualizar o app do iPhone e o Deck do Mac. Testes: `ios/Pacote/Tests/DeckCascaTests/BluetoothTestes.swift`
+      (id que nunca conecta, situação da busca, vizinho que recusa) e `mac/Testes/BluetoothTestes.swift` (vigia do anúncio).
 
 Nada em aberto que trave a fase 1. Falta só confirmar, na construção, o link que abre uma sessão
 específica no app do Claude do iPhone (se não existir, cai no "mostra a pergunta").
