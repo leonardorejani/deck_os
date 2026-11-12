@@ -24,6 +24,33 @@ public struct AnuncioBle: Equatable, Sendable {
     public static let sinalDePerto = -75
 }
 
+/// A última lista de Macs que cada ouvinte da procura recebeu. O sinal oscila a cada anúncio, então só se avisa quem
+/// escuta quando a lista mudou para ele. Uma lista só para todos fazia a procura nova (que entrou com a lista vazia)
+/// nunca saber de um Mac que a procura anterior já tinha recebido: "a procura terminou com 0 Mac(s)" com o Mac no ar.
+struct UltimaListaPorOuvinte {
+    private struct Chave: Equatable {
+        var id: String
+        var nome: String
+        var perto: Bool
+    }
+    private var enviada: [UUID: [Chave]] = [:]
+
+    private static func chaves(_ lista: [AnuncioBle]) -> [Chave] { lista.map { Chave(id: $0.id, nome: $0.nome, perto: $0.perto) } }
+
+    mutating func entrou(_ ouvinte: UUID, recebeu lista: [AnuncioBle]) { enviada[ouvinte] = Self.chaves(lista) }
+    mutating func saiu(_ ouvinte: UUID) { enviada[ouvinte] = nil }
+
+    /// Quem precisa receber `lista` agora. Já marca como recebida.
+    mutating func quemAvisar(_ lista: [AnuncioBle], ouvintes: [UUID]) -> [UUID] {
+        let nova = Self.chaves(lista)
+        return ouvintes.filter { o in
+            guard enviada[o] != nova else { return false }
+            enviada[o] = nova
+            return true
+        }
+    }
+}
+
 protocol RadioBle: Sendable {
     /// Os Macs com Deck no ar, a cada mudança. Cancelar a tarefa para a procura.
     func procurar() -> AsyncStream<[AnuncioBle]>
@@ -74,7 +101,7 @@ final class RadioCentral: NSObject, RadioBle, CBCentralManagerDelegate, CBPeriph
     private var vistos: [String: Visto] = [:]
     private var ouvintes: [UUID: AsyncStream<[AnuncioBle]>.Continuation] = [:]
     private var conexoes: [String: Conexao] = [:]
-    private var ultimaLista: [AnuncioBle] = []
+    private var ultimaLista = UltimaListaPorOuvinte()
     /// O Mac não anuncia o nome no ar: o iOS só o conhece depois de conectar. Na primeira vez que aparece um Mac
     /// sem nome, o rádio conecta um instante só para ler o nome e solta (um de cada vez).
     private var sondando: Set<String> = []
@@ -153,14 +180,17 @@ final class RadioCentral: NSObject, RadioBle, CBCentralManagerDelegate, CBPeriph
             let id = UUID()
             fila.async { [self] in
                 ouvintes[id] = continuacao
-                log("bluetooth: procura pedida (\(ouvintes.count) ouvinte(s))")
-                continuacao.yield(listaAtual())
+                let lista = listaAtual()
+                ultimaLista.entrou(id, recebeu: lista)
+                log("bluetooth: procura pedida (\(ouvintes.count) ouvinte(s), \(lista.count) Mac(s) ainda válidos)")
+                continuacao.yield(lista)
                 iniciarVarredura()
             }
             continuacao.onTermination = { [weak self] _ in
                 self?.fila.async {
                     guard let self else { return }
                     self.ouvintes[id] = nil
+                    self.ultimaLista.saiu(id)
                     self.log("bluetooth: procura encerrada (\(self.ouvintes.count) ouvinte(s) restantes)")
                     if self.ouvintes.isEmpty { self.pararVarredura() }
                 }
@@ -212,14 +242,10 @@ final class RadioCentral: NSObject, RadioBle, CBCentralManagerDelegate, CBPeriph
             .sorted { ($0.rssi, $1.nome) > ($1.rssi, $0.nome) }
     }
 
-    /// Só avisa quem escuta quando a lista mudou de verdade (o sinal oscila a cada anúncio).
+    /// Só avisa quem escuta quando a lista mudou de verdade para ele (o sinal oscila a cada anúncio).
     private func publicar() {
         let lista = listaAtual()
-        let resumo = lista.map { ($0.id, $0.nome, $0.perto) }
-        let antes = ultimaLista.map { ($0.id, $0.nome, $0.perto) }
-        guard resumo.count != antes.count || zip(resumo, antes).contains(where: { $0 != $1 }) else { return }
-        ultimaLista = lista
-        for o in ouvintes.values { o.yield(lista) }
+        for o in ultimaLista.quemAvisar(lista, ouvintes: Array(ouvintes.keys)) { ouvintes[o]?.yield(lista) }
     }
 
     func centralManagerDidUpdateState(_ c: CBCentralManager) {

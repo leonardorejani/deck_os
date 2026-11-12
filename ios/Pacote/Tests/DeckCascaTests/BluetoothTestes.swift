@@ -576,6 +576,45 @@ final class DiarioBluetoothTestes: XCTestCase {
     }
 }
 
+final class UltimaListaPorOuvinteTestes: XCTestCase {
+    private let mac = AnuncioBle(id: "333B2CE5", nome: "MacBook Pro de Exemplo", rssi: -44)
+
+    /// Diário do iPhone de 12/11/2026: a procura da reconexão via o Mac a cada segundo (ACEITO) e terminava com "0 Mac(s)".
+    /// A procura anterior já tinha recebido [mac] e saído. A nova entrou com a lista vazia (o anúncio velho venceu) e,
+    /// quando o Mac apareceu de novo, a comparação era com o que a procura ANTERIOR recebeu: igual, ninguém foi avisado.
+    func testProcuraNovaRecebeOMacMesmoQueAAnteriorJaTenhaRecebidoOMesmo() {
+        var u = UltimaListaPorOuvinte()
+        let antiga = UUID()
+        u.entrou(antiga, recebeu: [])
+        XCTAssertEqual(u.quemAvisar([mac], ouvintes: [antiga]), [antiga])
+        u.saiu(antiga)
+        let nova = UUID()
+        u.entrou(nova, recebeu: [])
+        XCTAssertEqual(u.quemAvisar([mac], ouvintes: [nova]), [nova], "a procura nova nunca soube do Mac que estava no ar")
+    }
+
+    func testSinalQueSoOscilaNaoAvisaDeNovo() {
+        var u = UltimaListaPorOuvinte()
+        let o = UUID()
+        u.entrou(o, recebeu: [])
+        XCTAssertEqual(u.quemAvisar([mac], ouvintes: [o]), [o])
+        var oscilou = mac
+        oscilou.rssi = -40
+        XCTAssertEqual(u.quemAvisar([oscilou], ouvintes: [o]), [])
+    }
+
+    /// Dois ouvintes ao mesmo tempo (lista do pareamento e reconexão): o que chegou depois recebe sem tirar do outro.
+    func testCadaOuvinteComparaComOQueEleRecebeu() {
+        var u = UltimaListaPorOuvinte()
+        let a = UUID()
+        u.entrou(a, recebeu: [])
+        XCTAssertEqual(u.quemAvisar([mac], ouvintes: [a]), [a])
+        let b = UUID()
+        u.entrou(b, recebeu: [])
+        XCTAssertEqual(u.quemAvisar([mac], ouvintes: [a, b]), [b])
+    }
+}
+
 final class AvaliacaoDeAnuncioTestes: XCTestCase {
     private let deck = EnlaceBle.servico
     private func av(servicos: [String] = [], extras: [String] = [], nome: String? = nil, rssi: Int = -50, conhecidos: Set<String> = [], filtro: Bool) -> AvaliacaoDeAnuncio.Resultado {
