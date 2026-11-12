@@ -94,6 +94,20 @@
           </div>
           </div>
           <div class="lista-cal" id="ca-lista"></div>
+          <form class="novo-comp" id="ca-form" hidden novalidate aria-label="Novo compromisso">
+            <header><h3>Novo compromisso</h3></header>
+            <div class="nc-corpo">
+              <div class="campo nc-titulo"><label for="nc-titulo">Título</label><input id="nc-titulo" maxlength="200" autocomplete="off" enterkeyhint="done"></div>
+              <div class="campo nc-dia"><label for="nc-dia">Dia</label><input id="nc-dia" type="date"></div>
+              <div class="campo nc-ini"><label for="nc-inicio">Início</label><input id="nc-inicio" type="time"></div>
+              <div class="campo nc-fim"><label for="nc-fim">Fim</label><input id="nc-fim" type="time"></div>
+              <div class="campo nc-onde"><label for="nc-destino">Onde salvar</label><select id="nc-destino"></select></div>
+              <div class="campo nc-alerta"><label for="nc-alerta">Alerta</label><select id="nc-alerta"></select></div>
+              <label class="nc-check nc-todo"><input type="checkbox" id="nc-todo"><span>Dia todo</span></label>
+              <label class="nc-check nc-padrao"><input type="checkbox" id="nc-padrao"><span id="nc-padrao-txt">Usar como padrão</span></label>
+            </div>
+            <footer><p class="nc-msg" id="nc-msg" role="status" aria-live="polite"></p><button type="button" class="btn secundario" data-nc-cancelar>Cancelar</button><button type="submit" class="btn primario" id="nc-salvar">Salvar</button></footer>
+          </form>
         </div>
       </section>
     </div>

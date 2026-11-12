@@ -221,6 +221,22 @@ Meet e Teams no navegador padrão, Zoom no app do Zoom se ele estiver instalado 
 no `Evento` (`link`, opcional: Mac antigo não manda e o botão não aparece) e só aceita abrir `https` desses três serviços
 (`POST /api/reuniao/entrar`, corpo `{"link": "https://..."}`, senão 400).
 
+**Novo compromisso (12/11/2026).** Na lista, o dia tocado oferece "Novo compromisso em <dia>". Tocar troca a parte da
+direita inteira pelo formulário (o mês continua à esquerda): título, dia, início e fim, "Dia todo", "Onde salvar",
+alerta e "Usar como padrão", com Cancelar e Salvar no pé. Onde salvar é um calendário do Mac (só os que aceitam
+gravar) ou uma lista do app Lembretes. Alerta com hora: sem, no horário, 5, 15, 30 min, 1 h ou 1 dia antes. Dia todo: sem,
+no dia às 9h, 1 dia, 2 dias ou 1 semana antes (às 9h). Salvar vai ao Mac, que grava pelo EventKit (aparece no Calendário
+do Mac e do celular da mesma conta). Depois a agenda recarrega no dia criado e mostra o item. Lembrete não aparece na
+agenda (ela lê só eventos): o aviso diz "Lembrete criado em <lista>. Ele aparece no app Lembretes."
+Rotas (com o código de acesso): `GET /api/agenda/destinos` devolve `{calendarios, listas, permissaoCalendario,
+permissaoLembretes, padrao}` e `?pedir=1` abre no Mac o pedido de acesso aos Lembretes (a permissão só é pedida
+quando a pessoa escolhe Lembretes). `POST /api/agenda/criar` recebe `{titulo, dia: "AAAA-MM-DD", diaTodo, inicio, fim:
+"HH:MM", destino: {tipo: "calendario"|"lembretes", id}, alertaMin, padrao}`. O Mac valida tudo (título de 1 a 200 letras,
+dia real entre 2000 e 2100, hora de 24 h, fim depois do início, alerta da lista, destino existente que aceita gravar) e
+responde 400 (entrada), 409 (sem acesso no macOS) ou 422 (destino sumiu ou o EventKit recusou). Sem `destino`, vale o
+padrão da config (`agendaPadrao: {tipo, id}`, ajustável em Ajustes > Este Mac > Agenda). `padrao: true` guarda o
+destino escolhido como padrão. Mac antigo responde 404 e o formulário pede para atualizar o Deck.
+
 ### Sessões esperando
 
 Tela de sessões em cartões, um por sessão: nome, projeto, há quanto tempo e o começo da pergunta (3 linhas), a mais
@@ -292,7 +308,7 @@ contas que o dono adicionar em User Management (até 25): quem não estiver na l
 
 | Dado | Fonte | Observação |
 |---|---|---|
-| Agenda | EventKit (Calendário do Mac) | o macOS recusa para processo de terminal sem perguntar, por isso o Deck é um app |
+| Agenda | EventKit (Calendário do Mac, e Lembretes para criar) | o macOS recusa para processo de terminal sem perguntar, por isso o Deck é um app |
 | Spotify | AppleScript no Spotify | nome, artista, álbum, capa, posição, duração, `repeating` e `shuffling`, testado. Próxima da fila e repetir só a música não existem no AppleScript (precisam do login na API do Spotify) |
 | Spotify, volume | AppleScript (`sound volume` do player e `output volume` do Mac) | lido junto do estado, mudado por `POST /api/spotify/volume`. Testado em 11/11/2026 lendo e devolvendo o volume sem mexer na música |
 | Spotify, aparelhos, curtir, fila, repetir | API do Spotify (`api.spotify.com/v1`), com o login da pessoa | só com o Spotify conectado nos Ajustes (seção 5, "Spotify: volume...") |
@@ -1008,6 +1024,16 @@ ficam sem medição". Decisão: o Deck mede o uso pelo token de `claude setup-to
 o escopo `user:profile` e o token de setup-token só tem `user:inference` (403). Conta da troca de contas sem
 medição do autoswitch passa a ser medida pelo token do perfil (type oauth_token). A leitura fica em cache de 5 min.
 
+Criar compromisso pela agenda do iPhone (12/11/2026, frente agenda-criar): "Tem que aparecer no app do calendário do Mac e
+celular tudo correto." e "deixa o usuário decidir pra onde vai, definir como padrão". Decisão: tocar num dia dá a opção
+de criar, o formulário ocupa a parte da direita inteira, e a pessoa escolhe entre um calendário e uma lista do app
+Lembretes, podendo marcar um padrão guardado na config (também ajustável no Mac). Isso muda o invariante 3: a agenda
+deixa de ser só leitura, e o Deck passa a gravar nela, só pela rota autenticada de criar e só o que a pessoa pediu
+(nunca altera nem apaga evento existente). O Deck passa a pedir acesso aos Lembretes (full access), na hora em que a
+pessoa escolhe Lembretes pela primeira vez.
+Correções (12/11/2026): o alerta do evento é gravado como alarme relativo ao início ("15 minutos antes", que acompanha o
+evento se o horário mudar), e só o lembrete usa data fixa. O acompanhamento do pedido de acesso aos Lembretes continua
+até a pessoa responder, porque o Mac só devolve "pedindo" na chamada que abriu a janela.
 Teste do Deck 1.0 (12/11/2026, frente iphone-bugs), dito pelo Leonardo:
 - "Mesmo com conta de IA configurada no Mac, no app não aparece nenhum dado. Uso e renovação não aparecem." Causa: o
   Mac mede por token só na tela Uso das IAs, e o estado que vai ao iPhone lia apenas o `measure.json` do autoswitch.

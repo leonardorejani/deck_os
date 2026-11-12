@@ -457,6 +457,29 @@ button.cartao { font: inherit; color: inherit; text-align: left; border: 0; curs
 .lista-cal { overflow: auto; overscroll-behavior: contain; scrollbar-width: none; border-left: 1px solid var(--borda); padding: var(--secao) var(--seguro-dir) 0 var(--pad); margin-right: calc(-1 * var(--seguro-dir)) }
 .lista-cal::-webkit-scrollbar { display: none }
 .folha.cheia .grupo-data h3 { background: var(--cal-fundo) }
+/* Novo compromisso: a parte da direita inteira vira o formulário (a lista fica escondida, o mês continua ali) */
+.lista-cal .btn-novo { width: 100%; justify-content: center; margin-bottom: var(--item) }
+.novo-comp { grid-column: 2; grid-row: 1; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: var(--item); min-height: 0; border-left: 1px solid var(--borda); padding: var(--item) var(--seguro-dir) 0 var(--pad); margin-right: calc(-1 * var(--seguro-dir)); color-scheme: dark }
+.novo-comp h3 { margin: 0; font-size: var(--texto-lg); font-weight: 700; line-height: var(--altura-titulo) }
+.nc-corpo { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: var(--item) var(--icone); align-content: start; overflow: auto; overscroll-behavior: contain; scrollbar-width: none }
+.nc-corpo::-webkit-scrollbar { display: none }
+.nc-titulo { grid-column: 1 / -1 }
+.nc-dia, .nc-ini, .nc-fim { grid-column: span 4 }
+.nc-onde, .nc-alerta, .nc-todo, .nc-padrao { grid-column: span 6 }
+.novo-comp .campo { min-width: 0 }
+.novo-comp .campo select, .novo-comp .campo input[type="date"], .novo-comp .campo input[type="time"] { font: inherit; font-size: var(--texto-campo); min-height: var(--alvo); border-radius: var(--raio-sm); border: 1px solid var(--borda); background: var(--fundo); color: var(--texto); padding: 0 var(--icone); min-width: 0; width: 100% }
+.novo-comp input[type="time"]::-webkit-calendar-picker-indicator, .novo-comp input[type="date"]::-webkit-calendar-picker-indicator { display: none } /* o iPhone não desenha esse ícone, e no Chrome ele roubava espaço do valor */
+.novo-comp .campo input:disabled { opacity: .5 }
+.nc-check { display: flex; align-items: center; gap: var(--item); min-height: var(--alvo); font-size: var(--texto-sm); color: var(--texto); cursor: pointer }
+.nc-check input { width: 20px; height: 20px; accent-color: var(--destaque); flex: none }
+.nc-padrao { color: var(--texto-2) }
+.novo-comp footer { display: flex; align-items: center; gap: var(--item); padding: var(--item) 0 }
+.nc-msg { flex: 1; min-width: 0; margin: 0 var(--item) 0 0; min-height: calc(var(--texto-sm) * 2.6); display: flex; align-items: center; font-size: var(--texto-sm); line-height: 1.3; color: var(--texto-2) }
+.nc-msg.erro { color: var(--perigo) }
+.novo-comp footer .btn { min-width: 96px }
+.novo-comp footer .btn:disabled { opacity: .5 }
+.vertical .novo-comp { grid-column: 1; grid-row: 2; border-left: 0; border-top: 1px solid var(--borda); padding: var(--pad) 0 0; margin: 0 }
+.vertical .nc-corpo { gap: var(--pad) var(--icone) }
 .vertical .cal-corpo { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); padding-top: var(--seguro-cima) }
 .vertical .lista-cal { border-left: 0; border-top: 1px solid var(--borda); padding: 0; margin: 0 }
 .vertical .sb-grade { grid-auto-rows: var(--dia-cal) }
