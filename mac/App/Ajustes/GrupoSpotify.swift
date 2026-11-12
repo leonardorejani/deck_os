@@ -55,6 +55,8 @@ struct GrupoSpotify: View {
         }
         .onChange(of: spotify.chave) { _ in spotify.guardarChave() }
         .onAppear { spotify.atualizar() }
+        // O login vive no Chaveiro e o painel lê de lá: ao voltar para o Deck a tela relê, para não dizer "Conectado" de um login que caiu.
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in spotify.atualizar() }
     }
 
     private var linhaDaChave: some View {

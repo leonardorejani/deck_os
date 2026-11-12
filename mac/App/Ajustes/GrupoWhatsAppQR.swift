@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// WhatsApp por QR dentro do grupo WhatsApp de Este Mac. Nasce desligado. O aviso fica sempre à vista,
+/// WhatsApp por QR, as linhas do cartão "Conectar pelo QR" em Conexões > WhatsApp. Nasce desligado. O aviso fica sempre à vista,
 /// antes e depois de ligar: a opção não é oficial. Ligada, mostra o QR, o estado e os botões.
 struct GrupoWhatsAppQR: View {
     @ObservedObject var modelo: ModeloApp
@@ -16,8 +16,8 @@ struct GrupoWhatsAppQR: View {
 
     var body: some View {
         Group {
-            LinhaDeAjuste(titulo: "Aparelho conectado (QR)", apoio: TextosWhatsAppQR.aviso, divisoria: true) {
-                ChaveDeAjuste(rotulo: "Aparelho conectado (QR)", ligada: ligado) { ligar in
+            LinhaDeAjuste(titulo: "Conectar pelo QR (aparelho conectado)", apoio: TextosWhatsAppQR.aviso) {
+                ChaveDeAjuste(rotulo: "Conectar pelo QR", ligada: ligado) { ligar in
                     if ligar {
                         modelo.gravar { $0.whatsapp.origem = "qr" }
                         qr.ligar()

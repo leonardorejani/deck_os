@@ -200,20 +200,37 @@ enum Ligacao {
                          executor: any Executor = ExecutorShell(), fontes: Fontes? = nil,
                          agenda: FonteAgenda = .viva(), rodizio: Rodizio = Rodizio(),
                          certificadoCA: URL? = nil, contaSpotify: ContaSpotify? = nil,
-                         apps: (any ProvedorDeApps)? = nil, ponteQR: PonteWhatsAppQR? = nil) -> Roteador {
+                         apps: (any ProvedorDeApps)? = nil, criadorDeAgenda: (any CriadorDeAgenda)? = nil,
+                         usoMedido: (@Sendable ([ContaIA], Date) -> [String: UsoConta])? = nil,
+                         ponteQR: PonteWhatsAppQR? = nil) -> Roteador {
         // A mesma decisão de origem do WhatsApp serve a leitura (estado) e a abertura (tecla e "Abrir no Mac").
         let origemWhats = OrigemWhatsApp(executor: executor, banco: FonteWhatsApp.caminhoPadrao(casa: NSHomeDirectory()),
                                          config: { armazem.ler().whatsapp })
         let complemento = contaSpotify.map { ComplementoSpotify(conta: $0) }
-        let agregador = Agregador(fontes: fontes ?? .vivas(executor: executor, origemWhatsApp: origemWhats, ponteQR: ponteQR, complementoSpotify: complemento))
+        var fontesDoMac = fontes ?? .vivas(executor: executor, origemWhatsApp: origemWhats, ponteQR: ponteQR, complementoSpotify: complemento)
+        if let usoMedido {
+            // O uso medido por token (o que o Mac mostra em Uso das IAs) também vale para o iPhone.
+            let lerArquivos = fontesDoMac.uso
+            fontesDoMac.uso = { contas, agora in FonteUso.mesclar(lerArquivos(contas, agora), medidos: usoMedido(contas, agora)) }
+        }
+        let agregador = Agregador(fontes: fontesDoMac)
         let abridor = AbridorWhatsApp(origem: origemWhats, executor: executor)
         return Roteador(
             paineis: PaineisReais(armazem: armazem, agregador: agregador, agenda: agenda),
             teclas: ExecutorAcoes(shell: executor, whatsappWeb: { abridor.abrir() }), spotify: SpotifyReal(executor: executor, conta: contaSpotify, complemento: complemento),
             config: armazem, pareamento: pareamento, pagina: pagina, rodizio: rodizio, certificadoCA: certificadoCA,
-            reunioes: AbridorDeReuniao(shell: executor),
+            reunioes: AbridorDeReuniao(shell: executor), criadorDeAgenda: criadorDeAgenda ?? Self.criadorPadrao(),
             abridorDeSessao: AbridorDeSessaoNoMac(raiz: URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".claude/jobs"), shell: executor),
             apps: apps ?? AppsDoMac(pastaDeCache: AppsDoMac.pastaDeCachePadrao(), executor: executor))
+    }
+
+    /// Só o Mac grava na agenda: no Linux (CI) a rota fica sem criador e responde 404.
+    static func criadorPadrao() -> (any CriadorDeAgenda)? {
+        #if canImport(EventKit) && canImport(CoreGraphics)
+        return CriadorEventKit()
+        #else
+        return nil
+        #endif
     }
 
     /// Nome do Mac para a config padrão ("MacBook do Leo"), ou "Mac" se o sistema não responde.

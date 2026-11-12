@@ -16,7 +16,7 @@ struct MenuDaBarra: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tema.Espaco.item) {
-            Topo(iphone: modelo.iphoneAtivo)
+            Topo(iphone: modelo.iphoneAtivo, agora: modelo.relogio?())
             if let pedido = modelo.pedidoBluetooth {
                 BlocoDoPedido(pedido: pedido) { modelo.responderPedido(permitir: $0) }
             }
@@ -31,16 +31,16 @@ struct MenuDaBarra: View {
                 BlocoPerfil(perfis: modelo.config.perfis, ativo: modelo.config.perfilAtivo, escolher: modelo.usarPerfil)
             }
             if modelo.renovacaoApertando, case .apertando(let vence) = modelo.estadoDaRenovacao {
-                AlertaDoMenu(texto: TextosDoNativo.venceEm(vence, agora: modelo.agora)) { modelo.secao = .iphone; acoes.abrirAjustes() }
+                AlertaDoMenu(texto: TextosDoNativo.venceEm(vence, agora: modelo.agora)) { modelo.metodoDeConexao = AvisoDeConexao.renovacao.metodo; modelo.secao = .iphone; acoes.abrirAjustes() }
             }
             if !modelo.acessosRecusados.isEmpty {
                 AlertaDoMenu(texto: TextosDoMenu.acessosRecusados(modelo.acessosRecusados.count)) { modelo.secao = .permissoes; acoes.abrirAjustes() }
             }
             if case .falhou = modelo.servidor {
-                AlertaDoMenu(texto: TextosDoMenu.servidorFalhou) { modelo.secao = .iphone; acoes.abrirAjustes() }
+                AlertaDoMenu(texto: TextosDoMenu.servidorFalhou) { modelo.metodoDeConexao = AvisoDeConexao.servidor.metodo; modelo.secao = .iphone; acoes.abrirAjustes() }
             }
             if let aviso = modelo.avisoDePorta {
-                AlertaDoMenu(texto: aviso) { modelo.secao = .iphone; acoes.abrirAjustes() }
+                AlertaDoMenu(texto: aviso) { modelo.metodoDeConexao = AvisoDeConexao.servidor.metodo; modelo.secao = .iphone; acoes.abrirAjustes() }
             }
             Separador()
             ItemDoMenu(titulo: "Ajustes...", atalho: "⌘,") { acoes.abrirAjustes() }
@@ -73,15 +73,19 @@ struct QuadroDoPopover<Conteudo: View>: View {
 
 private struct Topo: View {
     var iphone: IphonePareado?
+    var agora: Date?
 
     var body: some View {
         HStack(spacing: Tema.Espaco.icone) {
             Logo()
             VStack(alignment: .leading, spacing: 0) {
                 Text(Variante.atual.nomeDaPasta).tatile(Tema.Texto.base, .bold)
-                HStack(spacing: Tema.Espaco.item) {
-                    Ponto(ligado: iphone != nil)
-                    Text(TextosDoMenu.estadoIphone(iphone)).tatile(Tema.Texto.xs, .regular, Tema.Cor.texto2)
+                TimelineView(.periodic(from: .now, by: 5)) { contexto in
+                    let hora = self.agora ?? contexto.date
+                    HStack(spacing: Tema.Espaco.item) {
+                        Ponto(ligado: iphone?.aoVivo(agora: hora) ?? false)
+                        Text(TextosDoMenu.estadoIphone(iphone, agora: hora)).tatile(Tema.Texto.xs, .regular, Tema.Cor.texto2)
+                    }
                 }
             }
             Spacer(minLength: 0)

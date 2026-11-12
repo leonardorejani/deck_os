@@ -546,7 +546,9 @@ tela.addEventListener('pointerdown', ev => {
     gesto.timer = setTimeout(() => { gesto.segurou = true; t.classList.remove('segurando', 'apertada'); entrarOrganizar() }, 500);
   }
 });
-tela.addEventListener('pointermove', ev => {
+// pointermove/up/cancel no documento: soltar o dedo fora da tela (faixa preta, borda do aparelho) também termina o arrasto.
+// Só na tela, o fantasma da tecla e a tecla apagada (25%) ficavam para sempre
+document.addEventListener('pointermove', ev => {
   if (!gesto) return;
   const longe = Math.hypot(ev.clientX - gesto.x, ev.clientY - gesto.y) > 8;
   if (!organizando && !gesto.segurou) { if (longe) cancelarGesto(); return }
@@ -554,7 +556,7 @@ tela.addEventListener('pointermove', ev => {
   if (!gesto.arrastando && longe) comecarArrasto(ev);
   if (gesto.arrastando) moverArrasto(ev);
 });
-tela.addEventListener('pointerup', () => {
+document.addEventListener('pointerup', () => {
   if (!gesto) return;
   const g = gesto; clearTimeout(g.timer); g.el.classList.remove('segurando', 'apertada');
   if (g.arrastando) return soltarArrasto();
@@ -565,8 +567,10 @@ tela.addEventListener('pointerup', () => {
   executar(g.id);
 });
 tela.addEventListener('dragstart', e => e.preventDefault());
-tela.addEventListener('pointercancel', () => { if (gesto?.arrastando) soltarArrasto(); cancelarGesto() });
+document.addEventListener('pointercancel', () => { if (gesto?.arrastando) soltarArrasto(); cancelarGesto() });
 function cancelarGesto() { if (!gesto) return; clearTimeout(gesto.timer); gesto.el.classList.remove('segurando', 'apertada'); gesto = null }
+// rede de segurança: nenhum rastro de arrasto sobrevive ao fim do gesto (fantasma, tecla apagada, tecla apertada)
+function limparRastroDeArrasto() { $$('.fantasma').forEach(f => f.remove()); fantasma = null; $$('.tecla.arrastando, .tecla.apertada, .tecla.segurando').forEach(t => t.classList.remove('arrastando', 'apertada', 'segurando')) }
 
 let fantasma = null;
 function comecarArrasto(ev) {
@@ -598,7 +602,7 @@ function renderTeclas() {
 }
 async function soltarArrasto() {
   const g = gesto; gesto = null;
-  fantasma?.remove(); fantasma = null; renderTeclas();
+  limparRastroDeArrasto(); renderTeclas();
   const ordem = V.teclas.map(t => t.id), pid = V.perfilAtivo;
   if (ordem.join() === perfilVisto(g.antes).teclas.map(t => t.id).join()) return; // soltou onde estava
   const antes = g.antes;
@@ -620,6 +624,52 @@ tela.addEventListener('scroll', () => { tela.scrollTop = 0; tela.scrollLeft = 0 
 function abrirFolha(id) { folhaAberta = $(id); folhaAberta.classList.add('aberta'); tela.classList.add('com-folha') }
 function fecharFolha() { if (folhaAberta?.contains(document.activeElement)) document.activeElement.blur(); folhaAberta?.classList.remove('aberta'); folhaAberta = null; tela.classList.remove('com-folha') }
 $$('[data-fechar]').forEach(b => { if (!b.textContent.trim()) b.innerHTML = SVG.x });
+
+/* Puxar de cima para baixo fecha a tela aberta (folhas e relógio). A tela acompanha o dedo e, se soltar cedo, volta.
+   Não rouba o gesto de lista que ainda rola para cima, de barra arrastável nem de campo de texto */
+let puxar = null, puxouAte = 0;
+const LONGE_PUXAR = .25, RAPIDO_PUXAR = .5; // fração da altura, e px por ms
+const telaAberta = () => $('#f-relogio.aberta') || folhaAberta;
+function rolaParaCima(el, topo) { // algum pai ainda tem rolagem a desfazer? Então o gesto é dele
+  for (; el && el !== topo; el = el.parentElement) if (el.scrollHeight > el.clientHeight + 1 && el.scrollTop > 0 && getComputedStyle(el).overflowY !== 'visible') return true;
+  return false;
+}
+function devolverTela(f, fechar) {
+  f.style.transition = ''; f.style.translate = '';
+  if (fechar) { if (f.id === 'f-relogio') fecharRelogio(); else fecharFolha() }
+}
+tela.addEventListener('touchstart', e => {
+  puxar = null;
+  const f = telaAberta(); if (!f || e.touches.length !== 1 || !f.contains(e.target)) return;
+  if (e.target.closest('input, textarea, select, .progresso, .volume, .trilho') || rolaParaCima(e.target, f)) return;
+  const t = e.touches[0]; puxar = { f, x: t.clientX, y: t.clientY, t: e.timeStamp, dy: 0, seguindo: false };
+}, { passive: true });
+tela.addEventListener('touchmove', e => {
+  if (!puxar) return;
+  const t = e.touches[0], dx = t.clientX - puxar.x, dy = t.clientY - puxar.y, f = puxar.f;
+  if (!puxar.seguindo) {
+    if (Math.abs(dx) > 10 && Math.abs(dx) >= Math.abs(dy) || dy < -10) { puxar = null; return } // para o lado ou para cima: não é fechar
+    if (dy < 10 || dy < Math.abs(dx) * 1.5) return;
+    puxar.seguindo = true; f.style.transition = 'none';
+  }
+  puxar.dy = Math.max(0, dy); f.style.translate = `0 ${puxar.dy / escalaTela().k}px`;
+  e.preventDefault();
+}, { passive: false });
+function soltarPuxada(e, cancelado) {
+  const p = puxar; puxar = null; if (!p?.seguindo) return;
+  puxouAte = e.timeStamp + 400;
+  const alto = p.f.getBoundingClientRect().height, rapido = !cancelado && p.dy > 30 && p.dy / Math.max(1, e.timeStamp - p.t) > RAPIDO_PUXAR;
+  const fechar = !cancelado && (p.dy > alto * LONGE_PUXAR || rapido);
+  if (fechar && p.f.id === 'f-relogio') { // o relógio some em fade: desce junto até acabar o fade
+    p.f.style.transition = 'translate var(--mov-sai-padrao) var(--curva-sai), opacity var(--mov-sai-padrao) var(--curva-sai)'; p.f.style.translate = `0 ${alto / escalaTela().k}px`;
+    fecharRelogio(); setTimeout(() => devolverTela(p.f, false), msCss('--mov-sai-padrao') + 60); return;
+  }
+  devolverTela(p.f, fechar);
+}
+tela.addEventListener('touchend', e => soltarPuxada(e, false));
+tela.addEventListener('touchcancel', e => soltarPuxada(e, true));
+// o toque que terminou a puxada não aperta o que estava embaixo do dedo
+tela.addEventListener('click', e => { if (performance.now() < puxouAte) { e.stopPropagation(); e.preventDefault() } }, true);
 
 let editando = null, rasc = null;
 const TIPOS = {

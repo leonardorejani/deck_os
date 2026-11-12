@@ -104,7 +104,7 @@ Barra de Menus > Permitir na Barra de Menus, o ícone do Deck some. Quem constr�
 
 ### 2. O iPhone, caminho rápido (PWA pelo Wi-Fi)
 
-1. No Mac, abra o Deck na barra de menus e vá em Ajustes > Conectar iPhone.
+1. No Mac, abra o Deck na barra de menus e vá em Ajustes > Conexões.
 2. Leia o QR com a câmera do iPhone e siga a tela: baixar o certificado, instalar o perfil e confiar nele em Ajustes > Geral > Sobre > Ajustes de Confiança de Certificados.
 3. No Safari, Compartilhar > Adicionar à Tela de Início.
 
