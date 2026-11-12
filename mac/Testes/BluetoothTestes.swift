@@ -639,3 +639,47 @@ final class NomeFalsoTestes: XCTestCase {
     }
 }
 #endif
+
+/// O Mac parou de anunciar depois de uma queda e nunca voltou (12/11/2026): o log ficou mudo por horas e o iPhone
+/// não achava o Mac pelo Bluetooth. O vigia confere o anúncio e retoma, sempre com uma linha no log.
+final class VigiaDoAnuncioTestes: XCTestCase {
+    private final class Estado: @unchecked Sendable {
+        private let trava = NSLock()
+        private var _no_ar = true
+        private var _inicios = 0
+        private var _linhas: [String] = []
+        var noAr: Bool { get { trava.withLock { _no_ar } } set { trava.withLock { _no_ar = newValue } } }
+        var inicios: Int { trava.withLock { _inicios } }
+        var linhas: [String] { trava.withLock { _linhas } }
+        func iniciar() { trava.withLock { _inicios += 1; _no_ar = true } }
+        func anotar(_ s: String) { trava.withLock { _linhas.append(s) } }
+    }
+
+    private func vigia(_ e: Estado) -> VigiaDoAnuncio {
+        VigiaDoAnuncio(anunciando: { e.noAr }, iniciar: { e.iniciar() }, log: { e.anotar($0) })
+    }
+
+    func testAnuncioParadoDepoisDeQuedaVoltaAoArEFicaNoLog() {
+        let e = Estado()
+        let v = vigia(e)
+        e.noAr = false // o macOS parou de anunciar quando o iPhone saiu
+        XCTAssertTrue(v.conferir("iPhone saiu"))
+        XCTAssertTrue(e.noAr)
+        XCTAssertEqual(e.inicios, 1)
+        XCTAssertEqual(v.retomadas, 1)
+        XCTAssertTrue(e.linhas.contains { $0.contains("anúncio tinha parado") && $0.contains("iPhone saiu") }, "a retomada precisa ir para o log")
+    }
+
+    func testAnuncioNoArNaoMexeEMuitasQuedasSeguidasSempreRetomam() {
+        let e = Estado()
+        let v = vigia(e)
+        XCTAssertFalse(v.conferir("conferência periódica"))
+        XCTAssertEqual(e.inicios, 0)
+        for _ in 0..<5 {
+            e.noAr = false
+            XCTAssertTrue(v.conferir("sessão acabou"))
+        }
+        XCTAssertEqual(e.inicios, 5)
+        XCTAssertEqual(e.linhas.count, 5)
+    }
+}

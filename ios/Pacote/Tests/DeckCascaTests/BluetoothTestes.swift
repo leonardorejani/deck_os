@@ -129,9 +129,38 @@ final class RadioFalso: RadioBle, @unchecked Sendable {
         return AsyncStream { c in c.yield(lista) }
     }
 
-    func conectar(id: String) async throws -> FluxoBytes {
+    func conectar(id: String, prazo: TimeInterval) async throws -> FluxoBytes {
         if trava.withLock({ _recusaConectar }) { throw ErroPareamento.recusado("O Mac não respondeu.") }
         trava.withLock { _conexoes += 1 }
+        let (macFio, iphoneFio) = FluxoEnlace.par()
+        mac.atender(macFio)
+        return iphoneFio
+    }
+}
+
+/// O Mac trocou de endereço: conectar no id velho fica esperando para sempre (como o connect do iOS), e o Mac aparece na
+/// procura com o id novo.
+final class RadioComEnderecoNovo: RadioBle, @unchecked Sendable {
+    let mac: MacDeTeste
+    let velho: String
+    let novo: String
+    let nome: String
+    private let trava = NSLock()
+    private var _velho = 0
+    private var _novo = 0
+    init(mac: MacDeTeste, velho: String, novo: String, nome: String = "MacBook Pro de Exemplo") { self.mac = mac; self.velho = velho; self.novo = novo; self.nome = nome }
+    var tentativasNoVelho: Int { trava.withLock { _velho } }
+    var tentativasNoNovo: Int { trava.withLock { _novo } }
+    var indisponivel: String? { nil }
+    var pronto: Bool { true }
+    func procurar() -> AsyncStream<[AnuncioBle]> { AsyncStream { c in c.yield([AnuncioBle(id: novo, nome: nome, rssi: -40)]) } }
+    func conectar(id: String, prazo: TimeInterval) async throws -> FluxoBytes {
+        if id == velho {
+            trava.withLock { _velho += 1 }
+            try await Task.sleep(nanoseconds: 3_600_000_000_000) // nunca completa; só sai se cancelarem
+            throw ErroPareamento.recusado("O Mac não respondeu.")
+        }
+        trava.withLock { _novo += 1 }
         let (macFio, iphoneFio) = FluxoEnlace.par()
         mac.atender(macFio)
         return iphoneFio
@@ -149,7 +178,7 @@ final class RadioDeDoisMacs: RadioBle, @unchecked Sendable {
     var indisponivel: String? { nil }
     var pronto: Bool { true }
     func procurar() -> AsyncStream<[AnuncioBle]> { AsyncStream { c in c.yield(anuncios) } }
-    func conectar(id: String) async throws -> FluxoBytes {
+    func conectar(id: String, prazo: TimeInterval) async throws -> FluxoBytes {
         trava.withLock { _tentativas[id, default: 0] += 1 }
         let (macFio, iphoneFio) = FluxoEnlace.par()
         macs[id]?.atender(macFio)
@@ -441,6 +470,81 @@ final class BluetoothTestes: XCTestCase {
         c.iniciar()
         await esperar { c.canais.obter()?.tipo == .bluetooth }
         XCTAssertEqual(c.canais.obter()?.tipo, .bluetooth)
+    }
+
+    // MARK: Reconexão depois de a conexão direta nunca completar (12/11/2026)
+
+    /// O Mac trocou de endereço: o id guardado nunca conecta (o connect do iOS fica esperando, sem falhar) e o Mac
+    /// aparece na procura com outro id. Antes, o app insistia no id velho para sempre e nunca olhava o ar.
+    func testIdGuardadoQueNuncaConectaCaiParaAProcuraPeloServicoEConectaNoIdNovo() async throws {
+        let mac = MacDeTeste()
+        let radio = RadioComEnderecoNovo(mac: mac, velho: "mac-velho", novo: "mac-novo")
+        let cofre = CofreEmMemoria(pareado("mac-velho"))
+        let linhas = Linhas()
+        let g = GerenteBluetooth(radio: radio, cofre: cofre, nomeDoIphone: "iPhone Exemplo", esperaEntreTentativas: { _ in 0.05 },
+                                 prazoDaConexaoDireta: 0.2, prazoDaProcura: 1, log: { linhas.anotar($0) })
+        addTeardownBlock { g.parar() }
+        g.iniciar()
+        await esperar({ g.mac != nil }, segundos: 6)
+        XCTAssertEqual(g.mac?.id, "mac-novo", "ficou preso no id velho: \(linhas.todas)")
+        XCTAssertEqual(cofre.ler()?.idBluetooth, "mac-novo", "o id novo precisa ser guardado para a próxima vez")
+        XCTAssertEqual(cofre.ler()?.codigoAcesso, "ABCDEFGHIJKLMNOPQRST", "o pareamento não pode ser esquecido")
+        XCTAssertEqual(radio.tentativasNoVelho, 1, "a conexão direta tem que ter tempo limite, não repetir sem fim")
+    }
+
+    /// A tela de conexão tem que refletir cada tentativa e limpar quando conecta.
+    func testSituacaoDaBuscaMudaACadaTentativaELimpaAoConectar() async throws {
+        let mac = MacDeTeste()
+        let radio = RadioFalso(mac)
+        radio.recusaConectar = true
+        let cofre = CofreEmMemoria(pareado())
+        let (g, _) = gerente(radio, cofre: cofre)
+        let vistas = Linhas()
+        g.aoMudarSituacao { vistas.anotar($0 ?? "nil") }
+        g.iniciar()
+        await esperar({ vistas.todas.contains { $0.contains("Tentativa 2") } }, segundos: 6)
+        XCTAssertTrue(vistas.todas.contains { $0.contains("Procurando o Mac pelo Bluetooth. Tentativa 1") }, "\(vistas.todas)")
+        XCTAssertTrue(vistas.todas.contains { $0.contains("Tentativa 2") }, "\(vistas.todas)")
+        radio.recusaConectar = false
+        await esperar({ g.mac != nil }, segundos: 6)
+        XCTAssertNotNil(g.mac)
+        await esperar({ vistas.todas.last == "nil" }, segundos: 2)
+        XCTAssertEqual(vistas.todas.last, "nil", "conectou: a tela não tem mais o que dizer")
+        XCTAssertNil(g.situacao)
+    }
+
+    /// Quando a conexão cai, a tela volta a dizer que procura (antes ficava parada no que dizia).
+    func testQuedaDaConexaoVoltaASituacaoDeProcura() async throws {
+        let mac = MacDeTeste()
+        let cofre = CofreEmMemoria(pareado())
+        let radio = RadioFalso(mac)
+        let (g, _) = gerente(radio, cofre: cofre)
+        let vistas = Linhas()
+        g.aoMudarSituacao { vistas.anotar($0 ?? "nil") }
+        g.iniciar()
+        await esperar({ g.mac != nil }, segundos: 4)
+        radio.recusaConectar = true
+        mac.sairDoAlcance()
+        await esperar({ g.mac == nil && g.situacao != nil }, segundos: 4)
+        XCTAssertNotNil(g.situacao, "caiu e a tela continuou sem estado: \(vistas.todas)")
+    }
+
+    /// Só há outro Mac por perto (o do vizinho) e o Mac do iPhone sumiu: o vizinho não conhece este iPhone, mas isso não é
+    /// o Mac dele desconectando. O pareamento fica.
+    func testVizinhoQueRecusaNaProcuraNaoFazOPareamentoSerEsquecido() async throws {
+        let vizinho = MacDeTeste(codigoAcesso: "ZZZZZZZZZZZZZZZZZZZZ")
+        let radio = RadioComEnderecoNovo(mac: vizinho, velho: "mac-velho", novo: "vizinho", nome: "Mac do vizinho")
+        let cofre = CofreEmMemoria(pareado("mac-velho"))
+        let g = GerenteBluetooth(radio: radio, cofre: cofre, nomeDoIphone: "iPhone Exemplo", esperaEntreTentativas: { _ in 0.05 },
+                                 prazoDaConexaoDireta: 0.1, prazoDaProcura: 0.5, log: { _ in })
+        let esqueceu = Linhas()
+        g.aoNaoReconhecido { esqueceu.anotar("esqueceu") }
+        addTeardownBlock { g.parar() }
+        g.iniciar()
+        try await Task.sleep(nanoseconds: 3_500_000_000)
+        XCTAssertGreaterThanOrEqual(radio.tentativasNoNovo, 2, "o teste não exercitou a recusa do vizinho")
+        XCTAssertTrue(esqueceu.todas.isEmpty, "esqueceu o pareamento por causa de um Mac que não é o do iPhone")
+        XCTAssertNotNil(cofre.ler())
     }
 }
 #endif
