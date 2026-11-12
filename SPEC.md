@@ -1164,6 +1164,9 @@ Teste do Deck 1.0 (12/11/2026, frente iphone-bugs), dito pelo Leonardo:
       SIGTERM (o programa pode salvar antes, nunca SIGKILL). O Mac confere de novo na hora: o pid tem de ainda ser o
       programa de nome igual (pid reaproveitado não é fechado), ser do mesmo usuário e não ser `launchd`, `kernel_task`,
       `loginwindow`, `WindowServer`, o Deck ou o pid 1. O botão só aparece onde `podeEncerrar` é verdadeiro.
+    - Toque que não se perde (12/11/2026, achado na verificação). Os cartões e as listas se repintam em partes separadas.
+      Com o dedo em cima da tela (e uns 400 ms depois) a lista espera, porque o monitor muda quase a cada segundo e repintar
+      destruía o botão antes do dedo subir. Os cartões continuam andando. O toque do próprio dedo repinta na hora.
 
 35. WhatsApp por QR, aparelho conectado (12/11/2026). Palavras dele: "vamos seguir com o QR code". Decidido:
     - Uma quarta origem do WhatsApp, `whatsapp.origem` = `qr`, ao lado de `auto`, `app` e `web`. Nasce DESLIGADA: o
