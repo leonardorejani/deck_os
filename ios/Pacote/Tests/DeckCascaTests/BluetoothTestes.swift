@@ -548,3 +548,56 @@ final class BluetoothTestes: XCTestCase {
     }
 }
 #endif
+
+final class DiarioBluetoothTestes: XCTestCase {
+    func testAnelGuardaSoAsUltimasLinhasComHorario() {
+        let d = DiarioBluetooth(arquivo: nil, capacidade: 3, relogio: { Date(timeIntervalSince1970: 0) })
+        for i in 1...5 { d.anotar("passo \(i)") }
+        XCTAssertEqual(d.recentes, ["1970-01-01T00:00:00.000Z passo 3", "1970-01-01T00:00:00.000Z passo 4", "1970-01-01T00:00:00.000Z passo 5"])
+    }
+
+    func testArquivoGiraSemCrescerSemLimiteESobreviveAReabrir() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("bt-\(UUID().uuidString).log")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let d = DiarioBluetooth(arquivo: url, capacidade: 10)
+        for i in 1...35 { d.anotar("linha \(i)") }
+        let linhas = try String(contentsOf: url, encoding: .utf8).split(separator: "\n")
+        XCTAssertLessThanOrEqual(linhas.count, 20)
+        XCTAssertTrue(linhas.last!.hasSuffix("linha 35"))
+        let reaberto = DiarioBluetooth(arquivo: url, capacidade: 10)
+        XCTAssertEqual(reaberto.recentes.count, 10)
+        XCTAssertTrue(reaberto.recentes.last!.hasSuffix("linha 35"))
+    }
+
+    func testQuebraDeLinhaNaoViraDuasLinhas() {
+        let d = DiarioBluetooth(arquivo: nil)
+        d.anotar("a\nb")
+        XCTAssertEqual(d.recentes.count, 1)
+    }
+}
+
+final class AvaliacaoDeAnuncioTestes: XCTestCase {
+    private let deck = EnlaceBle.servico
+    private func av(servicos: [String] = [], extras: [String] = [], nome: String? = nil, rssi: Int = -50, conhecidos: Set<String> = [], filtro: Bool) -> AvaliacaoDeAnuncio.Resultado {
+        AvaliacaoDeAnuncio.avaliar(servicos: servicos, extras: extras, nome: nome, rssi: rssi, uuidDoDeck: deck, nomesConhecidos: conhecidos, comFiltro: filtro)
+    }
+
+    func testServicoNoPacoteOuNaAreaExtraAceita() {
+        XCTAssertTrue(av(servicos: [deck.lowercased()], filtro: false).aceito)
+        XCTAssertTrue(av(extras: [deck], filtro: false).aceito)
+    }
+
+    /// Sem filtro, um aparelho qualquer é descartado, mas o Mac pareado (pelo nome) passa mesmo sem o UUID à vista.
+    func testSemFiltroDescartaOutrosEAceitaOMacPareadoPeloNome() {
+        XCTAssertFalse(av(nome: "Fone", filtro: false).aceito)
+        XCTAssertTrue(av(nome: "MacBook Pro de Leonardo Rejani", conhecidos: ["MacBook Pro de Leonardo Rejani"], filtro: false).aceito)
+    }
+
+    func testComFiltroDoIosTudoQueChegaVale() {
+        XCTAssertTrue(av(filtro: true).aceito)
+    }
+
+    func testSinal127SempreDescarta() {
+        XCTAssertFalse(av(servicos: [deck], rssi: 127, filtro: true).aceito)
+    }
+}

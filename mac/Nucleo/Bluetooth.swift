@@ -301,6 +301,7 @@ final class RadioPeriferico: NSObject, CBPeripheralManagerDelegate, @unchecked S
     /// Anuncia o serviço do Deck. Só roda com o serviço publicado e o rádio ligado.
     private func anunciar() {
         guard montado, gerente.state == .poweredOn else { return }
+        log("bluetooth: (re)iniciando o anúncio (isAdvertising=\(gerente.isAdvertising))")
         gerente.startAdvertising([CBAdvertisementDataServiceUUIDsKey: [uuidServico], CBAdvertisementDataLocalNameKey: nome()])
     }
 
@@ -345,16 +346,18 @@ final class RadioPeriferico: NSObject, CBPeripheralManagerDelegate, @unchecked S
 
     func peripheralManager(_ p: CBPeripheralManager, didAdd service: CBService, error: Error?) {
         if let error { log("bluetooth: não consegui publicar o serviço (\(error.localizedDescription))"); montado = false; return }
+        log("bluetooth: serviço publicado, iniciando o anúncio")
         p.startAdvertising([CBAdvertisementDataServiceUUIDsKey: [uuidServico], CBAdvertisementDataLocalNameKey: nome()])
     }
 
     func peripheralManagerDidStartAdvertising(_ p: CBPeripheralManager, error: Error?) {
-        if let error { log("bluetooth: não consegui anunciar (\(error.localizedDescription))") } else { log("bluetooth: anunciando o serviço do Deck como \"\(nome())\"") }
+        if let error { log("bluetooth: não consegui anunciar (\(error.localizedDescription))") } else { log("bluetooth: anunciando o serviço do Deck como \"\(nome())\" (isAdvertising=\(p.isAdvertising))") }
     }
 
     // MARK: Sessões
 
     func peripheralManager(_ p: CBPeripheralManager, central: CBCentral, didSubscribeTo c: CBCharacteristic) {
+        log("bluetooth \(String(central.identifier.uuidString.prefix(8))): central inscreveu em \(c.uuid.uuidString) (resposta=\(c.uuid == uuidResposta))")
         guard c.uuid == uuidResposta, resposta != nil else { return }
         let id = central.identifier
         if let velha = sessoes[id] { velha.fluxo.fechar() }
@@ -381,13 +384,24 @@ final class RadioPeriferico: NSObject, CBPeripheralManagerDelegate, @unchecked S
     }
 
     func peripheralManager(_ p: CBPeripheralManager, central: CBCentral, didUnsubscribeFrom c: CBCharacteristic) {
+        log("bluetooth \(String(central.identifier.uuidString.prefix(8))): central saiu de \(c.uuid.uuidString)")
         guard c.uuid == uuidResposta else { return }
         log("bluetooth \(String(central.identifier.uuidString.prefix(8))): iPhone saiu")
         if let s = sessoes.removeValue(forKey: central.identifier) { s.fluxo.fechar() }
         vigiar("iPhone saiu")
     }
 
+    /// A resposta só notifica, então leitura não era esperada. O macOS segura o pedido até alguém responder, então responde recusando.
+    func peripheralManager(_ p: CBPeripheralManager, didReceiveRead request: CBATTRequest) {
+        log("bluetooth \(String(request.central.identifier.uuidString.prefix(8))): leitura de \(request.characteristic.uuid.uuidString) (offset \(request.offset)), recusei")
+        p.respond(to: request, withResult: .readNotPermitted)
+    }
+
     func peripheralManager(_ p: CBPeripheralManager, didReceiveWrite requests: [CBATTRequest]) {
+        // Com sessão aberta cada pedido do iPhone é uma escrita: só entra no log a escrita de quem não tem sessão.
+        for r in requests where sessoes[r.central.identifier] == nil {
+            log("bluetooth \(String(r.central.identifier.uuidString.prefix(8))): escrita em \(r.characteristic.uuid.uuidString) (\(r.value?.count ?? 0) bytes) sem sessão")
+        }
         for r in requests where r.characteristic.uuid == uuidPedido {
             if let dados = r.value, let s = sessoes[r.central.identifier] { s.fluxo.fila.empurrar(dados) }
             else if sessoes[r.central.identifier] == nil, !semSessao.contains(r.central.identifier) {
