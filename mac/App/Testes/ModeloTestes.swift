@@ -5,7 +5,7 @@ import ServiceManagement
 final class SecoesTestes: XCTestCase {
     func testSecoesNaOrdemDoPrototipo() {
         XCTAssertEqual(SecaoAjustes.grupos.flatMap { $0 }.map(\.nome),
-                       ["Suas teclas", "Uso das IAs", "Conectar iPhone", "Acessos do Mac", "Este Mac", "Sobre o Deck"])
+                       ["Suas teclas", "Uso das IAs", "Conexões", "Acessos do Mac", "Este Mac", "Sobre o Deck"])
     }
 
     /// Palavras dele: "As permissões não aparecem no painel". A seção some do menu lateral só quando o

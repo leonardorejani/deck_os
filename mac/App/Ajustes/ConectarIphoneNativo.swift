@@ -1,24 +1,59 @@
 import SwiftUI
 
-/// O grupo "App no iPhone, por cabo e Bluetooth" de Conectar iPhone, igual ao protótipo (prototipo/mac.js, natSecao).
-/// Sem app pareado: o pedido de pareamento (mesmo código das duas telas, Recusar e Permitir) ou o convite para
-/// abrir o Deck no iPhone, e os três passos. Com app pareado: o aviso de prazo, o canal em uso e a renovação.
-struct GrupoDoAppNativo: View {
+/// O método "Cabo e Bluetooth" de Conexões, igual ao protótipo (prototipo/mac.js, natSecao).
+/// Sem app pareado: o pedido de pareamento (o código de confirmação, igual nas duas telas, Recusar e Permitir) ou o
+/// convite para abrir o Deck no iPhone, os três passos e a segunda via pelo cabo, com o código dela. Nunca dois
+/// códigos de uma vez na tela. Com app pareado: o aparelho, o aviso de prazo, o canal em uso e a renovação.
+struct MetodoCaboEBluetooth: View {
     @ObservedObject var modelo: ModeloApp
+    /// O código curto do cabo, já em grupos. Vazio quando a tela dele não está aberta.
+    var codigo: String
+    /// O relógio da tela de Conexões (o mesmo do cabeçalho).
+    var agora: Date
 
     var body: some View {
-        GrupoDeAjuste(titulo: "App no iPhone, por cabo e Bluetooth", nota: nil) {
+        GrupoDeAjuste(titulo: "App no iPhone", nota: nil) {
             if let pedido = modelo.pedidoBluetooth {
                 CartaoDoPedido(pedido: pedido, responder: { modelo.responderPedido(permitir: $0) })
             }
             if let nativo = modelo.nativo {
-                AppNativoPareado(modelo: modelo, nativo: nativo)
+                LinhasDeAjuste {
+                    LinhaDeAjuste(titulo: nativo.nome,
+                                  apoio: TextosDeAjuste.conexao(IphonePareado(nome: nativo.nome, canal: nativo.canal, desde: nativo.desde, visto: nativo.visto), agora: agora)) {
+                        BotaoDeAjuste(texto: "Desconectar", estilo: .secundario) { modelo.desconectarNativo() }
+                    }
+                }
+                AppNativoPareado(modelo: modelo, nativo: nativo, agora: agora)
             } else {
                 if modelo.pedidoBluetooth == nil { CartaoVisivel() }
                 PassosDoNativo()
+                if modelo.pedidoBluetooth == nil, !codigo.isEmpty { CartaoDoCabo(codigo: codigo) }
                 NotaDeAjuste(TextosDoNativo.notaDaVia)
             }
         }
+    }
+}
+
+/// A segunda via: o código que se digita no iPhone quando ele está no cabo. É o mesmo código do PWA (o iPhone prova
+/// ao Mac que o conhece), por isso só aparece quando nenhum pedido de Bluetooth está na tela.
+private struct CartaoDoCabo: View {
+    var codigo: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Tema.Espaco.item) {
+            Text(TextosDoNativo.caboRotulo).tatile(Tema.Texto.xs, .semibold, Tema.Cor.texto2)
+            Text(codigo)
+                .font(.system(size: Tema.Medida.codigoTam, weight: .bold))
+                .tracking(Tema.Texto.trackingCodigo * Tema.Medida.codigoTam)
+                .monospacedDigit()
+                .foregroundColor(Tema.Cor.texto)
+                .lineLimit(1)
+                .frame(height: Tema.Medida.codigoTam, alignment: .leading)
+            Text(TextosDoNativo.caboTexto).tatile(Tema.Texto.sm / Tema.Texto.menorDe, .regular, Tema.Cor.texto2)
+        }
+        .padding(Tema.Espaco.pad)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .superficie()
     }
 }
 
@@ -83,36 +118,34 @@ private struct PassosDoNativo: View {
 private struct AppNativoPareado: View {
     @ObservedObject var modelo: ModeloApp
     var nativo: AppNativo
+    var agora: Date
 
     var body: some View {
-        // O relógio da tela: "agora" vira "há 1 min" sem ninguém mexer.
-        TimelineView(.periodic(from: .now, by: 15)) { contexto in
-            let agora = modelo.relogio?() ?? contexto.date
-            let estado = modelo.renovacao.estado(agora: agora)
-            VStack(alignment: .leading, spacing: Tema.Espaco.grade) {
-                if case .apertando(let vence) = estado, modelo.nativo != nil {
-                    AlertaDaRenovacao(vence: vence, agora: agora) { modelo.renovarAppNativo() }
-                }
-                LinhasDeAjuste {
-                    LinhaDeAjuste(titulo: "App no iPhone", apoio: TextosDoNativo.instalado(modelo.renovacao)) {
-                        if let v = modelo.renovacao.versao { ValorDeAjuste(v) }
-                    }
-                    LinhaDeAjuste(titulo: "Último canal", apoio: TextosDoNativo.canalApoio, divisoria: true) {
-                        ValorDeAjuste(TextosDoNativo.ultimoCanal(nativo, agora: agora))
-                    }
-                    LinhaDeAjuste(titulo: "Renovação automática", apoio: TextosDoNativo.renovacaoApoio, divisoria: true) {
-                        HStack(spacing: Tema.Espaco.item) {
-                            if case .apertando = estado {
-                                Text(TextosDoNativo.renovacao(estado, agora: agora)).tatile(Tema.Texto.sm, .regular, Tema.Cor.aviso)
-                            } else {
-                                ValorDeAjuste(TextosDoNativo.renovacao(estado, agora: agora))
-                            }
-                            BotaoDeAjuste(texto: "Renovar agora", estilo: .secundario) { modelo.renovarAppNativo() }
-                        }
-                    }
-                }
-                NotaDeAjuste(TextosDoNativo.renovacaoCondicoes)
+        // O relógio vem de Conexões (5 s): "agora" vira "há 1 min" sem ninguém mexer.
+        let estado = modelo.renovacao.estado(agora: agora)
+        VStack(alignment: .leading, spacing: Tema.Espaco.grade) {
+            if case .apertando(let vence) = estado, modelo.nativo != nil {
+                AlertaDaRenovacao(vence: vence, agora: agora) { modelo.renovarAppNativo() }
             }
+            LinhasDeAjuste {
+                LinhaDeAjuste(titulo: "App no iPhone", apoio: TextosDoNativo.instalado(modelo.renovacao)) {
+                    if let v = modelo.renovacao.versao { ValorDeAjuste(v) }
+                }
+                LinhaDeAjuste(titulo: "Último canal", apoio: TextosDoNativo.canalApoio, divisoria: true) {
+                    ValorDeAjuste(TextosDoNativo.ultimoCanal(nativo, agora: agora))
+                }
+                LinhaDeAjuste(titulo: "Renovação automática", apoio: TextosDoNativo.renovacaoApoio, divisoria: true) {
+                    HStack(spacing: Tema.Espaco.item) {
+                        if case .apertando = estado {
+                            Text(TextosDoNativo.renovacao(estado, agora: agora)).tatile(Tema.Texto.sm, .regular, Tema.Cor.aviso)
+                        } else {
+                            ValorDeAjuste(TextosDoNativo.renovacao(estado, agora: agora))
+                        }
+                        BotaoDeAjuste(texto: "Renovar agora", estilo: .secundario) { modelo.renovarAppNativo() }
+                    }
+                }
+            }
+            NotaDeAjuste(TextosDoNativo.renovacaoCondicoes)
         }
     }
 }

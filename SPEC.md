@@ -242,6 +242,22 @@ devolve o aviso, porque abrir escondido a cada leitura do iPhone faria o app sub
 `mensagens` com `id`, `remetente`, `assunto`, `previa`, `data` e `lida`) e `POST /api/mail/abrir` com `{"id": "<Message-ID>"}`,
 que abre `message://` no Mail. Tecla do Mail com ação (caixa de entrada de uma conta, novo e-mail) continua indo direto para o Mac.
 
+**Novo compromisso (12/11/2026).** Na lista, o dia tocado oferece "Novo compromisso em <dia>". Tocar troca a parte da
+direita inteira pelo formulário (o mês continua à esquerda): título, dia, início e fim, "Dia todo", "Onde salvar",
+alerta e "Usar como padrão", com Cancelar e Salvar no pé. Onde salvar é um calendário do Mac (só os que aceitam
+gravar) ou uma lista do app Lembretes. Alerta com hora: sem, no horário, 5, 15, 30 min, 1 h ou 1 dia antes. Dia todo: sem,
+no dia às 9h, 1 dia, 2 dias ou 1 semana antes (às 9h). Salvar vai ao Mac, que grava pelo EventKit (aparece no Calendário
+do Mac e do celular da mesma conta). Depois a agenda recarrega no dia criado e mostra o item. Lembrete não aparece na
+agenda (ela lê só eventos): o aviso diz "Lembrete criado em <lista>. Ele aparece no app Lembretes."
+Rotas (com o código de acesso): `GET /api/agenda/destinos` devolve `{calendarios, listas, permissaoCalendario,
+permissaoLembretes, padrao}` e `?pedir=1` abre no Mac o pedido de acesso aos Lembretes (a permissão só é pedida
+quando a pessoa escolhe Lembretes). `POST /api/agenda/criar` recebe `{titulo, dia: "AAAA-MM-DD", diaTodo, inicio, fim:
+"HH:MM", destino: {tipo: "calendario"|"lembretes", id}, alertaMin, padrao}`. O Mac valida tudo (título de 1 a 200 letras,
+dia real entre 2000 e 2100, hora de 24 h, fim depois do início, alerta da lista, destino existente que aceita gravar) e
+responde 400 (entrada), 409 (sem acesso no macOS) ou 422 (destino sumiu ou o EventKit recusou). Sem `destino`, vale o
+padrão da config (`agendaPadrao: {tipo, id}`, ajustável em Ajustes > Este Mac > Agenda). `padrao: true` guarda o
+destino escolhido como padrão. Mac antigo responde 404 e o formulário pede para atualizar o Deck.
+
 ### Sessões esperando
 
 Tela de sessões em cartões, um por sessão: nome, projeto, há quanto tempo e o começo da pergunta (3 linhas), a mais
@@ -301,7 +317,7 @@ contas que o dono adicionar em User Management (até 25): quem não estiver na l
 | Spotify fechado | o player sai e as sessões ocupam o espaço (animado, item 3) |
 | Spotify pausado | capa a meia luz, botão de tocar |
 | Agenda sem permissão | selo "!" na tecla, e a folha explica onde liberar no Mac |
-| Agenda vazia | "Nada nos próximos 30 dias" |
+| Agenda vazia | "Nada neste mês a partir deste dia" |
 | Nenhuma sessão esperando | ícone do Claude, "Tudo respondido" e "Nenhuma sessão do Claude esperando você" |
 | Spotify fechado e nenhuma sessão | as sessões ocupam o espaço mostrando "Tudo respondido" |
 | Uso sem medição recente | barra cinza com "-" |
@@ -313,7 +329,7 @@ contas que o dono adicionar em User Management (até 25): quem não estiver na l
 
 | Dado | Fonte | Observação |
 |---|---|---|
-| Agenda | EventKit (Calendário do Mac) | o macOS recusa para processo de terminal sem perguntar, por isso o Deck é um app |
+| Agenda | EventKit (Calendário do Mac, e Lembretes para criar) | o macOS recusa para processo de terminal sem perguntar, por isso o Deck é um app |
 | Spotify | AppleScript no Spotify | nome, artista, álbum, capa, posição, duração, `repeating` e `shuffling`, testado. Próxima da fila e repetir só a música não existem no AppleScript (precisam do login na API do Spotify) |
 | Spotify, volume | AppleScript (`sound volume` do player e `output volume` do Mac) | lido junto do estado, mudado por `POST /api/spotify/volume`. Testado em 11/11/2026 lendo e devolvendo o volume sem mexer na música |
 | Spotify, aparelhos, curtir, fila, repetir | API do Spotify (`api.spotify.com/v1`), com o login da pessoa | só com o Spotify conectado nos Ajustes (seção 5, "Spotify: volume...") |
@@ -1001,6 +1017,37 @@ Ajustes de UX (11/11/2026, teste do Leonardo no iPhone):
     - Precisa atualizar o app do iPhone e o Deck do Mac. Testes: `ios/Pacote/Tests/DeckCascaTests/BluetoothTestes.swift`
       (id que nunca conecta, situação da busca, vizinho que recusa) e `mac/Testes/BluetoothTestes.swift` (vigia do anúncio).
 
+33. Conexões e uma fonte de verdade por estado (12/11/2026, frente mac-conexoes). Palavras dele: "pode manter a conexão
+    com spotify entao se a pessoa quiser conectar essas opções aparecem nos controles", "quando ia parear pelo celular
+    aparecia um código nada a ver e às vezes era o mesmo do PWA", "os ícones demoram e só aparecem ao alternar de perfil",
+    "quando clico em liberar (botão azul) ele leva o app pra baixo de tudo ao invés de só liberar e manter o app na frente",
+    "mostra nenhum iPhone pareado mas estou conectado" e "temos muitas coisas dentro do app que estão se contradizendo. Coisas
+    funcionando mas diz que não, conexões que aparecem desconectadas. Tem que ver o app e painel inteiros." Decidido:
+    - "Conectar iPhone" vira "Conexões", com o método no topo: Cabo e Bluetooth, WhatsApp e PWA (Wi-Fi). Cada método mostra
+      só o que é dele. O Spotify (login opcional) e o WhatsApp saíram de Este Mac. O Spotify fica num grupo à parte no fim
+      de Conexões, porque não é um jeito de conectar o iPhone (decisão minha, a confirmar com ele). WhatsApp tem a escolha
+      de origem de sempre e o espaço reservado "Conectar pelo QR", sem ação até a frente do QR existir.
+    - Um código por tela: o pedido de Bluetooth mostra o código de confirmação (igual nas duas telas), e o cartão "Código do
+      cabo" só aparece quando não há pedido na tela. O código do cabo é o mesmo do PWA por construção (o iPhone prova ao Mac
+      que o conhece, `ProvaCabo.modoCodigo`). PENDENTE DE DECISÃO DELA: ele reclamou de "às vezes era o mesmo do PWA", e
+      sem pedido de Bluetooth os dois métodos ainda mostram o mesmo número. Foi só reposicionado (nunca dois códigos na mesma
+      tela). Para ser outro código teria de existir um segundo segredo no núcleo, o que muda a prova do cabo. Perguntar.
+    - Fonte única de "tem iPhone": `ModeloApp.iphoneAtivo` (cabo ou Bluetooth primeiro, depois Wi-Fi), usada pelo cabeçalho,
+      pelo menu, por Conexões e pela configuração inicial. "Falando agora" é o `visto` (última resposta boa da API, pelo Wi-Fi,
+      cabo ou Bluetooth) dentro de 30 s, senão o texto diz "fora de alcance". A tela de Conexões e a configuração inicial
+      releem isso no mesmo relógio de 5 s do cabeçalho (o iPhone lembrado de uma abertura anterior, que ainda não falou,
+      não é "conectado"), e "Último canal" só diz "agora" dentro dos mesmos 30 s. Resposta boa pelo Wi-Fi sem registro cria o
+      iPhone (o Mac reabriu): estar falando é estar conectado.
+    - Sobre: sem o título "Sobre o Deck" em cima e sem as linhas Mac, iPhone e Licença (a licença fica só no texto do grupo).
+    - Teclas: a lista de apps carrega ao abrir o Deck e o ícone observa a lista (antes só aparecia ao trocar de perfil).
+    - Permissões: terminado o pedido, o Deck volta para a frente. Se foi preciso abrir os Ajustes do Sistema (inclusive pelo
+      diálogo de Acessibilidade), o Deck não volta antes: olha a permissão a cada segundo (até 3 minutos) e volta quando ela
+      muda. Rede Local e Automação com o app alvo fechado o macOS não deixa reler, então não há espera: o Deck só volta
+      quando a pessoa clicar nele.
+    - Os avisos do menu e o selo da barra lateral abrem Conexões já no método onde o cartão aparece (renovação em Cabo e
+      Bluetooth, servidor e porta em PWA).
+    - Nome deste Mac: o campo passou de 170 para 280 pt.
+
 Nada em aberto que trave a fase 1. Falta só confirmar, na construção, o link que abre uma sessão
 específica no app do Claude do iPhone (se não existir, cai no "mostra a pergunta").
 
@@ -1010,6 +1057,33 @@ ficam sem medição". Decisão: o Deck mede o uso pelo token de `claude setup-to
 o escopo `user:profile` e o token de setup-token só tem `user:inference` (403). Conta da troca de contas sem
 medição do autoswitch passa a ser medida pelo token do perfil (type oauth_token). A leitura fica em cache de 5 min.
 
+Criar compromisso pela agenda do iPhone (12/11/2026, frente agenda-criar): "Tem que aparecer no app do calendário do Mac e
+celular tudo correto." e "deixa o usuário decidir pra onde vai, definir como padrão". Decisão: tocar num dia dá a opção
+de criar, o formulário ocupa a parte da direita inteira, e a pessoa escolhe entre um calendário e uma lista do app
+Lembretes, podendo marcar um padrão guardado na config (também ajustável no Mac). Isso muda o invariante 3: a agenda
+deixa de ser só leitura, e o Deck passa a gravar nela, só pela rota autenticada de criar e só o que a pessoa pediu
+(nunca altera nem apaga evento existente). O Deck passa a pedir acesso aos Lembretes (full access), na hora em que a
+pessoa escolhe Lembretes pela primeira vez.
+Correções (12/11/2026): o alerta do evento é gravado como alarme relativo ao início ("15 minutos antes", que acompanha o
+evento se o horário mudar), e só o lembrete usa data fixa. O acompanhamento do pedido de acesso aos Lembretes continua
+até a pessoa responder, porque o Mac só devolve "pedindo" na chamada que abriu a janela.
+Teste do Deck 1.0 (12/11/2026, frente iphone-bugs), dito pelo Leonardo:
+- "Mesmo com conta de IA configurada no Mac, no app não aparece nenhum dado. Uso e renovação não aparecem." Causa: o
+  Mac mede por token só na tela Uso das IAs, e o estado que vai ao iPhone lia apenas o `measure.json` do autoswitch.
+  Decisão: o estado soma o uso medido por token ao que vem dos arquivos (só preenche conta sem número, medição boa de
+  arquivo não é trocada).
+- "Clico dia 26/nov e ele mostra sexta 25 de dezembro (Natal) na direita. Só pode mostrar os daquele mês, mudou de mês
+  mudou todos os feriados/compromissos." Decisão: a lista da Agenda vai do dia tocado até o fim do mês na tela e nunca
+  passa disso. Trocar de mês (seta ou arrasto) recarrega grade e lista, e o dia escolhido vira hoje (no mês de hoje) ou o dia 1.
+- "Quando arrasto e seguro pra mudar de mês ele buga": o mês arrastado fica recortado na coluna dele, sem passar por
+  cima da lista.
+- "Às vezes quando arrasto as cenas de teclas ele buga e aparece o risco acima": a linha roxa NÃO foi reproduzida (o painel
+  não tem elemento roxo, e o indicador de páginas e o LED ficam no lugar durante e depois do arrasto, coberto por teste).
+  O que se achou e corrigiu: soltar o dedo fora da tela deixava o fantasma da tecla e a tecla apagada, e o arrasto agora
+  termina em qualquer lugar onde o dedo solte. Pendente: um print do risco, para achar a causa se ele continuar.
+- Telas abertas (player, relógio, agenda, WhatsApp, sessões, editor): além do X, arrastar de cima para baixo fecha. A tela
+  acompanha o dedo e volta se soltar cedo. Lista que ainda rola para cima, barra de tempo, volume e campo de texto
+  ficam com o gesto deles.
 31. Sessões com o contexto do que esperam (12/11/2026). Palavras dele: "quando clico no card da sessão ele não mostra nada de
     contexto que eu tenho que aprovar, se for assim não muda nada eu abrir isso no celular." E: "muda o visual, deixa mais
     bonito aí sla, intuitivo e fácil de ler". Decisão: a sessão aberta mostra o pedido inteiro, o contexto e Abrir no Mac, e o

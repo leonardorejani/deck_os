@@ -2,7 +2,8 @@ import SwiftUI
 import AppKit
 
 /// Seção "Este Mac" dos Ajustes, igual ao protótipo (prototipo/mac.js, TELAS.geral): nome do Mac, abrir
-/// junto com o Mac, procurar atualizações e refazer a configuração inicial, e os grupos WhatsApp e Spotify.
+/// junto com o Mac, procurar atualizações e refazer a configuração inicial. O WhatsApp e o Spotify moraram aqui e agora
+/// ficam em Conexões.
 /// Sem porta e sem composição: a porta é escolhida sozinha (SPEC 14.4) e a composição fica
 /// no menu da barra.
 struct EsteMac: View {
@@ -44,20 +45,7 @@ struct EsteMac: View {
                     }
                 }
             }
-            GrupoDeAjuste(titulo: "WhatsApp", nota: nil) {
-                LinhasDeAjuste {
-                    LinhaDeAjuste(titulo: "Ler as não lidas de", apoio: PreferenciasDoMac.apoioDoWhatsApp(modelo.config.whatsapp.origem)) {
-                        HStack(spacing: Tema.Espaco.fino) {
-                            ForEach(PreferenciasDoMac.origensDoWhatsApp, id: \.id) { o in
-                                BotaoDeAjuste(texto: o.rotulo, estilo: modelo.config.whatsapp.origem == o.id ? .primario : .secundario) {
-                                    modelo.gravar { $0.whatsapp.origem = o.id }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            GrupoSpotify(spotify: modelo.spotify)
+            GrupoAgenda(modelo: modelo)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .onAppear { abrirComMac.atualizar() }

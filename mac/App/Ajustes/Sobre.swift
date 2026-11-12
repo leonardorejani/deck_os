@@ -1,7 +1,7 @@
 import SwiftUI
 import AppKit
 
-/// O que a seção Sobre mostra: versão, data e os sistemas. Sai do app em uso, ou de dados de exemplo nas fotos.
+/// O que a seção Sobre mostra: versão e data. Sai do app em uso, ou de dados de exemplo nas fotos.
 struct InformacoesDoApp: Equatable {
     var versao: String
     var compilacao: String
@@ -28,11 +28,6 @@ struct InformacoesDoApp: Equatable {
                                 atualizadoEm: data, macOS: "macOS \(sistema.majorVersion)")
     }
 
-    /// O que a linha do iPhone mostra: a versão do aparelho pareado, ou que não há nenhum.
-    static func iphoneEmUso(_ iphone: IphonePareado?) -> String {
-        guard let iphone else { return "nenhum pareado" }
-        return iphone.ios ?? "pareado"
-    }
 }
 
 /// Os endereços do projeto aberto no GitHub. Abrem no navegador padrão (NSWorkspace).
@@ -41,7 +36,6 @@ enum LinksDoProjeto {
     /// A página do repositório é o lugar da estrela: o botão "Star" fica no topo dela.
     static let estrela = repositorio
     static let problema = URL(string: "https://github.com/leonardorejani/deck_os/issues/new")!
-    static let licenca = URL(string: "https://github.com/leonardorejani/deck_os/blob/main/LICENSE")!
 }
 
 private struct ChaveInformacoes: EnvironmentKey { static let defaultValue: InformacoesDoApp? = nil }
@@ -54,8 +48,9 @@ extension EnvironmentValues {
     }
 }
 
-/// Seção "Sobre o Deck" dos Ajustes, igual ao protótipo (prototipo/mac.js, TELAS.sobre): informação do app
-/// com o projeto aberto no GitHub (estrela, problema e licença). A assinatura fica no rodapé da barra lateral.
+/// Seção "Sobre o Deck" dos Ajustes (prototipo/mac.js, TELAS.sobre): o cartão do app, a versão e o projeto aberto no
+/// GitHub (estrela e problema). A licença fica só no texto do grupo. Sem título em cima (a janela abre direto no cartão)
+/// e sem linha de Mac ou iPhone: quem diz se há iPhone conectado é Conexões. A assinatura fica no rodapé da barra lateral.
 struct Sobre: View {
     @ObservedObject var modelo: ModeloApp
     /// Abre o endereço no navegador padrão. Os testes trocam por um que só anota.
@@ -81,18 +76,11 @@ struct Sobre: View {
             LinhasDeAjuste {
                 LinhaDeAjuste(titulo: "Versão", apoio: "A mais recente") { ValorDeAjuste(informacoes.versaoComCompilacao) }
                 LinhaDeAjuste(titulo: "Atualizado em", apoio: nil, divisoria: true) { ValorDeAjuste(informacoes.dataPorExtenso) }
-                LinhaDeAjuste(titulo: "Mac", apoio: "Precisa do macOS 13 ou mais novo", divisoria: true) { ValorDeAjuste(informacoes.macOS) }
-                LinhaDeAjuste(titulo: "iPhone", apoio: "Precisa do iOS 16.4 ou mais novo", divisoria: true) {
-                    ValorDeAjuste(InformacoesDoApp.iphoneEmUso(modelo.iphone))
-                }
             }
             GrupoDeAjuste(titulo: "Projeto aberto", nota: "O Deck é código aberto, com licença MIT. Uma estrela ajuda outras pessoas a achar o projeto.") {
                 LinhasDeAjuste {
                     LinhaDeAjuste(titulo: "Gostou do Deck?", apoio: "Abre a página do projeto no GitHub") {
                         BotaoDeAjuste(texto: "Dar uma estrela no GitHub", estilo: .estrela, icone: "star.fill") { abrir(LinksDoProjeto.estrela) }
-                    }
-                    LinhaDeAjuste(titulo: "Licença", apoio: "Uso livre, com o aviso de direitos mantido", divisoria: true) {
-                        BotaoDeAjuste(texto: "MIT", estilo: .link) { abrir(LinksDoProjeto.licenca) }
                     }
                     LinhaDeAjuste(titulo: "Achou um erro?", apoio: "Abre o formulário de problema no GitHub", divisoria: true) {
                         BotaoDeAjuste(texto: "Relatar um problema", estilo: .secundario) { abrir(LinksDoProjeto.problema) }
