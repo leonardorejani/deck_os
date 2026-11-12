@@ -858,6 +858,12 @@ Ajustes de UX (11/11/2026, teste do Leonardo no iPhone):
 Nada em aberto que trave a fase 1. Falta só confirmar, na construção, o link que abre uma sessão
 específica no app do Claude do iPhone (se não existir, cai no "mostra a pergunta").
 
+Teste do Deck 1.0 (11/11/2026, frente contas-ia): "nao consigo configurar conta do claude" e "as que consigo
+ficam sem medição". Decisão: o Deck mede o uso pelo token de `claude setup-token` lendo os cabeçalhos
+`anthropic-ratelimit-unified-7d-*` de um pedido de 1 token ao Claude, porque o endereço `/api/oauth/usage` pede
+o escopo `user:profile` e o token de setup-token só tem `user:inference` (403). Conta da troca de contas sem
+medição do autoswitch passa a ser medida pelo token do perfil (type oauth_token). A leitura fica em cache de 5 min.
+
 ## 14. Melhorias (10/11/2026)
 
 Feitas no protótipo em 10/11/2026: 14.1 a 14.9 e 14.14, marcadas com **(feito)**. As outras
