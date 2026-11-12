@@ -1003,7 +1003,6 @@ pessoa escolhe Lembretes pela primeira vez.
 Correções (12/11/2026): o alerta do evento é gravado como alarme relativo ao início ("15 minutos antes", que acompanha o
 evento se o horário mudar), e só o lembrete usa data fixa. O acompanhamento do pedido de acesso aos Lembretes continua
 até a pessoa responder, porque o Mac só devolve "pedindo" na chamada que abriu a janela.
-=======
 31. Sessões com o contexto do que esperam (12/11/2026). Palavras dele: "quando clico no card da sessão ele não mostra nada de
     contexto que eu tenho que aprovar, se for assim não muda nada eu abrir isso no celular." E: "muda o visual, deixa mais
     bonito aí sla, intuitivo e fácil de ler". Decisão: a sessão aberta mostra o pedido inteiro, o contexto e Abrir no Mac, e o
@@ -1014,7 +1013,6 @@ até a pessoa responder, porque o Mac só devolve "pedindo" na chamada que abriu
     com senha (qualquer esquema, não só http), par chave/valor em JSON com aspas e chave com underscore (`sk_live_...`). E
     "fácil de ler" inclui bloco de código com cerca (a cerca some e o comando fica como está), link, itálico, `__forte__` e
     citação sem a marcação.
->>>>>>> origin/bancada
 
 ## 14. Melhorias (10/11/2026)
 
