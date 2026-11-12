@@ -200,7 +200,7 @@ enum Ligacao {
                          executor: any Executor = ExecutorShell(), fontes: Fontes? = nil,
                          agenda: FonteAgenda = .viva(), rodizio: Rodizio = Rodizio(),
                          certificadoCA: URL? = nil, contaSpotify: ContaSpotify? = nil,
-                         apps: (any ProvedorDeApps)? = nil) -> Roteador {
+                         apps: (any ProvedorDeApps)? = nil, mail: (any ProvedorDeMail)? = nil) -> Roteador {
         // A mesma decisão de origem do WhatsApp serve a leitura (estado) e a abertura (tecla e "Abrir no Mac").
         let origemWhats = OrigemWhatsApp(executor: executor, banco: FonteWhatsApp.caminhoPadrao(casa: NSHomeDirectory()),
                                          config: { armazem.ler().whatsapp })
@@ -213,7 +213,8 @@ enum Ligacao {
             config: armazem, pareamento: pareamento, pagina: pagina, rodizio: rodizio, certificadoCA: certificadoCA,
             reunioes: AbridorDeReuniao(shell: executor),
             abridorDeSessao: AbridorDeSessaoNoMac(raiz: URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".claude/jobs"), shell: executor),
-            apps: apps ?? AppsDoMac(pastaDeCache: AppsDoMac.pastaDeCachePadrao(), executor: executor))
+            apps: apps ?? AppsDoMac(pastaDeCache: AppsDoMac.pastaDeCachePadrao(), executor: executor),
+            mail: mail ?? LeitorDeMail(executor: executor))
     }
 
     /// Nome do Mac para a config padrão ("MacBook do Leo"), ou "Mac" se o sistema não responde.

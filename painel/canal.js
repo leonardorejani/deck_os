@@ -15,6 +15,8 @@
      gravarConfig(config)      -> Config
      whatsapp()                -> [ConversaWhatsApp]
      agenda(de, dias)          -> [Evento]
+     mail(conta?)              -> {estado, aviso?, contas, conta, mensagens}  as últimas da caixa de entrada (só leitura, 404 em Mac antigo)
+     abrirMensagem(id)         -> {ok: true}       abre a mensagem no Mail do Mac
      sessoes()                 -> [Sessao]
      abrirSessao(id)           -> {ok, como, app}  traz o terminal da sessão para a frente no Mac (como: "terminal" ou "pasta")
      entrarNaReuniao(link)     -> {ok: true}       abre no Mac o link de reunião do evento (Meet, Zoom ou Teams)
@@ -88,6 +90,8 @@ function criarCanalHttps() {
     gravarConfig: config => pedir('PUT', '/api/config', config),
     whatsapp: () => pedir('GET', '/api/whatsapp'),
     agenda: (de, dias) => pedir('GET', `/api/agenda?de=${encodeURIComponent(de)}&dias=${encodeURIComponent(dias)}`),
+    mail: conta => pedir('GET', '/api/mail' + (conta ? '?conta=' + encodeURIComponent(conta) : ''), undefined, 15000), // o Mac lê o Mail por AppleScript, até uns 10 s
+    abrirMensagem: id => pedir('POST', '/api/mail/abrir', { id }),
     sessoes: () => pedir('GET', '/api/sessoes'),
     abrirSessao: id => pedir('POST', '/api/sessoes/' + encodeURIComponent(id) + '/abrir'),
     entrarNaReuniao: link => pedir('POST', '/api/reuniao/entrar', { link }),
