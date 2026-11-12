@@ -93,6 +93,10 @@ type ajudante struct {
 	// Quando se tentou pela última vez (e falhou) pegar o nome de um grupo ou a foto de uma conversa.
 	tentadas  map[string]time.Time
 	filaFotos chan string
+	// completando evita duas rodadas de completar ao mesmo tempo. completarFn existe para o teste trocar a rede.
+	completando bool
+	refazer     bool
+	completarFn func(context.Context) bool
 }
 
 // Como o aparelho aparece em "Aparelhos conectados" no WhatsApp do celular. Com o tipo "desconhecido" (o padrão da
@@ -122,10 +126,9 @@ func (a *ajudante) publicar(ctx context.Context) {
 		case <-a.sujo:
 			emitir(map[string]any{"t": "conversas", "lista": a.estado.Lista()})
 			_ = a.estado.Salvar()
-			// Nome, número e foto das conversas da lista: depois de entregar, para a mensagem nova não esperar a rede.
-			if a.completar(ctx) {
-				a.marcarSujo()
-			}
+			// Nome, número e foto das conversas da lista: depois de entregar, e fora do laço, para uma consulta
+			// de rede lenta não segurar a próxima mensagem.
+			a.completarEmFundo(ctx)
 			select {
 			case <-ctx.Done():
 				return
@@ -135,8 +138,36 @@ func (a *ajudante) publicar(ctx context.Context) {
 	}
 }
 
+// completarEmFundo roda o completar numa goroutine, uma por vez. Se algo mudou, avisa o laço para publicar de novo.
+func (a *ajudante) completarEmFundo(ctx context.Context) {
+	a.mu.Lock()
+	if a.completando {
+		a.refazer = true
+		a.mu.Unlock()
+		return
+	}
+	a.completando = true
+	fn := a.completarFn
+	a.mu.Unlock()
+	if fn == nil {
+		fn = a.completar
+	}
+	go func() {
+		mudou := fn(ctx)
+		a.mu.Lock()
+		a.completando = false
+		refazer := a.refazer
+		a.refazer = false
+		a.mu.Unlock()
+		if mudou || refazer {
+			a.marcarSujo()
+		}
+	}()
+}
+
 const (
 	esperaGrupo      = 10 * time.Minute
+	esperaConsulta   = 15 * time.Second
 	esperaFoto       = 6 * time.Hour
 	validadeFoto     = 24 * time.Hour
 	limiteMidia      = 8 << 20
@@ -333,7 +364,10 @@ func (a *ajudante) nomeDoGrupo(ctx context.Context, j types.JID, rede bool) stri
 	if ok || !rede || a.cli == nil || (tentou && time.Since(falhou) < esperaGrupo) {
 		return n
 	}
-	info, err := a.cli.GetGroupInfo(ctx, j)
+	// Sem prazo próprio, uma consulta travada seguraria o completar inteiro.
+	cctx, cancelar := context.WithTimeout(ctx, esperaConsulta)
+	defer cancelar()
+	info, err := a.cli.GetGroupInfo(cctx, j)
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if err != nil || info.Name == "" {

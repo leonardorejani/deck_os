@@ -124,3 +124,31 @@ func TestMensagemNovaSaiNaHora(t *testing.T) {
 		t.Fatal("a lista nunca saiu")
 	}
 }
+
+// Uma consulta de rede lenta no completar (nome de grupo) nao pode segurar a mensagem nova seguinte.
+func TestCompletarLentoNaoSegraMensagemNova(t *testing.T) {
+	saiu := make(chan struct{}, 8)
+	velho := emitir
+	emitir = func(any) { saiu <- struct{}{} }
+	defer func() { emitir = velho }()
+	travar := make(chan struct{})
+	defer close(travar)
+	a := &ajudante{estado: NovoEstado(""), sujo: make(chan struct{}, 1), grupos: map[string]string{}, tentadas: map[string]time.Time{}}
+	a.completarFn = func(context.Context) bool { <-travar; return false }
+	ctx, parar := context.WithCancel(context.Background())
+	defer parar()
+	go a.publicar(ctx)
+	a.marcarSujo()
+	select {
+	case <-saiu:
+	case <-time.After(2 * time.Second):
+		t.Fatal("a primeira lista nunca saiu")
+	}
+	time.Sleep(50 * time.Millisecond) // o completar ja esta travado
+	a.marcarSujo()
+	select {
+	case <-saiu:
+	case <-time.After(2 * time.Second):
+		t.Fatal("a mensagem nova ficou presa atras do completar lento")
+	}
+}
