@@ -18,13 +18,17 @@ struct ExecutorAcoes: Sendable {
     let whatsappWeb: (@Sendable () -> AberturaWhatsApp)?
     /// Shell em que a tecla de comando roda (o de login do usuário, com o perfil dele carregado).
     let shellDoUsuario: @Sendable () -> String
+    /// O que o Deck guardou das teclas liga e desliga sem comando de conferir.
+    let memoria: MemoriaLigaDesliga
 
     init(shell: Executor,
          temAcessibilidade: @escaping @Sendable () -> Bool = { AcoesSistema.temAcessibilidade() },
          enviarTecla: @escaping @Sendable (Combinacao) -> Void = { AcoesSistema.enviar($0) },
          limiteSegundos: Int = ExecutorAcoes.limitePadrao,
          whatsappWeb: (@Sendable () -> AberturaWhatsApp)? = nil,
-         shellDoUsuario: @escaping @Sendable () -> String = { Shell.doUsuario() }) {
+         shellDoUsuario: @escaping @Sendable () -> String = { Shell.doUsuario() },
+         memoria: MemoriaLigaDesliga = .compartilhada) {
+        self.memoria = memoria
         self.shellDoUsuario = shellDoUsuario
         self.limiteSegundos = limiteSegundos
         self.whatsappWeb = whatsappWeb
@@ -40,7 +44,7 @@ struct ExecutorAcoes: Sendable {
         case "app":
             if let acao = tecla.acao { return abrirComAcao(tecla, acao) }
             return abrirApp(valor)
-        case "comando": return rodarComando(valor)
+        case "comando": return tecla.ligaEDesliga ? alternar(tecla, ligar: valor) : rodarComando(valor)
         case "atalho": return rodarAtalho(valor)
         // O contrato (Modelos.swift) chama o tipo de "tecla". "teclado" fica por compatibilidade.
         case "tecla", "teclado": return teclar(valor)
@@ -51,6 +55,10 @@ struct ExecutorAcoes: Sendable {
     // MARK: - Tipos
 
     private func abrirApp(_ nome: String) -> String? {
+        // "Google Meet (navegador)" não é app instalado: sem ação, abre o Meet no navegador padrão.
+        if nome == ControleDeReuniao.valorDoMeet {
+            return shell.rodar("open \(Self.escapar("https://meet.google.com"))").status == 0 ? nil : "Não consegui abrir o Meet no navegador"
+        }
         if nome.lowercased() == "whatsapp", let web = whatsappWeb {
             switch web() {
             case .aberto: return nil
@@ -62,7 +70,7 @@ struct ExecutorAcoes: Sendable {
         return r.status == 0 ? nil : "Não achei o app \(nome) neste Mac"
     }
 
-    private func rodarComando(_ linha: String) -> String? {
+    func rodarComando(_ linha: String) -> String? {
         let r = shell.rodar(Shell.limitadoNoPerfil(linha, segundos: limiteSegundos, shell: shellDoUsuario()))
         if r.status == 0 { return nil }
         if r.status == 127 { return Self.erroComandoInexistente(r.saida) }

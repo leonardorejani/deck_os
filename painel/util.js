@@ -28,6 +28,7 @@ const SVG = {
   globo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg>',
   sol: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
   luzTeclado: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="9" width="20" height="11" rx="2"/><path d="M6 13h.01M10 13h.01M14 13h.01M18 13h.01M7 17h10M9 2v3M12 1v4M15 2v3"/></svg>',
+  video: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="13" height="12" rx="2"/><path d="m15 10 6-3v10l-6-3"/></svg>',
   controles: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg>',
   volume: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4zM15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg>',
   curtir: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.5-1.5 3-3.2 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.8 0-3 .5-4.5 2-1.5-1.5-2.7-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4 3 5.5l7 7z"/></svg>',
@@ -39,6 +40,8 @@ const SVG = {
 // ícones dos apps que o Mac pode ter em uma tecla (o nome vem em tecla.icone)
 /* "Controles do Mac" não é um app: é uma tela do próprio iPhone (controles.js). Entra na lista de apps do editor, como o navegador padrão */
 const CONTROLES_DO_MAC = { nome: 'Controles do Mac', valor: 'Controles', bundle: 'deck-controles', controles: true };
+/* "Google Meet (navegador)" também não é app instalado: a tecla acha a sala aberta em qualquer navegador e muta ou liga a câmera (o Mac sabe as ações, bundle "deck-meet-navegador") */
+const MEET_NAVEGADOR = { nome: 'Google Meet (navegador)', nomeTecla: 'Google Meet', valor: 'Google Meet', bundle: 'deck-meet-navegador', meet: true };
 const APPS = [
   { nome: 'Vorssaint', ic: 'icones/vorssaint.png' }, { nome: 'Spotify', ic: 'icones/spotify.png' },
   { nome: 'WhatsApp', ic: 'icones/whatsapp.png' }, { nome: 'Calendar', ic: 'icones/calendario.png' },

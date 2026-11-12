@@ -79,7 +79,7 @@ da área segura com 4 ou com 12 teclas, nas duas composições).
 | Uso da semana | uma barra por conta, com o ícone do serviço: Claude `leo`, Claude `equipe` e Codex. Só o limite semanal (o Claude não tem mais a janela de 5 h, e o Codex só registra a semana: 5.694 de 5.694 registros conferidos em 10/11/2026). Ao lado, quando aquela conta renova ("sex 14h"), porque cada conta renova num dia. Amarelo a partir de 70%, vermelho a partir de 90%, sempre com o número | nada na v1 |
 | Spotify | capa, faixa, artista com o ícone do Spotify, tempo decorrido e total, anterior / tocar-pausar / próxima. Fundo com um brilho das duas cores dominantes da capa (o Mac tira as cores da arte e manda junto) | capa ou nome abre o player em tela cheia (seção 5). Botões controlam a música. **Arrastar a barra de tempo pula a música**: a área de arrasto é alta, mas fica numa linha só dela, abaixo dos botões. Nas pontas da barra, **aleatório** e **repetir** (verdes quando ligados), só quando o Mac manda o estado deles |
 | Sessões esperando | com o ícone do Claude: nome, pergunta e há quanto tempo espera (amarelo depois de 1 h), das 3 mais recentes | tocar em qualquer ponto do bloco (linha ou título) abre a tela de sessões, um cartão por sessão (seção 5). A linha é pequena demais para ser um alvo separado |
-| Monitor do Mac | uma linha pequena com processador, memória, bateria (some em Mac sem bateria) e rede (baixando e enviando). Nasce desligado. Nos Ajustes do Mac, "Este Mac", a pessoa liga o bloco e escolhe quais itens aparecem. Sem item escolhido o bloco some. Em A e B ele toma uma linha embaixo da data (o relógio cede a altura, e a B mostra uma sessão só), na C fica embaixo das placas | nada |
+| Monitor do Mac | uma linha pequena com processador, memória, bateria (some em Mac sem bateria) e rede (baixando e enviando). Nasce desligado. Nos Ajustes do Mac, na tecla do Monitor de Atividade, a pessoa liga o bloco e escolhe quais itens aparecem. Sem item escolhido o bloco some. Em A e B ele toma uma linha embaixo da data (o relógio cede a altura, e a B mostra uma sessão só), na C fica embaixo das placas | nada |
 | Teclas | ícone, nome, LED, selo de não lidas. Na Agenda, o horário do próximo compromisso centralizado no topo, só o texto, sem pílula. Toda tecla reserva no topo o espaço do selo, então os ícones ficam na mesma altura com ou sem selo | toque executa, segurar organiza |
 
 **Sem música tocando:** o player sai e as sessões crescem até o topo, ocupando o lugar dele (até 7
@@ -562,8 +562,7 @@ uma linha e "Excluir tecla" (⌘Z desfaz). Embaixo, dois passos numerados:
    - Atalho: busca na lista do app Atalhos.
    - Teclado: "Clique aqui e aperte as teclas", que grava do teclado de verdade (Esc cancela, exige
      uma tecla de controle), com exemplos prontos.
-     Embaixo, "Montar escolhendo as teclas": modificadores e a tecla em botões, para o atalho que outro
-     app (CleanShot, Raycast) já usa e que o gravador não consegue pegar (decisão 33 da seção 13).
+     (A seção "Montar escolhendo as teclas" saiu em 12/11/2026, ver o fim da seção 13.)
    - Comando: caixa em fonte de código, "Testar agora" e comandos prontos (apagar tela, abrir
      Downloads, silenciar, esvaziar Lixeira).
 
@@ -1197,6 +1196,30 @@ Teste do Deck 1.0 (12/11/2026, frente iphone-bugs), dito pelo Leonardo:
       (e) Desligar a chave "Conectar pelo QR" volta para a origem de antes (`whatsapp.origemAntes`), não para "auto".
       (f) Sem o ajudante no app a chave não liga e a origem não muda.
 
+Ajustes dentro da tecla, gravador limpo, liga e desliga, Meet no navegador e Controles na lista (12/11/2026). Palavras dele: "Os
+ajustes de app Agenda e Monitor do Mac saem do Este Mac (lá os botões ficaram quebrados e jogados) e vão para dentro do editor da
+tecla", "isso é muito feio, tira eles daí e deixa o usuário fazer a combinação", "ele usa o Meet só no navegador" e "Controles
+(volume, brilho, luz do teclado) não foi achado". O que mudou, no editor de tecla do Mac:
+- Agenda e Monitor de Atividade. Saíram do Este Mac. A tecla do app Agenda (Calendar) ganha "Salvar compromissos em", num menu
+  nativo: "Perguntar toda vez" (de fábrica), "Calendário padrão do Mac" (`agendaPadrao` com o id `padrao-do-mac`, que o Mac troca
+  pelo calendário padrão de verdade na hora de salvar e ao mostrar o padrão no iPhone) e cada calendário e lista dos Lembretes. A
+  tecla do Monitor de Atividade ganha a chave "Mostrar na tela do iPhone" e uma chave por item (processador, memória, bateria,
+  rede), todos ligados de fábrica. A config é a mesma de antes (`agendaPadrao`, `blocos.monitor`, `monitor`).
+- Controles do Mac. Entrou na lista de apps, na frente, junto de "Google Meet (navegador)", tanto no editor do Mac quanto no do
+  iPhone (o botão escondido embaixo da lista saiu). A tecla ganha uma chave por barra (volume com mudo, brilho, luz do teclado),
+  todas ligadas de fábrica: `config.controles`. O Mac só devolve em `GET /api/controles` as barras ligadas, e o iPhone esconde as
+  outras como esconde a que o Mac não oferece. Não é um bloco na tela inicial do iPhone (não tem espaço lá).
+- Gravador de atalho. A seção "Montar escolhendo as teclas" (item 33) saiu, no Mac e no protótipo. A pessoa faz a combinação no
+  campo do gravador, que ganhou fonte menor. O gravador que pega a tecla antes dos outros apps continua como era.
+- Tecla de comando com liga e desliga. Chave "Liga e desliga": o comando principal vira "Comando para ligar" e entram "Comando
+  para desligar" (`Tecla.desligar`) e, opcional, "Comando que confere se está ligado" (o `estado`, sai 0 = ligado). A tecla acende
+  como a de Manter acordado. Sem o comando de conferir, o Deck guarda o estado: o toque roda ligar ou desligar e só grava o novo
+  estado se o comando deu certo (arquivo `teclas-ligadas.json` na pasta de dados do Deck). Apagar o `desligar` volta a tecla a ser
+  um comando só.
+- Google Meet (navegador). Tecla de app com o valor "Google Meet", sem app instalado. Sem ação abre meet.google.com no navegador
+  padrão. Com "Mutar ou desmutar o microfone" ou "Ligar ou desligar a câmera", o Mac acha a sala aberta em qualquer navegador que o
+  Deck sabe consultar (Safari, Chrome, Arc, Brave, Edge), traz a aba para a frente e aperta Cmd+D ou Cmd+E, igual ao item 35 da
+  seção 13. Trocar o app da tecla, ou o tipo, apaga a ação e o desligar que eram do antigo.
 Conexões e WhatsApp, depois de testar (12/11/2026, frente conexoes-whatsapp). Pedidos dele, resumidos: o aparelho
 conectado pelo QR aparecia como "Outro dispositivo" e tem que aparecer como "Deck OS", a mensagem nova levava cerca de 1 s,
 havia conversa sem nome e sem avatar, e as arquivadas só podem aparecer no filtro "Arquivadas". Decidido: o seletor de Conexões vira Cabo e Bluetooth, PWA, WhatsApp e Spotify (o

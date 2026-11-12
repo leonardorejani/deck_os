@@ -93,13 +93,13 @@ export default async function (h) {
   h.ok(noEditor.painel === 'controles' && noEditor.comAcao === undefined, `a tecla de app "${noEditor.valor}" abre a tela dos controles (${JSON.stringify(noEditor)})`);
   await p.context().close();
 
-  /* ---------- no editor, "Controles do Mac" fica ao lado da lista de apps e vira a tecla ---------- */
+  /* ---------- no editor, "Controles do Mac" está na lista de apps (era um botão escondido embaixo) e vira a tecla ---------- */
   await h.reset(); await h.cenario({ apps: 'normal' });
   p = await h.pagina(); await pronta(h, p);
   await p.evaluate(() => abrirEditor('nova'));
-  h.ok(await h.espera(p, () => !!document.querySelector('#ed-lista-apps button') && !!document.querySelector('[data-app-controles]')), 'o editor de tecla nova oferece "Controles do Mac" ao lado da lista de apps');
-  h.ok(await p.evaluate(() => ![...document.querySelectorAll('#ed-lista-apps button')].some(b => /Controles/.test(b.textContent))), 'a lista de apps do Mac continua só com os apps do Mac');
-  await p.click('[data-app-controles]');
+  h.ok(await h.espera(p, () => !!document.querySelector('#ed-lista-apps button[data-app-bundle="deck-controles"]')), 'o editor de tecla nova lista "Controles do Mac" junto dos apps');
+  h.ok(await p.evaluate(() => !document.querySelector('[data-app-controles]')), 'o botão escondido embaixo da lista saiu');
+  await p.click('#ed-lista-apps button[data-app-bundle="deck-controles"]');
   const rascunho = await p.evaluate(() => ({ valor: rasc.valor, icone: rasc.icone, tipo: rasc.tipo, nome: document.querySelector('#ed-nome').value, ajuda: document.querySelector('#ed-acoes')?.textContent.trim() }));
   h.ok(rascunho.valor === 'Controles' && rascunho.icone === 'svg:controles' && rascunho.tipo === 'app' && rascunho.nome === 'Controles do Mac', `escolher cria a tecla de app "Controles" com o ícone próprio (${JSON.stringify(rascunho)})`);
   h.ok(/abre os controles do Mac aqui no iPhone/.test(rascunho.ajuda), 'a tela diz que a tecla abre os controles aqui, sem lista de ações');

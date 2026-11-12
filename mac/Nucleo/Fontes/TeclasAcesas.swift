@@ -14,12 +14,15 @@ enum TeclasAcesas {
 
     /// Ids das teclas acesas, na ordem das teclas. Roda tudo em paralelo. Quem passa do limite
     /// conta como apagada, e o comando dela é deixado terminar sozinho.
-    static func ler(_ teclas: [Tecla], executor: any Executor, limite: TimeInterval = TeclasAcesas.limite) -> [String] {
+    /// Tecla liga e desliga sem comando de conferir acende pelo que o Deck guardou (`memoria`).
+    static func ler(_ teclas: [Tecla], executor: any Executor, limite: TimeInterval = TeclasAcesas.limite,
+                    memoria: MemoriaLigaDesliga = .compartilhada) -> [String] {
+        let guardadas = Set(teclas.filter { $0.ligaEDesliga && $0.comandoQueConfere == nil && memoria.ligada($0.id) }.map(\.id))
         let comEstado = teclas.compactMap { t -> (String, String)? in
-            guard let e = t.estado?.trimmingCharacters(in: .whitespacesAndNewlines), !e.isEmpty else { return nil }
+            guard let e = t.comandoQueConfere else { return nil }
             return (t.id, e)
         }
-        guard !comEstado.isEmpty else { return [] }
+        guard !comEstado.isEmpty else { return teclas.map(\.id).filter { guardadas.contains($0) } }
         let r = Resultados()
         let grupo = DispatchGroup()
         for (id, comando) in comEstado {
@@ -31,6 +34,6 @@ enum TeclasAcesas {
         }
         _ = grupo.wait(timeout: .now() + limite)
         let acesas = r.copia()
-        return comEstado.map(\.0).filter { acesas.contains($0) }
+        return teclas.map(\.id).filter { acesas.contains($0) || guardadas.contains($0) }
     }
 }

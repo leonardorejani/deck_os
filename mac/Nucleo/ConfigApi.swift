@@ -10,6 +10,7 @@ struct ConfigPublica: Codable, Equatable, Sendable {
     var blocos: Blocos
     var whatsapp: ConfigWhatsApp
     var monitor: ConfigMonitor
+    var controles: ConfigControles
     var nomeMac: String
     var porta: Int
 }
@@ -17,7 +18,7 @@ struct ConfigPublica: Codable, Equatable, Sendable {
 extension Config {
     var publica: ConfigPublica {
         ConfigPublica(versao: versao, perfis: perfis, perfilAtivo: perfilAtivo, comp: comp, contas: contas,
-                      blocos: blocos, whatsapp: whatsapp, monitor: monitor, nomeMac: nomeMac, porta: porta)
+                      blocos: blocos, whatsapp: whatsapp, monitor: monitor, controles: controles, nomeMac: nomeMac, porta: porta)
     }
 
     /// Lê o corpo do PUT /api/config. Corpo sem alguma das chaves de uma config completa é recusado:
@@ -40,6 +41,8 @@ extension Config {
         if json["whatsapp"] == nil { completa.whatsapp = atual.whatsapp }
         // Mesmo caso do monitor (12/11/2026): painel velho não conhece a chave, e o padrão não apaga a escolha.
         if json["monitor"] == nil { completa.monitor = atual.monitor }
+        // E para as barras dos Controles do Mac (12/11/2026).
+        if json["controles"] == nil { completa.controles = atual.controles }
         // Idem para o lugar padrão da agenda: painel velho não manda a chave e não pode apagar a escolha.
         if json["agendaPadrao"] == nil { completa.agendaPadrao = atual.agendaPadrao }
         return aplicar(recebida: completa, sobre: atual)

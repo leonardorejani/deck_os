@@ -1,5 +1,5 @@
 /* Monitor de Atividade no iPhone: a tecla do app abre esta tela. Em cima, os mesmos dados do bloco do monitor (V.monitor,
-   que o Mac já manda no estado) em tamanho grande, só os itens que a pessoa deixou ligados nos Ajustes do Mac. Embaixo, os
+   que o Mac já manda no estado) em tamanho grande, só os itens que a pessoa deixou ligados na tecla do Monitor, nos Ajustes do Mac. Embaixo, os
    5 processos que mais usam processador e os 5 que mais usam memória (GET /api/processos), cada um com "Encerrar", que
    sempre pede confirmação antes. Quem diz se um processo pode ser encerrado é o Mac (`podeEncerrar`).
    Usa as peças de deck.js (V, canal, avisar, abrirFolha, tratarErro, monitorItens, velocidade, nivel) e paineis.js (msgErro). */
@@ -50,7 +50,7 @@ function metricasHTML() {
   const itens = monitorItens();
   if (!V?.monitor || !itens.length) {
     const desligado = !V?.blocos?.monitor;
-    return `<div class="vazio-bloco mn-vazio"><strong>${desligado ? 'O monitor está desligado' : 'Nenhum item ligado'}</strong><span>Para ver o processador, a memória, a bateria e a rede aqui, ligue o Monitor do Mac em Ajustes, Este Mac.</span></div>`;
+    return `<div class="vazio-bloco mn-vazio"><strong>${desligado ? 'O monitor está desligado' : 'Nenhum item ligado'}</strong><span>Para ver o processador, a memória, a bateria e a rede aqui, ligue o monitor na tecla Monitor de Atividade, nos Ajustes do Deck no Mac.</span></div>`;
   }
   return `<div class="mn-grade" data-n="${itens.length}">${itens.map(k => cartaoMonitor(k, V.monitor)).join('')}</div>`;
 }
