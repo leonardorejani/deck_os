@@ -49,7 +49,16 @@ struct PedidosDoMac: PedidosDeAcesso {
         }
     }
 
+    /// O macOS põe a janelinha dele (ou os Ajustes do Sistema) na frente do Deck: terminado o pedido, o Deck volta.
     func pedir(_ acesso: AcessoMac) async -> EstadoDoAcesso {
+        FocoDoDeck.comecarPedido()
+        let r = await pedirSemFoco(acesso)
+        // Com os Ajustes do Sistema abertos pelo pedido, o Deck volta quando a permissão mudar (FocoDoDeck.vigiar), não antes.
+        PrimeiroPlano.aoTerminarPedido(vigiaLigada: FocoDoDeck.vigiaLigada) { FocoDoDeck.trazer() }
+        return r
+    }
+
+    private func pedirSemFoco(_ acesso: AcessoMac) async -> EstadoDoAcesso {
         if (acesso == .bluetooth || acesso == .redeLocal) && !Variante.atual.pedeBluetoothERedeLocal { return .naoPedido }
         switch acesso {
         case .calendarios:
@@ -73,7 +82,10 @@ struct PedidosDoMac: PedidosDeAcesso {
         case .acessibilidade:
             marcarPedido(acesso)
             let opcoes = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
-            return AXIsProcessTrustedWithOptions(opcoes) ? .liberado : .recusado
+            if AXIsProcessTrustedWithOptions(opcoes) { return .liberado }
+            // O diálogo do macOS leva aos Ajustes do Sistema: o Deck volta quando a chave for ligada lá.
+            vigiar(acesso)
+            return .recusado
         case .discoTotal:
             marcarPedido(acesso)
             // O macOS não tem janelinha para este: só dá para ligar nos Ajustes do Sistema.
@@ -87,8 +99,17 @@ struct PedidosDoMac: PedidosDeAcesso {
         }
     }
 
+    /// Abre a página certa dos Ajustes do Sistema e traz o Deck de volta quando a permissão mudar lá.
     func abrirAjustes(_ acesso: AcessoMac) {
         NSWorkspace.shared.open(acesso.enderecoDosAjustes)
+        vigiar(acesso)
+    }
+
+    /// Rede Local não tem como ser relida (o macOS só deixa saber perguntando): sem vigia, o Deck não espera à toa.
+    private func vigiar(_ acesso: AcessoMac) {
+        guard acesso != .redeLocal else { return }
+        let defaults = defaults
+        FocoDoDeck.vigiar { VerificadorVivo(defaults: defaults).ler(acesso)?.situacao }
     }
 
     /// Nome da página de Privacidade e Segurança de cada acesso.

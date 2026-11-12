@@ -10,15 +10,6 @@ struct PedidoDePareamento: Equatable {
     var codigo: String
 }
 
-/// O app nativo do iPhone, visto por quem fala com ele pelo cabo ou pelo Bluetooth.
-struct AppNativo: Equatable {
-    var nome: String
-    /// O canal do último pedido atendido: o cabo ou o Bluetooth.
-    var canal: CanalIphone
-    var desde: Date
-    var visto: Date
-}
-
 extension CanalIphone {
     /// O rótulo da sessão no núcleo: "usbmux/<id>" é o cabo, "bluetooth/<id>" é o Bluetooth.
     init?(rotulo: String) {
@@ -105,8 +96,9 @@ enum TextosDoNativo {
     static func ultimoCanal(_ n: AppNativo, agora: Date = Date()) -> String {
         let nome = n.canal == .bluetooth ? "Bluetooth" : "Cabo"
         let seg = agora.timeIntervalSince(n.visto)
-        if seg < 60 { return "\(nome), agora" }
-        if seg < 3600 { return "\(nome), há \(Int(seg / 60)) min" }
+        // "agora" tem a mesma janela do cabeçalho (30 s): passou disso, o iPhone não está falando.
+        if seg <= IphonePareado.janelaAoVivo { return "\(nome), agora" }
+        if seg < 3600 { return "\(nome), há \(max(1, Int(seg / 60))) min" }
         return "\(nome), às \(formato("HH:mm").string(from: n.visto))"
     }
 
@@ -147,8 +139,10 @@ enum TextosDoNativo {
     static let vazioTexto = "Ele lista os Macs por perto. Toque neste."
     static let vazioRotulo = "Visível por Bluetooth"
     static let pedidoTexto = "Confira se o código é o mesmo do iPhone."
+    static let caboRotulo = "Código do cabo"
+    static let caboTexto = "Digite no iPhone, na tela do cabo. Vale por 10 minutos."
     static func pedidoRotulo(_ iphone: String) -> String { "\(iphone) quer parear" }
-    static let notaDaVia = "Sem Bluetooth ou sem achar o Mac? Segunda via: plugue o iPhone no cabo e, na tela de procurar do app, toque em \"Conectar pelo cabo com código\". O Mac mostra um código de 6 dígitos para digitar no iPhone."
+    static let notaDaVia = "Sem Bluetooth ou sem achar o Mac? Segunda via: plugue o iPhone no cabo e, na tela de procurar do app, toque em \"Conectar pelo cabo com código\". Digite o código do cartão acima."
 }
 
 // MARK: - Pareamento por Bluetooth
@@ -241,9 +235,21 @@ final class LogDoDeck: @unchecked Sendable {
 // MARK: - O modelo
 
 extension ModeloApp {
-    /// O iPhone do topo do menu e do cabeçalho dos Ajustes: o app nativo tem a vez, depois o Safari pelo Wi-Fi.
+    /// O iPhone do topo do menu, do cabeçalho dos Ajustes, do Sobre e de Conexões: o app nativo tem a vez, depois o
+    /// Safari pelo Wi-Fi. É a única fonte de "tem iPhone pareado". Se ele está falando agora é `iphoneAoVivo`.
     var iphoneAtivo: IphonePareado? {
-        nativo.map { IphonePareado(nome: $0.nome, canal: $0.canal, desde: $0.desde) } ?? iphone
+        nativo.map { IphonePareado(nome: $0.nome, canal: $0.canal, desde: $0.desde, visto: $0.visto) } ?? iphone
+    }
+
+    /// O iPhone do `iphoneAtivo` falou com o Mac nos últimos 30 s.
+    var iphoneAoVivo: Bool { iphoneAtivo?.aoVivo(agora: agora) ?? false }
+
+    /// O núcleo respondeu a API pelo Wi-Fi: o iPhone está falando, mesmo que o Mac não tenha anotado o pareamento.
+    func wifiAtendeu(caminho: String, status: Int, agora: Date = Date()) {
+        guard let novo = Conexoes.aposRespostaDoWifi(atual: iphone, caminho: caminho, status: status, agora: agora) else { return }
+        let nasceu = iphone == nil
+        iphone = novo
+        if nasceu { IphoneLembrado.gravar(novo, codigo: config.codigoAcesso, defaults) }
     }
 
     var estadoDaRenovacao: RenovacaoDoApp.Estado { renovacao.estado(agora: agora) }
