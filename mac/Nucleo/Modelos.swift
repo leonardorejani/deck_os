@@ -147,6 +147,13 @@ struct Sessao: Codable, Equatable, Sendable {
     var pergunta: String
     /// Desde quando espera, ISO 8601.
     var desde: String
+    /// O pedido inteiro da sessão (`needs`), quando é mais que o resumo de `pergunta`. Ausente em Mac antigo.
+    var pedido: String? = nil
+    /// A última mensagem da sessão antes de parar (o contexto do que ela espera), sem segredos e com limite de
+    /// tamanho. Só vem em GET /api/sessoes, nunca no estado. Ausente em Mac antigo.
+    var contexto: String? = nil
+    /// A resposta que a própria sessão sugere (`suggestedReply`), só para ler. Ausente em Mac antigo.
+    var sugestao: String? = nil
 }
 
 struct ResumoWhatsApp: Codable, Equatable, Sendable {

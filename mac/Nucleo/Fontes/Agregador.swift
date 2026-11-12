@@ -226,7 +226,7 @@ final class Agregador: @unchecked Sendable {
 
         return Estado(
             agora: Datas.iso(agora), nomeMac: config.nomeMac, perfilAtivo: config.perfilAtivo, comp: config.comp, blocos: b,
-            spotify: leituraSpotify.valor, uso: leituraUso.valor, sessoes: leituraSessoes.valor, whatsapp: resumoWhats,
+            spotify: leituraSpotify.valor, uso: leituraUso.valor, sessoes: FonteSessoes.semContexto(leituraSessoes.valor), whatsapp: resumoWhats,
             agenda: leituraAgenda.valor, acesas: acesas, selos: selos, avisos: avisos
         )
     }
