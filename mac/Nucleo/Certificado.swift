@@ -76,8 +76,7 @@ struct GeradorCertificado: Sendable {
     }
 
     static func pastaPadrao() -> URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/Deck/certificados", isDirectory: true)
+        Variante.atual.pastaDeDados().appendingPathComponent("certificados", isDirectory: true)
     }
 
     var arquivos: ArquivosCertificado { ArquivosCertificado(pasta: pasta) }

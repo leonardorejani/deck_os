@@ -66,6 +66,26 @@ targets:
         PRODUCT_NAME: Deck
         ENABLE_APP_SANDBOX: NO
 
+  # Deck Bancada: o mesmo app do Mac para testar telas sem tocar no Deck instalado (Nucleo/Variante.swift). Bundle,
+  # pasta de dados, porta, log e Chaveiro próprios, sem cabo, Bluetooth nem renovação. `scripts/bancada.sh` compila e instala.
+  DeckBancada:
+    templates: [Tela]
+    sources:
+      - Deck
+      - path: ../../painel
+        type: folder
+        buildPhase: resources
+    postBuildScripts:
+      - name: Tirar os testes do painel do pacote
+        script: rm -rf "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/painel/teste"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.leonardorejani.deck.bancada
+        PRODUCT_NAME: Deck Bancada
+        INFOPLIST_KEY_CFBundleDisplayName: Deck Bancada
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIconBancada
+        ENABLE_APP_SANDBOX: NO
+
   # Só para fotografar as telas (ImageRenderer) e comparar com o protótipo. Não é entregue.
   DeckFotos:
     templates: [Tela]
@@ -92,6 +112,12 @@ targets:
         BUNDLE_LOADER: "$(TEST_HOST)"
 
 schemes:
+  DeckBancada:
+    build:
+      targets:
+        DeckBancada: all
+    run:
+      config: Debug
   Deck:
     build:
       targets:

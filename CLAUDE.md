@@ -59,6 +59,14 @@ Bluetooth, build, instalação e renovação). Falta o teste de ponta a ponta no
   Auditor: `node ~/.claude/skills/tatile/modulos/pwa/scripts/auditar.mjs painel` (0 erros). Prova no iPhone: `docs/provas/fase-4-pwa.md`.
 - Regra do produto: **o Mac configura, o iPhone mostra** (ver `.claude/rules/01-invariants.md`).
 
+### Deck Bancada
+
+Variante do app do Mac para testar telas sem tocar no Deck instalado (`mac/Nucleo/Variante.swift`, SPEC 13.31). Bundle
+`com.leonardorejani.deck.bancada`, dados em `Application Support/Deck Bancada`, porta 4791, log e Chaveiro próprios, sem cabo,
+Bluetooth, renovação nem rede (só loopback). `scripts/bancada.sh` compila a worktree atual e instala em
+`~/Applications/Deck Bancada.app` sem abrir. Primeira abertura copia a config do Deck real (só leitura).
+Tudo que for do dono (pasta, log, Chaveiro, porta) tem que passar por `Variante.atual`, nunca por caminho fixo.
+
 ### Como rodar e verificar
 
 - Protótipo: `cd prototipo && python3 -m http.server 4871`, depois http://localhost:4871/ (iPhone) e
