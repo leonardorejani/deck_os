@@ -28,7 +28,7 @@ extension Blocos {
 }
 
 extension ConfigWhatsApp {
-    static let origens = ["auto", "app", "web"]
+    static let origens = ["auto", "app", "web", "qr"]
 
     /// Leitura tolerante: chave faltando ou valor que o Deck não conhece volta para o padrão (auto, sem
     /// navegador fixo), em vez de derrubar a config inteira.
@@ -36,8 +36,10 @@ extension ConfigWhatsApp {
         let c = try decoder.container(keyedBy: ChavesConfig.self)
         let origem = (try? c.decodeIfPresent(String.self, forKey: ChavesConfig("origem"))) ?? nil
         let navegador = (try? c.decodeIfPresent(String.self, forKey: ChavesConfig("navegador"))) ?? nil
+        let antes = (try? c.decodeIfPresent(String.self, forKey: ChavesConfig("origemAntes"))) ?? nil
         self.init(origem: origem.flatMap { Self.origens.contains($0) ? $0 : nil } ?? "auto",
-                  navegador: navegador.flatMap { n in NavegadorWeb.todos.contains { $0.nome == n } ? n : nil })
+                  navegador: navegador.flatMap { n in NavegadorWeb.todos.contains { $0.nome == n } ? n : nil },
+                  origemAntes: antes.flatMap { Self.origens.contains($0) && $0 != "qr" ? $0 : nil })
     }
 }
 
@@ -161,7 +163,7 @@ extension Config {
                 return "O perfil da conta \"\(conta.conta)\" não é válido."
             }
         }
-        if !ConfigWhatsApp.origens.contains(c.whatsapp.origem) { return "A origem do WhatsApp deve ser automática, app ou web." }
+        if !ConfigWhatsApp.origens.contains(c.whatsapp.origem) { return "A origem do WhatsApp deve ser automática, app, web ou QR." }
         if let n = c.whatsapp.navegador, !NavegadorWeb.todos.contains(where: { $0.nome == n }) {
             return "O navegador do WhatsApp Web não é válido."
         }

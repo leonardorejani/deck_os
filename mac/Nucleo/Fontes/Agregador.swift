@@ -71,7 +71,7 @@ struct Fontes: Sendable {
     /// `origemWhatsApp` é quem decide entre o banco do app e o WhatsApp Web: o roteador passa o mesmo
     /// que usa para abrir o WhatsApp, e sem ele vale o automático.
     static func vivas(executor: any Executor = ExecutorShell(), casa: String = NSHomeDirectory(),
-                      origemWhatsApp: OrigemWhatsApp? = nil, complementoSpotify: ComplementoSpotify? = nil,
+                      origemWhatsApp: OrigemWhatsApp? = nil, ponteQR: PonteWhatsAppQR? = nil, complementoSpotify: ComplementoSpotify? = nil,
                       spotifyAberto: (@Sendable () -> Bool)? = nil) -> Fontes {
         let base = URL(fileURLWithPath: casa)
         let jobs = base.appendingPathComponent(".claude/jobs")
@@ -79,7 +79,7 @@ struct Fontes: Sendable {
         let sessoesCodex = base.appendingPathComponent(".codex/sessions")
         let banco = FonteWhatsApp.caminhoPadrao(casa: casa)
         let whats = FonteWhatsAppEscolhida(origem: origemWhatsApp ?? OrigemWhatsApp(executor: executor, banco: banco),
-                                           app: FonteWhatsApp(executor: executor, banco: banco))
+                                           app: FonteWhatsApp(executor: executor, banco: banco), qr: ponteQR)
         // Só o executor de verdade consulta o sistema: com executor falso (teste) o Spotify vale como aberto.
         var aberto: @Sendable () -> Bool = { true }
         if let spotifyAberto { aberto = spotifyAberto } else if executor is ExecutorShell { aberto = { FonteSpotify.spotifyAberto() } }

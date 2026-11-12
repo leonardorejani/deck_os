@@ -95,6 +95,7 @@ enum PreferenciasDoMac {
         switch origem {
         case "app": return "Só o app do WhatsApp no Mac. Mostra cada conversa"
         case "web": return "Só o WhatsApp Web aberto no navegador. O iPhone vê o total, sem separar por conversa"
+        case "qr": return "Lendo pelo aparelho conectado (QR), aí embaixo. Escolha uma opção daqui para voltar"
         default: return "O Deck usa o app do WhatsApp e, se ele estiver parado, o WhatsApp Web aberto no navegador"
         }
     }

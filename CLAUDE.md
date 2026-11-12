@@ -57,6 +57,11 @@ Bluetooth, build, instalação e renovação). Falta o teste de ponta a ponta no
   (registro do service worker, Wake Lock e deslocamento contra queima de tela) e `pareamento.js` (certificado pelo QR e código de 6
   dígitos). Quem carrega arquivo novo no `index.html` tem que pô-lo na lista `ESSENCIAIS` do `sw.js` (o `pwa.teste.mjs` cobra).
   Auditor: `node ~/.claude/skills/tatile/modulos/pwa/scripts/auditar.mjs painel` (0 erros). Prova no iPhone: `docs/provas/fase-4-pwa.md`.
+- `helpers/whatsapp/`: ajudante em Go (whatsmeow, MPL-2.0) do WhatsApp por QR, só leitura, desligado por padrão
+  (`whatsapp.origem` = `qr`, SPEC 13 item 35). `helpers/whatsapp/build.sh` gera o binário universal, o `build.sh` e o
+  `scripts/bancada.sh` o põem em `Contents/Helpers`. No núcleo, `mac/Nucleo/Fontes/WhatsAppQR.swift` (`PonteWhatsAppQR`)
+  o abre e lê as linhas de JSON. Testes: `go test` em `helpers/whatsapp` e `mac/Testes/FontesWhatsAppQRTestes.swift`.
+  Prova com QR de verdade: `scripts/whatsapp-qr-prova.sh`.
 - Regra do produto: **o Mac configura, o iPhone mostra** (ver `.claude/rules/01-invariants.md`).
 
 ### Deck Bancada
