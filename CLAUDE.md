@@ -64,6 +64,10 @@ Bluetooth, build, instalação e renovação). Falta o teste de ponta a ponta no
 - Protótipo: `cd prototipo && python3 -m http.server 4871`, depois http://localhost:4871/ (iPhone) e
   http://localhost:4871/mac.html (Mac). Sem conta.
 - Núcleo: `swift test --package-path mac`. No CI roda na imagem `swift:6.2` (Docker, no runner Linux).
+- Teste do app do Mac (`xcodebuild test`) é lento e abre o Deck de Debug: agentes em paralelo rodam o verificar com
+  `DECK_SEM_APP=1` (pula só esse bloco) e o coordenador roda o teste do app uma vez, no final. O app como hospedeiro de teste
+  nunca toca no Chaveiro, na config ou nas preferências reais (`mac/Nucleo/AmbienteDeTeste.swift`); o verificar falha se
+  aparecer `DECK-CHAVEIRO-REAL-BLOQUEADO` no log.
 - Pronto é `.claude/verificar.sh` verde (sintaxe do JS, validadores, auditor da tatile e testes do
   núcleo) e o print da tela conferido. Testes de navegador (Playwright) moram em `.teste/`, fora do git.
 - Todo valor visual vem de token do tatile ou do bloco de tokens no topo de `deck.css`/`mac.css`.

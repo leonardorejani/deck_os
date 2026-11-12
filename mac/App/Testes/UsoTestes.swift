@@ -13,6 +13,13 @@ final class CofreFalso: CofreDeToken, @unchecked Sendable {
     func apagar(conta: String) { trava.lock(); itens[conta] = nil; trava.unlock() }
 }
 
+final class Contador: @unchecked Sendable { var n = 0 }
+final class Relogio: @unchecked Sendable { var agora = Date(timeIntervalSince1970: 1_800_000_000) }
+struct ContadorLeitor: LeitorDeUsoPorToken {
+    var conta: Contador
+    func ler(token: String) async -> ResultadoDoToken { conta.n += 1; return .ok(UsoDoToken(semana: 5, renova: nil)) }
+}
+
 struct LeitorFalso: LeitorDeUsoPorToken {
     var resultado: ResultadoDoToken
     func ler(token: String) async -> ResultadoDoToken { resultado }
@@ -91,13 +98,71 @@ final class TokenClaudeTestes: XCTestCase {
         XCTAssertNil(TokenClaude.erroDeFormato(tokenValido()))
     }
 
-    func testInterpretaOUsoDaSemana() throws {
-        let json = #"{"five_hour":{"utilization":3.0},"seven_day":{"utilization":61.4,"resets_at":"2026-11-13T17:00:00.123Z"}}"#
-        let u = try XCTUnwrap(ClaudeUsoPorToken.interpretar(Data(json.utf8)))
+    /// O token de setup-token toma 403 em /api/oauth/usage (falta o escopo user:profile). O uso vem nos
+    /// cabeçalhos de /v1/messages, como fração de 0 a 1 e reset em epoch.
+    func testInterpretaOUsoDosCabecalhosDoClaude() throws {
+        let cab = ["anthropic-ratelimit-unified-7d-utilization": "0.614", "anthropic-ratelimit-unified-7d-reset": "1794474000"]
+        guard case .ok(let u) = ClaudeUsoPorToken.interpretar(status: 200, cabecalhos: cab) else { return XCTFail("deveria ler o uso") }
         XCTAssertEqual(u.semana, 61)
-        XCTAssertNotNil(u.renova)
-        XCTAssertNil(ClaudeUsoPorToken.interpretar(Data("{}".utf8)))
-        XCTAssertEqual(try XCTUnwrap(ClaudeUsoPorToken.interpretar(Data(#"{"seven_day":{"utilization":140}}"#.utf8))).semana, 100)
+        XCTAssertEqual(u.renova, Date(timeIntervalSince1970: 1794474000))
+        guard case .ok(let cheio) = ClaudeUsoPorToken.interpretar(status: 429, cabecalhos: ["anthropic-ratelimit-unified-7d-utilization": "1.4"]) else { return XCTFail("429 com cabeçalho também mede") }
+        XCTAssertEqual(cheio.semana, 100)
+        XCTAssertNil(cheio.renova)
+    }
+
+    func testSemCabecalhoDecideOErroPeloStatus() {
+        XCTAssertEqual(ClaudeUsoPorToken.interpretar(status: 401, cabecalhos: [:]), .recusado)
+        XCTAssertEqual(ClaudeUsoPorToken.interpretar(status: 403, cabecalhos: [:]), .recusado)
+        XCTAssertEqual(ClaudeUsoPorToken.interpretar(status: 429, cabecalhos: [:]), .inesperado)
+        XCTAssertEqual(ClaudeUsoPorToken.interpretar(status: 503, cabecalhos: [:]), .inesperado)
+        XCTAssertEqual(ClaudeUsoPorToken.interpretar(status: 200, cabecalhos: [:]), .inesperado)
+        XCTAssertEqual(ClaudeUsoPorToken.interpretar(status: 400, cabecalhos: [:]), .inesperado)
+    }
+
+    func testCacheNaoPedeDeNovoDentroDaValidadeENaoGuardaFalha() async {
+        let conta = Contador()
+        let relogio = Relogio()
+        let c = LeitorComCache(ContadorLeitor(conta: conta), validade: 300, agora: { relogio.agora })
+        _ = await c.ler(token: "a"); _ = await c.ler(token: "a")
+        XCTAssertEqual(conta.n, 1)
+        relogio.agora = relogio.agora.addingTimeInterval(301)
+        _ = await c.ler(token: "a")
+        XCTAssertEqual(conta.n, 2)
+        _ = await c.ler(token: "b")
+        XCTAssertEqual(conta.n, 3)
+    }
+
+    /// A conta "leo" da troca de contas aparecia "Sem medição" sem o autoswitch: agora o Deck mede pelo token do perfil.
+    func testContaDePerfilSemMedicaoUsaOTokenDoPerfil() async {
+        let casa = FileManager.default.temporaryDirectory.appendingPathComponent("deck-vazio-\(UUID().uuidString)")
+        let uso = await PainelUso.lerUso(contas: [claudeLeo], casa: casa, cofre: CofreFalso(),
+                                         leitor: LeitorFalso(resultado: .ok(UsoDoToken(semana: 61, renova: nil))), agora: Date(),
+                                         tokenDoPerfil: { perfil, _ in perfil == "leo" ? "t" : nil })
+        XCTAssertEqual(uso["claude-leo"]?.semana, 61)
+        let sem = await PainelUso.lerUso(contas: [claudeLeo], casa: casa, cofre: CofreFalso(),
+                                         leitor: LeitorFalso(resultado: .ok(UsoDoToken(semana: 61, renova: nil))), agora: Date(),
+                                         tokenDoPerfil: { _, _ in nil })
+        XCTAssertNil(sem["claude-leo"]?.semana)
+    }
+
+    func testServicoDoTokenSegueOTipoDoPerfil() {
+        XCTAssertEqual(TokenDoPerfil.servico(perfil: ["type": "oauth_token", "keychainService": "A"]), "A")
+        XCTAssertEqual(TokenDoPerfil.servico(perfil: ["type": "native_archive", "keychainService": "X-archive", "measureKeychainService": "M"]), "M")
+        XCTAssertNil(TokenDoPerfil.servico(perfil: ["type": "native_archive", "keychainService": "X-archive"]))
+        XCTAssertNil(TokenDoPerfil.servico(perfil: ["type": "native_archive", "measureKeychainService": ""]))
+        XCTAssertNil(TokenDoPerfil.servico(perfil: ["type": "outro", "keychainService": "A"]))
+    }
+
+    func testTokenDoPerfilSoLeOAuthTokenEPerfilValido() throws {
+        let casa = FileManager.default.temporaryDirectory.appendingPathComponent("deck-casa-\(UUID().uuidString)")
+        let pasta = casa.appendingPathComponent(".config/claude-account/profiles")
+        try FileManager.default.createDirectory(at: pasta, withIntermediateDirectories: true)
+        try Data(#"{"type":"native_archive","keychainService":"deck-teste-nao-existe"}"#.utf8).write(to: pasta.appendingPathComponent("nativa.json"))
+        try Data(#"{"type":"oauth_token","keychainService":"deck-teste-nao-existe-\#(UUID().uuidString)"}"#.utf8).write(to: pasta.appendingPathComponent("tok.json"))
+        XCTAssertNil(TokenDoPerfil.ler(perfil: "nativa", casa: casa))
+        XCTAssertNil(TokenDoPerfil.ler(perfil: "tok", casa: casa))
+        XCTAssertNil(TokenDoPerfil.ler(perfil: "../x", casa: casa))
+        XCTAssertNil(TokenDoPerfil.ler(perfil: "ausente", casa: casa))
     }
 }
 
@@ -198,6 +263,13 @@ final class PainelUsoTestes: XCTestCase {
         XCTAssertEqual(p.conta?.erro, TokenClaude.recusado)
         XCTAssertEqual(p.conta?.conferindo, false)
         XCTAssertTrue(m.config.contas.isEmpty)
+    }
+
+    func testRespostaInesperadaTemMensagemPropria() async {
+        let p = PainelUso(cofre: CofreFalso(), leitorToken: LeitorFalso(resultado: .inesperado))
+        p.conta = EstadoConta(token: tokenValido())
+        await p.adicionarToken(modelo: modelo([]))
+        XCTAssertEqual(p.conta?.erro, TokenClaude.inesperado)
     }
 
     func testTokenSemRedeNaoViraRecusado() async {

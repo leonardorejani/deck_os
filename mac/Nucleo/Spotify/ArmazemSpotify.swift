@@ -46,6 +46,7 @@ struct ArmazemSpotifyChaveiro: ArmazemSpotify {
     }
 
     func ler() -> DadosSpotify {
+        guard AmbienteDeTeste.chaveiroPermitido(servico: servico) else { return DadosSpotify() }
         var q = consulta()
         q[kSecReturnData as String] = true
         q[kSecMatchLimit as String] = kSecMatchLimitOne
@@ -56,6 +57,7 @@ struct ArmazemSpotifyChaveiro: ArmazemSpotify {
     }
 
     func gravar(_ dados: DadosSpotify) -> Bool {
+        guard AmbienteDeTeste.chaveiroPermitido(servico: servico) else { return false }
         guard let json = try? JSONEncoder().encode(dados) else { return false }
         let atualizar = SecItemUpdate(consulta() as CFDictionary, [kSecValueData as String: json] as CFDictionary)
         if atualizar == errSecSuccess { return true }
@@ -66,6 +68,9 @@ struct ArmazemSpotifyChaveiro: ArmazemSpotify {
         return SecItemAdd(item as CFDictionary, nil) == errSecSuccess
     }
 
-    func apagar() { SecItemDelete(consulta() as CFDictionary) }
+    func apagar() {
+        guard AmbienteDeTeste.chaveiroPermitido(servico: servico) else { return }
+        SecItemDelete(consulta() as CFDictionary)
+    }
 }
 #endif
