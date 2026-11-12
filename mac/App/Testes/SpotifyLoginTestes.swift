@@ -292,6 +292,38 @@ final class SpotifyLoginTestes: XCTestCase {
         XCTAssertNil(m2.nome)
     }
 
+    /// Defeito: com o /me lento, a tela voltava para "Esperando" (conectando e conectado ao mesmo tempo).
+    func testComMeLentoATelaJaMostraConectadoSemEsperar() async {
+        let (m, _, _) = montar { r in
+            if r.url.hasSuffix("/me") { Thread.sleep(forTimeInterval: 1.5); return respostaDeMentira(200, "{\"display_name\":\"Fulana\"}") }
+            return tokenDeMentira()
+        }
+        m.abrirNavegador = navegador()
+        m.chave = Self.chave
+        let tarefa = Task { await m.conectar() }
+        var espera = 0
+        while !m.conectado, espera < 100 { try? await Task.sleep(nanoseconds: 50_000_000); espera += 1 }
+        XCTAssertTrue(m.conectado)
+        XCTAssertFalse(m.conectando)
+        XCTAssertEqual(m.situacao, .conectado)
+        XCTAssertNotEqual(SpotifyLogica.apoioDoLogin(m.situacao, erro: m.erro, confirmando: m.confirmando), "Esperando você permitir no navegador...")
+        await tarefa.value
+        XCTAssertEqual(m.nome, "Fulana")
+    }
+
+    /// Defeito: conta fora da lista só é recusada no /me. O login já foi apagado e a tela tem que dizer isso.
+    func testContaForaDaListaRecusadaNoMeMostraOAvancado() async {
+        let (m, _, a) = montar(embutida: Self.chaveDoDeck) { r in
+            r.url.hasSuffix("/me") ? respostaDeMentira(403, "{\"error\":{\"message\":\"User not registered in the Developer Dashboard\"}}") : tokenDeMentira()
+        }
+        m.abrirNavegador = navegador()
+        await m.conectar()
+        XCTAssertNil(a.ler().renovacao)
+        XCTAssertFalse(m.conectado)
+        XCTAssertEqual(m.erro, ErroSpotify.semCadastro.texto)
+        XCTAssertTrue(m.avancadoAberto)
+    }
+
     /// A tela sempre sai do "Esperando": aqui o navegador nunca volta, e o log conta o que houve.
     func testTempoEsgotadoSaiDoEsperandoEDiscaNoLog() async {
         let (m, _, _) = montar { _ in tokenDeMentira() }

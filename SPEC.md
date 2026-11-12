@@ -855,6 +855,9 @@ Ajustes de UX (11/11/2026, teste do Leonardo no iPhone):
       olhar). O Deck grava cada passo no deck.log, sem código nem token. Conectado mostra "Conectado como <nome>" e o botão
       Desconectar. A chave do Deck guardada no Chaveiro não conta como "própria": com a chave embutida o campo vem vazio e o
       Avançado recolhido.
+    - Spotify, correção da verificação (11/11/2026): conectado não volta ao "Esperando" enquanto o nome da conta carrega, e a
+      conta recusada só no /me (fora da lista) mostra o Avançado na hora. O texto de tempo esgotado não aponta mais o endereço
+      de retorno como causa. A causa do travamento real segue sem confirmação: o próximo teste manual lê o deck.log.
 
 Nada em aberto que trave a fase 1. Falta só confirmar, na construção, o link que abre uma sessão
 específica no app do Claude do iPhone (se não existir, cai no "mostra a pergunta").

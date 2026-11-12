@@ -65,6 +65,7 @@ final class ModeloSpotify: ObservableObject {
         Task {
             let n = await Task.detached { conta.atualizarNome() }.value
             if let n, n != nome { nome = n }
+            resincronizar()
         }
     }
 
@@ -127,9 +128,19 @@ final class ModeloSpotify: ObservableObject {
         registrar("spotify: conectado")
         avisar("Spotify conectado", false)
         NSApp.activate(ignoringOtherApps: true)
+        // Já conectou: a tela não volta ao "Esperando" enquanto o nome da conta não chega (o /me pode demorar).
+        conectando = false
         confirmando = false
         let nomeDaConta = await Task.detached { conta.atualizarNome() }.value
         nome = nomeDaConta
+        resincronizar()
+    }
+
+    /// Relê a conta depois de uma chamada ao Spotify: se ela apagou o login (conta fora da lista), a tela acompanha.
+    private func resincronizar() {
+        conectado = conta.conectado
+        if !conectado { nome = nil }
+        if conta.precisaChavePropria, !conectado { pedirChavePropria() }
     }
 
     /// Clicar em Cancelar enquanto espera o navegador.
@@ -144,7 +155,7 @@ final class ModeloSpotify: ObservableObject {
         erro = nil
     }
 
-    static let textoDeTempoEsgotado = "O login do Spotify demorou demais e o navegador não voltou para o Deck. Se a página do Spotify mostrou um erro, o endereço de retorno do app não está cadastrado: use o Avançado com a sua chave. Se não, clique em Conectar para tentar de novo."
+    static let textoDeTempoEsgotado = "O login do Spotify demorou demais e o navegador não voltou para o Deck. Clique em Conectar para tentar de novo. Se a página do Spotify mostrou um erro, use o Avançado com a sua chave."
 
     func desconectar() {
         conta.desconectar()
