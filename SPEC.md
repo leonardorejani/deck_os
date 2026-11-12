@@ -931,6 +931,10 @@ medição do autoswitch passa a ser medida pelo token do perfil (type oauth_toke
     cartão e a tela ganham hierarquia nova (seção 5). Sem responder pelo iPhone nesta versão. O Mac não vê o pedido de
     permissão (ferramenta e comando) porque o `state.json` não o guarda: o que existe é `needs` e a última mensagem da
     sessão no `timeline.jsonl`, e é isso que a tela mostra.
+    Correção da verificação (12/11/2026): como o pedido é "sem segredo: mascare tokens", a máscara cobre também URL de banco
+    com senha (qualquer esquema, não só http), par chave/valor em JSON com aspas e chave com underscore (`sk_live_...`). E
+    "fácil de ler" inclui bloco de código com cerca (a cerca some e o comando fica como está), link, itálico, `__forte__` e
+    citação sem a marcação.
 
 ## 14. Melhorias (10/11/2026)
 
