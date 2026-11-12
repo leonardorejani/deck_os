@@ -215,7 +215,6 @@ enum Ligacao {
                          certificadoCA: URL? = nil, contaSpotify: ContaSpotify? = nil,
                          apps: (any ProvedorDeApps)? = nil, criadorDeAgenda: (any CriadorDeAgenda)? = nil,
                          usoMedido: (@Sendable ([ContaIA], Date) -> [String: UsoConta])? = nil,
-                         mail: (any ProvedorDeMail)? = nil,
                          ponteQR: PonteWhatsAppQR? = nil) -> Roteador {
         // A mesma decisão de origem do WhatsApp serve a leitura (estado) e a abertura (tecla e "Abrir no Mac").
         let origemWhats = OrigemWhatsApp(executor: executor, banco: FonteWhatsApp.caminhoPadrao(casa: NSHomeDirectory()),
@@ -236,8 +235,7 @@ enum Ligacao {
             reunioes: AbridorDeReuniao(shell: executor), criadorDeAgenda: criadorDeAgenda ?? Self.criadorPadrao(),
             abridorDeSessao: AbridorDeSessaoNoMac(raiz: URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".claude/jobs"), shell: executor),
             apps: apps ?? AppsDoMac(pastaDeCache: AppsDoMac.pastaDeCachePadrao(), executor: executor),
-            controles: ControlesReais(executor: executor), processos: ProcessosReais(executor: executor),
-            mail: mail ?? LeitorDeMail(executor: executor))
+            controles: ControlesReais(executor: executor), processos: ProcessosReais(executor: executor))
     }
 
     /// Só o Mac grava na agenda: no Linux (CI) a rota fica sem criador e responde 404.

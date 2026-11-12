@@ -40,4 +40,17 @@ final class FontesAgendaTestes: XCTestCase {
         XCTAssertEqual(Cor.hex(r: 1.2, g: -0.1, b: 0), "#ff0000")
         XCTAssertEqual(Cor.hex(1, 2, 3), "#010203")
     }
+
+    func testLembreteComPrazoViraItemDoDiaEEntraJuntoDoEvento() {
+        var cal = Calendar(identifier: .gregorian); cal.timeZone = utc
+        let comHora = Agenda.lembrete(titulo: "Pagar boleto", prazo: DateComponents(year: 2026, month: 11, day: 12, hour: 15, minute: 30),
+                                      lista: "Lembretes", cor: (r: 0, g: 0, b: 1), calendario: cal)
+        XCTAssertEqual(comHora?.inicio, Date(timeIntervalSince1970: 1_794_497_400))
+        XCTAssertEqual(comHora?.diaTodo, false)
+        let diaTodo = Agenda.lembrete(titulo: "Ligar", prazo: DateComponents(year: 2026, month: 11, day: 12), lista: "Casa", cor: (r: 0, g: 0, b: 1), calendario: cal)
+        XCTAssertEqual(diaTodo?.diaTodo, true)
+        XCTAssertNil(Agenda.lembrete(titulo: "Sem dia", prazo: DateComponents(hour: 9), lista: "Casa", cor: (r: 0, g: 0, b: 1), calendario: cal))
+        let junto = Agenda.juntar([evento("Reuniao", inicio: 7 * 86_400)], [comHora!, diaTodo!].compactMap { $0 })
+        XCTAssertEqual(junto.map(\.titulo), ["Ligar", "Pagar boleto", "Reuniao"])
+    }
 }

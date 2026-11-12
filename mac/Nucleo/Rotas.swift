@@ -172,8 +172,6 @@ struct Roteador: Sendable {
     var controles: (any ControlesDoMac)? = nil
     /// Os processos que mais usam processador e memória, e o encerrar (tela do Monitor de Atividade). Nil: as rotas /api/processos não existem (404).
     var processos: (any ProcessosDoMac)? = nil
-    /// A tela do Mail (últimas mensagens). Nil: as rotas /api/mail não existem (404).
-    var mail: (any ProvedorDeMail)? = nil
 
     func responder(_ r: HttpRequisicao) -> RespostaRota {
         if r.caminho == "/api/parear" {
@@ -237,10 +235,6 @@ struct Roteador: Sendable {
             return somente(["GET"], r) ?? .codificar(200, paineis.sessoes())
         case "/api/agenda":
             return somente(["GET"], r) ?? agenda(r)
-        case "/api/mail":
-            return somente(["GET"], r) ?? caixaDeMail(r)
-        case "/api/mail/abrir":
-            return somente(["POST"], r) ?? abrirMensagem(r)
         default:
             break
         }
@@ -322,16 +316,6 @@ struct Roteador: Sendable {
         return .json(200, Data("{\"ok\":true}".utf8))
     }
 
-    /// GET /api/mail?conta=<id>. Sem `conta`, a primeira conta do Mail. O id só vai ao script como argumento separado.
-    private func caixaDeMail(_ r: HttpRequisicao) -> RespostaRota {
-        guard let mail else { return .erro(404, "Essa rota não existe.") }
-        var conta: String?
-        if let c = r.query["conta"], !c.isEmpty {
-            guard Self.textoSimples(c, maximo: 200) else { return .erro(400, "Essa conta do Mail não é válida.") }
-            conta = c
-        }
-        return .codificar(200, mail.caixa(conta: conta))
-    }
 
     /// GET /api/whatsapp/foto/<arquivo>: a foto de perfil, em base64 (a mesma forma serve ao Wi-Fi, ao cabo e ao Bluetooth).
     private func fotoDoWhatsApp(_ arquivo: String) -> RespostaRota {
@@ -367,17 +351,6 @@ struct Roteador: Sendable {
             return .json(200, (try? JSONSerialization.data(withJSONObject: corpo)) ?? Data("{\"ok\":true}".utf8))
         case .falhou(let e): return .erro(422, e)
         }
-    }
-
-    /// POST /api/mail/abrir, corpo {"id": "<Message-ID>"}: abre a mensagem no Mail do Mac. Não marca nada.
-    private func abrirMensagem(_ r: HttpRequisicao) -> RespostaRota {
-        guard let mail else { return .erro(404, "Essa rota não existe.") }
-        guard let obj = (try? JSONSerialization.jsonObject(with: r.corpo)) as? [String: Any], let id = obj["id"] as? String,
-              LeitorDeMail.idLimpo(id) != nil else {
-            return .erro(400, "Informe a mensagem a abrir, por exemplo {\"id\": \"<Message-ID>\"}.")
-        }
-        if let erro = mail.abrir(id: id) { return .erro(422, erro) }
-        return .json(200, Data("{\"ok\":true}".utf8))
     }
 
     /// Texto sem caractere de controle e sem tamanho absurdo.

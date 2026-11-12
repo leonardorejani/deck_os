@@ -78,8 +78,6 @@
     whatsappMidia: (chat, id) => pedir('GET', '/api/whatsapp/midia', { chat: String(chat), id: String(id) }, undefined, 45000), // o Mac baixa da internet antes de responder
     abrirConversa: id => pedir('POST', '/api/whatsapp/abrir', undefined, { id }),
     agenda: (de, dias) => pedir('GET', '/api/agenda', { de: String(de), dias: String(dias) }),
-    mail: conta => pedir('GET', '/api/mail', conta ? { conta: String(conta) } : undefined, undefined, 15000), // o Mac lê o Mail por AppleScript, até uns 10 s
-    abrirMensagem: id => pedir('POST', '/api/mail/abrir', undefined, { id }),
     sessoes: () => pedir('GET', '/api/sessoes'),
     abrirSessao: id => pedir('POST', '/api/sessoes/' + encodeURIComponent(id) + '/abrir'),
     entrarNaReuniao: link => pedir('POST', '/api/reuniao/entrar', undefined, { link }),
