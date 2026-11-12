@@ -26,12 +26,14 @@ enum AcoesSistema {
         #endif
     }
 
+    /// Posta a combinação no nível do HID (como um teclado de verdade), para atalho global de outro app
+    /// (CleanShot, por exemplo) receber igual ao dedo na tecla.
     static func enviar(_ c: Combinacao) {
         #if os(macOS)
         let origem = CGEventSource(stateID: .hidSystemState)
-        for descendo in [true, false] {
-            guard let ev = CGEvent(keyboardEventSource: origem, virtualKey: c.codigo, keyDown: descendo) else { continue }
-            ev.flags = c.modificadores.flagsCG
+        for passo in Teclas.passos(c) {
+            guard let ev = CGEvent(keyboardEventSource: origem, virtualKey: passo.codigo, keyDown: passo.descendo) else { continue }
+            ev.flags = passo.modificadores.flagsCG
             ev.post(tap: .cghidEventTap)
         }
         #endif

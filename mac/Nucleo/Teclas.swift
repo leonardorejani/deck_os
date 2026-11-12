@@ -55,6 +55,100 @@ enum Teclas {
     }
 }
 
+/// Um passo do envio da combinação: a tecla desce ou sobe com as flags dos modificadores.
+struct PassoDeTecla: Equatable {
+    let codigo: UInt16
+    let descendo: Bool
+    let modificadores: Modificadores
+}
+
+extension Teclas {
+    /// O que o Deck posta no HID para apertar a combinação: a tecla desce e sobe, e os dois eventos
+    /// levam os modificadores (um app que escuta o atalho global confere as flags de cada evento).
+    static func passos(_ c: Combinacao) -> [PassoDeTecla] {
+        [true, false].map { PassoDeTecla(codigo: c.codigo, descendo: $0, modificadores: c.modificadores) }
+    }
+
+    /// Ordem fixa do texto gravado: o mesmo "ctrl+opt+cmd+shift" que o gravador sempre escreveu.
+    private static let ordemDoTexto: [(Modificadores, String)] = [(.fn, "fn"), (.controle, "ctrl"), (.opcao, "opt"), (.comando, "cmd"), (.shift, "shift")]
+
+    /// Escreve a combinação no formato do config.json. Nil se a tecla não existe ou se faltou modificador
+    /// (combinação sem modificador dispararia a tecla solta em qualquer app).
+    static func escrever(modificadores: Modificadores, tecla: String) -> String? {
+        guard !modificadores.isEmpty, codigos[tecla] != nil else { return nil }
+        return (ordemDoTexto.filter { modificadores.contains($0.0) }.map(\.1) + [tecla]).joined(separator: "+")
+    }
+
+    /// Teclas do seletor na tela, por grupo. Só nomes que o `codigos` entende (o teste cobra).
+    static let grupos: [GrupoDeTeclas] = [
+        GrupoDeTeclas(nome: "Letras", teclas: "abcdefghijklmnopqrstuvwxyz".map { TeclaDoSeletor(nome: String($0), rotulo: String($0).uppercased()) }),
+        GrupoDeTeclas(nome: "Números", teclas: "1234567890".map { TeclaDoSeletor(nome: String($0), rotulo: String($0)) }),
+        GrupoDeTeclas(nome: "F1 a F12", teclas: (1...12).map { TeclaDoSeletor(nome: "f\($0)", rotulo: "F\($0)") }),
+        GrupoDeTeclas(nome: "Setas", teclas: [("left", "←"), ("up", "↑"), ("down", "↓"), ("right", "→"),
+                                              ("home", "Home"), ("end", "End"), ("pageup", "Page Up"), ("pagedown", "Page Down")]
+            .map { TeclaDoSeletor(nome: $0.0, rotulo: $0.1) }),
+        GrupoDeTeclas(nome: "Outras", teclas: [("space", "Espaço"), ("return", "Return"), ("tab", "Tab"), ("delete", "Delete"), ("esc", "Esc"),
+                                               ("-", "-"), ("=", "="), ("[", "["), ("]", "]"), (";", ";"), ("'", "'"), (",", ","), (".", "."),
+                                               ("/", "/"), ("\\", "\\"), ("`", "`")]
+            .map { TeclaDoSeletor(nome: $0.0, rotulo: $0.1) }),
+    ]
+}
+
+struct TeclaDoSeletor: Equatable, Identifiable {
+    let nome: String
+    let rotulo: String
+    var id: String { nome }
+}
+
+struct GrupoDeTeclas: Equatable, Identifiable {
+    let nome: String
+    let teclas: [TeclaDoSeletor]
+    var id: String { nome }
+}
+
+/// A combinação sendo montada na tela, sem apertar nada: modificadores ligados e a tecla escolhida.
+/// Só vira texto (e vai para a config) quando está completa.
+struct MontagemDeCombinacao: Equatable {
+    var modificadores: Modificadores = []
+    var tecla: String?
+
+    init() {}
+
+    /// Parte de um texto já gravado ("cmd+shift+4"). Texto que não entende começa vazio.
+    init(valor: String) {
+        guard let c = Teclas.ler(valor), let nome = Teclas.nome(doCodigo: c.codigo) else { return }
+        modificadores = c.modificadores
+        tecla = nome
+    }
+
+    /// O texto da combinação, ou nil enquanto falta modificador ou tecla.
+    var valor: String? { tecla.flatMap { Teclas.escrever(modificadores: modificadores, tecla: $0) } }
+
+    /// O que falta, em português simples, para o aviso embaixo do seletor. Nil quando está completa.
+    var faltaDizer: String? {
+        switch (modificadores.isEmpty, tecla == nil) {
+        case (true, true): return "Ligue pelo menos um modificador e escolha a tecla."
+        case (true, false): return "Ligue pelo menos um modificador."
+        case (false, true): return "Escolha a tecla."
+        case (false, false): return nil
+        }
+    }
+
+    mutating func alternar(_ m: Modificadores) {
+        if modificadores.contains(m) { modificadores.remove(m) } else { modificadores.insert(m) }
+    }
+}
+
+extension Teclas {
+    /// Nome da tecla a partir do código virtual (o inverso de `codigos`). O nome mais legível quando há apelidos.
+    static func nome(doCodigo codigo: UInt16) -> String? {
+        let preferidos = ["return", "left", "right", "down", "up", "space"]
+        let candidatos = codigos.filter { $0.value == codigo }.map(\.key)
+        if let p = preferidos.first(where: candidatos.contains) { return p }
+        return candidatos.min { ($0.count, $0) < ($1.count, $1) }
+    }
+}
+
 #if canImport(CoreGraphics)
 import CoreGraphics
 
