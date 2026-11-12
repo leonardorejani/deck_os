@@ -1048,6 +1048,28 @@ Ajustes de UX (11/11/2026, teste do Leonardo no iPhone):
       Bluetooth, servidor e porta em PWA).
     - Nome deste Mac: o campo passou de 170 para 280 pt.
 
+36. Controles do Mac no iPhone (12/11/2026). Palavras dele: "controles seria interessante (volume do mac, brilho, teclado
+    brilho, etc)".
+    - Tela "Controles do Mac" no iPhone, aberta pela tecla **Controles** (no editor de tecla ela é o botão "Controles do Mac" embaixo da lista de apps,
+      e a tecla não manda nada ao Mac: abre a tela aqui). Três barras arrastáveis como a do volume do
+      player (resposta na hora, no máximo 4 pedidos por segundo, sempre o último valor): **Volume** (com botão **Mudo**),
+      **Brilho da tela** e **Luz do teclado**. Aberta, a tela acompanha o Mac a cada 2 s, porque as teclas do próprio Mac
+      também mexem nesses valores.
+    - O Mac diz o que oferece em `GET /api/controles` (`volume`, `mudo`, `brilho`, `teclado`, de 0 a 100). Campo que falta
+      quer dizer que este Mac não oferece, e a barra some em vez de fingir. Mexer: `POST /api/controles/<volume|brilho|teclado>?v=0..100`
+      e `POST /api/controles/mudo?v=0|1`. Mac antigo (sem a rota) faz a tela pedir para atualizar o Deck.
+    - Volume e mudo: AppleScript (`set volume output volume`, `set volume output muted`), sem pedir acesso. Saída de som sem
+      volume próprio (algumas telas HDMI) volta "missing value" e a barra some.
+    - Brilho da tela: `DisplayServicesGetBrightness` e `DisplayServicesSetBrightness` (framework privado, carregado com
+      `dlopen`), só na tela interna. Brilho do teclado: `KeyboardBrightnessClient` do `CoreBrightness` (privado, por `dlopen`
+      e pelo runtime do Objective-C), só com teclado interno (a luz "suprimida" não esconde a barra: é só o auto-brilho, e a escrita funciona). Qualquer peça que falte vira "não oferece".
+    - Prova neste Mac (macOS 26, MacBook Pro): o volume e o mudo leem e escrevem (mexido e devolvido ao valor de antes).
+      Com a tampa fechada e uma tela externa, a tela interna não está ativa e a externa não responde ao DisplayServices
+      (`CanChangeBrightness` falso), então o brilho some, como pedido. Teclado, com a tampa aberta: `isBacklightSuppressedOnKeyboard`
+      continua verdadeiro com o auto-brilho ligado, a leitura dá 0, e `setBrightness:forKeyboard:` retorna verdadeiro e relê o
+      valor novo (a flag vira falsa, e restaurar o valor de antes também funciona). Então suprimida não quer dizer sem efeito,
+      e o filtro por ela escondia um controle que funciona. Falta provar a escrita do brilho da tela interna com a tampa aberta.
+
 Nada em aberto que trave a fase 1. Falta só confirmar, na construção, o link que abre uma sessão
 específica no app do Claude do iPhone (se não existir, cai no "mostra a pergunta").
 
