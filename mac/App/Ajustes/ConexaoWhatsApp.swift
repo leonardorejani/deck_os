@@ -20,19 +20,20 @@ struct MetodoWhatsApp: View {
                     }
                 }
             }
-            ConectarWhatsAppPeloQr()
+            ConectarWhatsAppPeloQr(modelo: modelo)
         }
     }
 }
 
-/// O lugar do "Conectar pelo QR". Fica reservado e sem ação até a conexão por QR existir: nada aqui finge funcionar.
+/// "Conectar pelo QR": o WhatsApp como aparelho conectado (ajudante de leitura, desligado por padrão). O aviso de que não
+/// é oficial fica sempre à vista. O conteúdo está em `GrupoWhatsAppQR`.
 struct ConectarWhatsAppPeloQr: View {
+    @ObservedObject var modelo: ModeloApp
+
     var body: some View {
         GrupoDeAjuste(titulo: nil, nota: nil) {
             LinhasDeAjuste {
-                LinhaDeAjuste(titulo: "Conectar pelo QR", apoio: "Em breve: ler o QR do WhatsApp aqui, sem depender do navegador aberto") {
-                    BotaoDeAjuste(texto: "Conectar", estilo: .secundario, desligado: true) {}
-                }
+                GrupoWhatsAppQR(modelo: modelo)
             }
         }
     }

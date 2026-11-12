@@ -48,6 +48,8 @@ final class ModeloApp: ObservableObject {
     let pareamento = Pareamento()
     /// O login do Spotify (Ajustes > Este Mac). A conta dele é a mesma que o servidor usa.
     let spotify: ModeloSpotify
+    /// O WhatsApp por QR (ajudante de leitura). Desligado até a pessoa escolher a origem QR nos Ajustes.
+    let whatsappQR: ModeloWhatsAppQR
     let abrirComMac: AbrirComMac
     /// Compartilhado com o roteador: a trava dele evita duas trocas do código ao mesmo tempo.
     let rodizio = Rodizio()
@@ -105,6 +107,7 @@ final class ModeloApp: ObservableObject {
         self.defaults = defaults
         // Sem Chaveiro nem internet: as fotos e os testes nunca tocam no login de verdade.
         self.spotify = ModeloSpotify(conta: ContaSpotify(armazem: ArmazemSpotifyMemoria(), transporte: TransporteUrlSession()))
+        self.whatsappQR = ModeloWhatsAppQR.semAjudante()
         self.spotify.avisar = { [weak self] texto, falha in self?.avisar(texto, falha: falha) }
     }
 
@@ -133,6 +136,8 @@ final class ModeloApp: ObservableObject {
             self.registrar = { LogDoDeck.padrao.escrever($0) }
             self.spotify.registrar = { LogDoDeck.padrao.escrever($0) }
         }
+        // Hospedeiro de teste não abre o ajudante do WhatsApp (nem a sessão do dono).
+        self.whatsappQR = testando ? ModeloWhatsAppQR.semAjudante() : ModeloWhatsAppQR.padrao()
         self.spotify.avisar = { [weak self] texto, falha in self?.avisar(texto, falha: falha) }
         ligarDecisao()
         // O núcleo só entrega o código: quem o recebeu é lembrado aqui, e vale enquanto o código for o mesmo.
@@ -149,6 +154,8 @@ final class ModeloApp: ObservableObject {
         vigiarAcessos()
         vigiarRodizio(cada: intervaloDoRodizio)
         if comServidor { subirServidor(armazem) }
+        // Origem QR escolhida antes: volta a conectar sozinha (a sessão já está guardada).
+        if config.whatsapp.origem == "qr", whatsappQR.disponivel, whatsappQR.ponte.temSessao { whatsappQR.ligar() }
     }
 
     func encerrar() {
@@ -158,6 +165,8 @@ final class ModeloApp: ObservableObject {
         vigia?.parar()
         servidorHttps?.parar()
         servidorHttps = nil
+        // Fecha o ajudante com o app, sem apagar a sessão.
+        whatsappQR.ponte.desligar()
         portaDoCabo?.parar(); portaDoCabo = nil
         radio?.parar(); radio = nil
         servidor = .parado
@@ -294,7 +303,7 @@ final class ModeloApp: ObservableObject {
         }
         let roteador = Ligacao.roteador(armazem: armazem, pareamento: pareamento, pagina: ArquivosPagina(raiz: pasta),
                                         rodizio: rodizio, certificadoCA: GeradorCertificado().arquivos.ca, contaSpotify: spotify.conta,
-                                        usoMedido: ModeloApp.usoMedidoPorToken())
+                                        usoMedido: ModeloApp.usoMedidoPorToken(), ponteQR: whatsappQR.ponte)
         // A bancada não tem iPhone: nada de cabo nem Bluetooth.
         if Variante.atual.ligaIphone { ligarNativo(roteador: roteador) }
         let portaInicial = Variante.atual.portaFixa ?? config.porta

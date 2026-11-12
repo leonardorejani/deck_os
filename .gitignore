@@ -31,6 +31,7 @@ ios/build/
 ios/Pacote/.build/
 # gerado pelo build.sh
 dist/
+helpers/whatsapp/build/
 
 # cache do auditor de PWA da tatile
 .pwa-nativo/

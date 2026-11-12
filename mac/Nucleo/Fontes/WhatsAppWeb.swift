@@ -167,6 +167,8 @@ final class OrigemWhatsApp: @unchecked Sendable {
         switch cfg.origem {
         case "app":
             return DecisaoWhatsApp(origem: "app")
+        case "qr":
+            return DecisaoWhatsApp(origem: "qr")
         case "web":
             let b = procurar(preferido: escolhido)
             return DecisaoWhatsApp(origem: "web", aba: b.aba, navegadorEscolhido: escolhido,
@@ -220,9 +222,19 @@ final class OrigemWhatsApp: @unchecked Sendable {
 struct FonteWhatsAppEscolhida: Sendable {
     var origem: OrigemWhatsApp
     var app: FonteWhatsApp
+    /// O WhatsApp por QR (ajudante). Nil: sem ele, a origem "qr" só avisa que não está disponível.
+    var qr: PonteWhatsAppQR? = nil
 
     func ler() -> Leitura<WhatsAppDados?> {
         let d = origem.decidir()
+        if d.origem == "qr" {
+            guard let qr else {
+                return Leitura(valor: nil, aviso: Aviso(fonte: "whatsapp", texto: "O WhatsApp por QR não está disponível nesta versão do Deck."))
+            }
+            return qr.ler()
+        }
+        // Saiu da origem QR: a conexão não fica ocupando um dos 4 aparelhos do WhatsApp à toa.
+        if let qr, qr.ligada { qr.desligar() }
         guard d.origem == "web" else {
             var l = app.ler()
             l.valor?.resumo.origem = "app"

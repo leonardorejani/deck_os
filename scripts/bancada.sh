@@ -18,6 +18,10 @@ xcodebuild -project Deck.xcodeproj -scheme DeckBancada -configuration Release -d
   CODE_SIGN_IDENTITY="-" build | grep -E "error:|\*\* BUILD" | tail -5
 app="$raiz/mac/App/build-bancada/Build/Products/Release/Deck Bancada.app"
 [ -d "$app" ] || { echo "A compilação não gerou o Deck Bancada.app" >&2; exit 1; }
+# Ajudante do WhatsApp por QR (Go) dentro da bancada, para a opção de QR funcionar nela. Sem Go, a bancada segue sem ele.
+if bash "$raiz/helpers/whatsapp/build.sh" "$app/Contents/Helpers"; then :; else
+  [ "$?" = 3 ] || { echo "O ajudante do WhatsApp não compilou" >&2; exit 1; }
+fi
 # Requisito estável: a bancada não perde as permissões do macOS a cada build novo.
 bash "$raiz/scripts/assinar-deck.sh" "$app"
 

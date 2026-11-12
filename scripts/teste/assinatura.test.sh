@@ -32,4 +32,12 @@ confere "o requisito é o identificador do app" 'requisito "$tmp/a/Deck.app" | g
 confere "o build novo cumpre o requisito que o macOS guardou do build velho" 'codesign --verify -R="identifier \"com.exemplo.deck\"" "$tmp/b/Deck.app" 2>/dev/null'
 confere "a assinatura continua íntegra" 'codesign --verify --deep --strict "$tmp/a/Deck.app" 2>/dev/null'
 
+# o ajudante do WhatsApp por QR (Go) mora em Contents/Helpers: o selo do app tem que continuar íntegro com ele dentro,
+# e o requisito do app segue sendo só o identificador (o do ajudante é o dele)
+fazer "$tmp/e" /usr/bin/true; mkdir -p "$tmp/e/Deck.app/Contents/Helpers"; cp /bin/echo "$tmp/e/Deck.app/Contents/Helpers/deck-whatsapp"
+bash "$raiz/scripts/assinar-deck.sh" "$tmp/e/Deck.app" >/dev/null 2>&1
+confere "app com o ajudante dentro: a assinatura continua íntegra" 'codesign --verify --deep --strict "$tmp/e/Deck.app" 2>/dev/null'
+confere "app com o ajudante dentro: o requisito do app segue sendo o identificador" 'requisito "$tmp/e/Deck.app" | grep -q "identifier \"com.exemplo.deck\""'
+confere "o ajudante tem identificador próprio (não o do app)" '! codesign -d "$tmp/e/Deck.app/Contents/Helpers/deck-whatsapp" 2>&1 | grep -q "Identifier=com.exemplo.deck$"'
+
 [ "$falhas" = 0 ] && echo "assinatura: ok" || { echo "assinatura: $falhas falhas"; exit 1; }

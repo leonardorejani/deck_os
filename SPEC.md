@@ -339,7 +339,7 @@ contas que o dono adicionar em User Management (até 25): quem não estiver na l
 | Spotify, volume | AppleScript (`sound volume` do player e `output volume` do Mac) | lido junto do estado, mudado por `POST /api/spotify/volume`. Testado em 11/11/2026 lendo e devolvendo o volume sem mexer na música |
 | Spotify, aparelhos, curtir, fila, repetir | API do Spotify (`api.spotify.com/v1`), com o login da pessoa | só com o Spotify conectado nos Ajustes (seção 5, "Spotify: volume...") |
 | Manter acordado | atalho de teclado do Vorssaint + `pmset -g assertions` | ligar e desligar testado |
-| WhatsApp | banco local do WhatsApp do Mac (`ChatStorage.sqlite`), só leitura | tem nome do contato ou grupo, não lidas, última mensagem e as mensagens. Hoje: 445 conversas, 53 com não lidas. Filtrar arquivadas e escondidas. Pode mudar com atualização do WhatsApp, então tem que falhar com aviso, nunca quebrar a tela. Origem web (11/11/2026): o total de não lidas vem do título da aba do WhatsApp Web ("(23) WhatsApp"), lido por AppleScript em Safari, Chrome, Arc, Brave ou Edge (só com a aba aberta, pede Automação na primeira vez), sem lista por conversa |
+| WhatsApp | banco local do WhatsApp do Mac (`ChatStorage.sqlite`), só leitura | tem nome do contato ou grupo, não lidas, última mensagem e as mensagens. Hoje: 445 conversas, 53 com não lidas. Filtrar arquivadas e escondidas. Pode mudar com atualização do WhatsApp, então tem que falhar com aviso, nunca quebrar a tela. Origem QR (12/11/2026, item 35): lista por conversa pelo aparelho conectado (ajudante Go, só leitura, desligada por padrão). Origem web (11/11/2026): o total de não lidas vem do título da aba do WhatsApp Web ("(23) WhatsApp"), lido por AppleScript em Safari, Chrome, Arc, Brave ou Edge (só com a aba aberta, pede Automação na primeira vez), sem lista por conversa |
 | Mail | AppleScript do app Mail do Mac (`message` e `account` do dicionário dele), só leitura | as contas configuradas no Mail e as 20 últimas da caixa de entrada de cada uma (remetente, assunto, começo do texto, data, lida). Sem login no Deck. Pede Automação na primeira vez. Com o Mail fechado devolve o aviso e não abre o app. Cache de 20 s |
 | Uso do Claude | medição da troca de contas (`~/.config/claude-account`, perfis `leo` e `equipe`) | o arquivo de medição não existe agora. Quando faltar, o Deck mede por conta própria a cada 5 min com o login de cada perfil, sem gravar token em lugar nenhum |
 | Uso do Codex | `rate_limits` nos arquivos de sessão do Codex (`~/.codex/sessions`) | só a janela semanal (`window_minutes` 10080), percentual, plano e `resets_at` (quando renova). Só atualiza quando o Codex roda |
@@ -1148,6 +1148,34 @@ Teste do Deck 1.0 (12/11/2026, frente iphone-bugs), dito pelo Leonardo:
     minutos embaixo, e o calendário do mês à direita, escolhível como as composições que já existem. `comp` aceita "a", "b" e
     "c". Escolhe-se no menu da barra do Mac, ao lado das outras. A configuração inicial (primeira vez) ainda mostra só A e B,
     porque as fotos dela são das duas antigas.
+35. WhatsApp por QR, aparelho conectado (12/11/2026). Palavras dele: "vamos seguir com o QR code". Decidido:
+    - Uma quarta origem do WhatsApp, `whatsapp.origem` = `qr`, ao lado de `auto`, `app` e `web`. Nasce DESLIGADA: o
+      `auto` nunca escolhe `qr`, só a pessoa liga, em Ajustes > Este Mac > WhatsApp > Aparelho conectado (QR).
+    - Quem conecta é um ajudante separado em Go, `helpers/whatsapp/` (biblioteca whatsmeow, licença MPL-2.0, citada no
+      README). O build.sh compila e o põe em `Deck.app/Contents/Helpers/deck-whatsapp` (universal, assinado à parte). O
+      núcleo (`PonteWhatsAppQR`) o abre e fala por linhas de JSON no stdout (fase, qr, conversas). Fechou o stdin, o
+      ajudante sai. Sem Go no Mac que compila, o Deck sai sem ele e a opção diz que não está disponível.
+    - Só LEITURA: o ajudante nunca envia mensagem, nunca marca como lido e nunca anuncia presença. Ele aparece no
+      WhatsApp do celular como "Deck (só leitura)" em Aparelhos conectados.
+    - A sessão fica em `~/Library/Application Support/Deck/whatsapp-qr` (a bancada tem a dela), pasta 0700 e arquivos
+      0600. As conversas com não lidas ficam num `conversas.json` dentro dela. "Apagar este aparelho" sai do aparelho no
+      WhatsApp e apaga a pasta. Trocar a origem para outra desliga o ajudante (não fica ocupando uma das 4 conexões).
+    - O núcleo entrega o mesmo formato de `/api/whatsapp` do banco do app (conversas, não lidas, mensagens, hora), com
+      `Estado.whatsapp.origem` = `qr` e `aberto` dizendo se a conexão está de pé. O painel mostra a lista por conversa
+      como no app e, com a conexão caída, "WhatsApp por QR sem conexão" em vez de "0 não lidas".
+    - Aviso fixo na tela do Mac, antes e depois de ligar: "Não é oficial e viola os termos do WhatsApp. Só lê, não
+      envia. Ocupa uma das 4 conexões. Para sair, apague o aparelho em Aparelhos conectados."
+    - Prova: `scripts/whatsapp-qr-prova.sh` mostra o QR no terminal, guarda a sessão na pasta da bancada e, com
+      `--ligar-bancada`, põe a origem QR na config da bancada.
+    - Correções da verificação (12/11/2026): (a) sair pelo celular (LoggedOut) apaga o `conversas.json` e zera o estado, e
+      o `conversas.json` só guarda as conversas com não lidas, nunca o texto de conversa já lida. (b) "Apagar este
+      aparelho" sobe o ajudante só para o logout quando ele está parado e NÃO apaga a pasta se não conseguiu sair (sem
+      rede): a tela mostra "Não consegui sair do aparelho" e a pessoa tenta de novo. (c) Com sessão guardada, rede fora
+      na subida não derruba o ajudante: ele avisa "desconectado" e tenta de novo (2 s, 5 s, 10 s, depois 30 s em 30 s).
+      (d) Subindo ou reconectando, o painel diz "Reconectando ao WhatsApp, volta sozinho" (`Estado.whatsapp.reconectando`)
+      e mantém a lista de antes, em vez de mandar ler o QR, que só vale em aguardando QR, QR vencido e erro.
+      (e) Desligar a chave "Conectar pelo QR" volta para a origem de antes (`whatsapp.origemAntes`), não para "auto".
+      (f) Sem o ajudante no app a chave não liga e a origem não muda.
 
 ## 14. Melhorias (10/11/2026)
 

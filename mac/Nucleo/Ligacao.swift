@@ -202,12 +202,13 @@ enum Ligacao {
                          certificadoCA: URL? = nil, contaSpotify: ContaSpotify? = nil,
                          apps: (any ProvedorDeApps)? = nil, criadorDeAgenda: (any CriadorDeAgenda)? = nil,
                          usoMedido: (@Sendable ([ContaIA], Date) -> [String: UsoConta])? = nil,
-                         mail: (any ProvedorDeMail)? = nil) -> Roteador {
+                         mail: (any ProvedorDeMail)? = nil,
+                         ponteQR: PonteWhatsAppQR? = nil) -> Roteador {
         // A mesma decisão de origem do WhatsApp serve a leitura (estado) e a abertura (tecla e "Abrir no Mac").
         let origemWhats = OrigemWhatsApp(executor: executor, banco: FonteWhatsApp.caminhoPadrao(casa: NSHomeDirectory()),
                                          config: { armazem.ler().whatsapp })
         let complemento = contaSpotify.map { ComplementoSpotify(conta: $0) }
-        var fontesDoMac = fontes ?? .vivas(executor: executor, origemWhatsApp: origemWhats, complementoSpotify: complemento)
+        var fontesDoMac = fontes ?? .vivas(executor: executor, origemWhatsApp: origemWhats, ponteQR: ponteQR, complementoSpotify: complemento)
         if let usoMedido {
             // O uso medido por token (o que o Mac mostra em Uso das IAs) também vale para o iPhone.
             let lerArquivos = fontesDoMac.uso

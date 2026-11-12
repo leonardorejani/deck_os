@@ -59,16 +59,28 @@ function pintarWhatsWeb() {
   $('#wa-lista').setAttribute('aria-busy', 'false');
   manterRolagem($('#wa-lista'), `<div class="vazio-bloco"><strong>${aberto ? (n ? `${n} ${n === 1 ? 'não lida' : 'não lidas'}` : 'Nada novo') : 'WhatsApp Web fechado'}</strong>${aviso}<span>Pelo WhatsApp Web o Deck vê só o total. Para ver cada conversa, use o app do WhatsApp no Mac.</span></div>`);
 }
+/* Pelo QR (aparelho conectado) a conversa vem inteira, igual ao app. Com a conexão caída o 0 não é medição: a folha diz o que fazer */
+function pintarWhatsQrCaido() {
+  $('#wa-titulo').textContent = 'WhatsApp';
+  $('#wa-lista').setAttribute('aria-busy', 'false');
+  manterRolagem($('#wa-lista'), '<div class="vazio-bloco"><strong>WhatsApp por QR sem conexão</strong><span>Abra os Ajustes do Deck no Mac para ler o QR de novo.</span></div>');
+}
 function pintarWhats() {
-  $('#wa-filtro').hidden = V?.whatsapp?.origem === 'web';
-  if (V?.whatsapp?.origem === 'web') return pintarWhatsWeb();
+  const w = V?.whatsapp;
+  /* subindo ou caiu um instante: o Mac reconecta sozinho, não precisa ler QR. A lista de antes continua à vista */
+  const reconectando = w?.origem === 'qr' && w.aberto === false && w.reconectando === true;
+  $('#wa-filtro').hidden = w?.origem === 'web' || (w?.origem === 'qr' && w.aberto === false && !reconectando);
+  if (w?.origem === 'web') return pintarWhatsWeb();
+  if (w?.origem === 'qr' && w.aberto === false && !reconectando) return pintarWhatsQrCaido();
   const todas = wa.lista || [], total = todas.reduce((s, c) => s + (c.naoLidas || 0), 0);
   const lista = todas.filter(c => wa.filtro === 'todas' || (wa.filtro === 'grupos') === !!c.grupo);
   $('#wa-titulo').innerHTML = wa.lista ? `WhatsApp <small>${total} não lidas em ${todas.length} ${todas.length === 1 ? 'conversa' : 'conversas'}</small>` : 'WhatsApp';
   $$('#wa-filtro button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.f === wa.filtro)));
   $('#wa-lista').setAttribute('aria-busy', String(!wa.lista && !wa.erro));
+  const notaReconecta = reconectando ? '<div class="vazio-bloco" style="min-height:96px"><strong>Reconectando ao WhatsApp</strong><span>Volta sozinho em instantes. Não precisa ler o QR de novo.</span></div>' : '';
+  if (reconectando && !todas.length) { manterRolagem($('#wa-lista'), notaReconecta); $('#wa-titulo').textContent = 'WhatsApp'; return }
   if (!wa.lista) { const el = $('#wa-lista'); if (wa.erro) el.innerHTML = erroLista(wa.erro); else if (!el.querySelector('.esq-lista')) el.innerHTML = esqueletoWa(); return }
-  manterRolagem($('#wa-lista'), lista.map(c => {
+  manterRolagem($('#wa-lista'), notaReconecta + lista.map(c => {
     const msgs = c.mensagens || [], ult = msgs[msgs.length - 1] || { de: '', texto: '' }, aberta = wa.aberta === c.id;
     const corpo = aberta ? `<div class="mensagens">${msgs.map(m => `<p>${m.de ? `<small>${esc(m.de)}</small>` : ''}${esc(m.texto)}</p>`).join('')}<button class="btn secundario pequeno" data-wa-mac="${esc(c.id)}">Responder no Mac</button></div>` : '';
     return `<button class="conversa" data-wa="${esc(c.id)}" aria-expanded="${aberta}"><span class="avatar">${c.grupo ? SVG.grupo : esc(iniciais(c.nome))}</span>
