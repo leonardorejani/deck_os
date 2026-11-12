@@ -1220,6 +1220,7 @@ tecla", "isso é muito feio, tira eles daí e deixa o usuário fazer a combinaç
   padrão. Com "Mutar ou desmutar o microfone" ou "Ligar ou desligar a câmera", o Mac acha a sala aberta em qualquer navegador que o
   Deck sabe consultar (Safari, Chrome, Arc, Brave, Edge), traz a aba para a frente e aperta Cmd+D ou Cmd+E, igual ao item 35 da
   seção 13. Trocar o app da tecla, ou o tipo, apaga a ação e o desligar que eram do antigo.
+
 Conexões e WhatsApp, depois de testar (12/11/2026, frente conexoes-whatsapp). Pedidos dele, resumidos: o aparelho
 conectado pelo QR aparecia como "Outro dispositivo" e tem que aparecer como "Deck OS", a mensagem nova levava cerca de 1 s,
 havia conversa sem nome e sem avatar, e as arquivadas só podem aparecer no filtro "Arquivadas". Decidido: o seletor de Conexões vira Cabo e Bluetooth, PWA, WhatsApp e Spotify (o
