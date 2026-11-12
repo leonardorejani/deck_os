@@ -36,6 +36,15 @@ extension ConfigMonitor {
     }
 }
 
+extension ConfigControles {
+    /// Barra que falta fica ligada: quem nunca escolheu nada vê os três controles.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: ChavesConfig.self)
+        func ler(_ nome: String) -> Bool { ((try? c.decodeIfPresent(Bool.self, forKey: ChavesConfig(nome))) ?? nil) ?? true }
+        self.init(volume: ler("volume"), brilho: ler("brilho"), teclado: ler("teclado"))
+    }
+}
+
 extension ConfigWhatsApp {
     static let origens = ["auto", "app", "web", "qr"]
 
@@ -53,7 +62,7 @@ extension ConfigWhatsApp {
 }
 
 extension Tecla {
-    private enum Chave: String, CodingKey { case id, nome, tipo, valor, estado, icone, acao }
+    private enum Chave: String, CodingKey { case id, nome, tipo, valor, estado, icone, acao, desligar }
 
     /// Leitura tolerante da ação de app: `acao` malformada (de uma versão futura, por exemplo) vira nil e a
     /// tecla só abre o app, em vez de derrubar a config inteira. O resto é estrito como sempre foi.
@@ -63,7 +72,8 @@ extension Tecla {
                   tipo: try c.decode(String.self, forKey: .tipo), valor: try c.decode(String.self, forKey: .valor),
                   estado: try c.decodeIfPresent(String.self, forKey: .estado),
                   icone: try c.decodeIfPresent(String.self, forKey: .icone),
-                  acao: (try? c.decodeIfPresent(AcaoDeApp.self, forKey: .acao)) ?? nil)
+                  acao: (try? c.decodeIfPresent(AcaoDeApp.self, forKey: .acao)) ?? nil,
+                  desligar: (try? c.decodeIfPresent(String.self, forKey: .desligar)) ?? nil)
     }
 
     /// A tecla "painel" do protótipo antigo virou "app" (igual normalizarTecla em prototipo/dados.js).
@@ -105,6 +115,7 @@ extension Config {
             blocos: try c.decodeIfPresent(Blocos.self, forKey: chave("blocos")) ?? Blocos(),
             whatsapp: (try? c.decodeIfPresent(ConfigWhatsApp.self, forKey: chave("whatsapp"))) ?? ConfigWhatsApp(),
             monitor: (try? c.decodeIfPresent(ConfigMonitor.self, forKey: chave("monitor"))) ?? ConfigMonitor(),
+            controles: (try? c.decodeIfPresent(ConfigControles.self, forKey: chave("controles"))) ?? ConfigControles(),
             nomeMac: try c.decodeIfPresent(String.self, forKey: chave("nomeMac")) ?? nomePadrao,
             porta: try c.decodeIfPresent(Int.self, forKey: chave("porta")) ?? 4777,
             codigoAcesso: try c.decodeIfPresent(String.self, forKey: chave("codigoAcesso")) ?? Config.novoCodigoAcesso(),
@@ -161,6 +172,10 @@ extension Config {
                 if vazio(t.valor) { return "A tecla \"\(t.nome)\" está sem ação." }
                 if t.tipo == "tecla", Teclas.ler(t.valor) == nil { return "A combinação da tecla \"\(t.nome)\" não foi reconhecida: \(t.valor)" }
                 if let erro = validarAcao(t) { return erro }
+                if let d = t.desligar {
+                    if t.tipo != "comando" { return "Só tecla de comando pode ter comando para desligar (\"\(t.nome)\")." }
+                    if d.count > 4000 { return "O comando para desligar da tecla \"\(t.nome)\" é grande demais." }
+                }
             }
         }
         if vazio(c.nomeMac) { return "O nome do Mac não pode ficar vazio." }

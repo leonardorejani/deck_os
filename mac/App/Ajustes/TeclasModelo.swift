@@ -42,8 +42,6 @@ final class ModeloTeclas: ObservableObject {
     private var captura: CapturaDeTecla?
     /// true quando a escuta pega a tecla antes dos atalhos de outros apps (a tela esconde o aviso de "se o atalho abrir outro app").
     @Published private(set) var capturaGlobal = false
-    /// Combinações incompletas sendo montadas na tela, por id de tecla.
-    @Published private var montagens: [String: MontagemDeCombinacao] = [:]
     private let pedirAcessibilidade: () -> Void
     private let executar: (Tecla) -> String?
     /// true enquanto o botão do mouse está apertado (trocado nos testes).
@@ -254,8 +252,7 @@ final class ModeloTeclas: ObservableObject {
     func escolherTipo(_ tipo: TipoDeTecla) {
         guard let t = tecla else { return }
         if t.tipo != tipo.rawValue {
-            montagens[t.id] = nil
-            mudarTecla { $0.tipo = tipo.rawValue; $0.valor = "" }
+            mudarTecla { $0.tipo = tipo.rawValue; $0.valor = ""; $0.acao = nil; $0.desligar = nil }
             if tipo == .tecla { pedirAcessibilidade() }
         }
         parar()
@@ -266,19 +263,23 @@ final class ModeloTeclas: ObservableObject {
     func escolherApp(_ app: AppDoMac) {
         let nomes = Set(catalogo.apps.map(\.nome) + catalogo.apps.map(\.valor) + catalogo.maisUsados.map(\.nome))
         mudarTecla {
-            $0.nome = LogicaTeclas.nomeAposEscolher(atual: $0.nome, escolhido: app.nome, nomesDeApps: nomes)
+            // A ação (conta do Mail, microfone do Meet...) é do app antigo: outro app começa sem ação.
+            if $0.valor != app.valor { $0.acao = nil }
+            $0.nome = LogicaTeclas.nomeAposEscolher(atual: $0.nome, escolhido: app.nomeDaTecla ?? app.nome, nomesDeApps: nomes)
             $0.valor = app.valor
-            $0.icone = app.valor
+            $0.icone = app.icone ?? app.valor
         }
         avisar("\(app.nome) escolhido")
     }
+
+    /// O que a tecla de app faz além de abrir (o microfone do Meet, por exemplo). Nil: só abre.
+    func escolherAcao(_ acao: AcaoDeApp?) { mudarTecla { $0.acao = acao } }
 
     func escolherAtalho(_ nome: String) {
         mudarTecla { $0.nome = LogicaTeclas.nomeAposEscolher(atual: $0.nome, escolhido: nome); $0.valor = nome }
     }
 
     func escolherCombinacao(_ valor: String) {
-        if let id = sel { montagens[id] = nil }
         mudarTecla { $0.valor = valor }
     }
 
@@ -288,6 +289,21 @@ final class ModeloTeclas: ObservableObject {
             if let nome { $0.nome = LogicaTeclas.nomeAposEscolher(atual: $0.nome, escolhido: nome) }
             $0.valor = valor
         }
+    }
+
+    /// Liga o modo liga e desliga da tecla de comando (o campo fica vazio até a pessoa escrever o comando de desligar).
+    /// Desligar o modo apaga os dois comandos extras: a tecla volta a ser um comando só.
+    func definirLigaEDesliga(_ ligado: Bool) {
+        mudarTecla {
+            if ligado { $0.desligar = $0.desligar ?? "" } else { $0.desligar = nil; $0.estado = nil }
+        }
+    }
+
+    func escolherDesligar(_ comando: String) { mudarTecla { $0.desligar = comando } }
+
+    /// Comando que confere se está ligado (sai 0 = ligado). Vazio apaga: aí o Deck guarda o estado.
+    func escolherConferir(_ comando: String) {
+        mudarTecla { $0.estado = comando.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : comando }
     }
 
     func escolherIcone(_ icone: String) { mudarTecla { $0.icone = icone } }
@@ -397,7 +413,7 @@ final class ModeloTeclas: ObservableObject {
     /// A captura se desligou sozinha (o Deck saiu da frente ou o tempo acabou).
     private func terminouCaptura() {
         captura = nil
-        if ouvindo { parar(); avisar("Gravação cancelada. Se o atalho abrir outro app, monte a combinação escolhendo as teclas") }
+        if ouvindo { parar(); avisar("Gravação cancelada. Clique no campo e aperte a combinação de novo") }
     }
 
     func parar() {
@@ -405,37 +421,6 @@ final class ModeloTeclas: ObservableObject {
         capturaGlobal = false
         captura?.parar(); captura = nil
         if let m = monitor { NSEvent.removeMonitor(m); monitor = nil }
-    }
-
-    // MARK: Montar combinação sem apertar
-
-    /// A montagem da tecla escolhida: o que a pessoa está ligando na tela, ou a combinação já gravada.
-    func montagem(de t: Tecla) -> MontagemDeCombinacao { montagens[t.id] ?? MontagemDeCombinacao(valor: t.valor) }
-
-    func alternarModificador(_ m: Modificadores) {
-        guard let t = tecla else { return }
-        var mont = montagem(de: t)
-        mont.alternar(m)
-        aplicar(mont, em: t)
-    }
-
-    func escolherTeclaDaMontagem(_ nome: String) {
-        guard let t = tecla else { return }
-        var mont = montagem(de: t)
-        mont.tecla = nome
-        aplicar(mont, em: t)
-    }
-
-    /// Só grava na config quando a montagem está completa. Incompleta, ela vive na tela e a combinação que
-    /// já estava gravada continua valendo no iPhone.
-    private func aplicar(_ mont: MontagemDeCombinacao, em t: Tecla) {
-        parar()
-        if let v = mont.valor {
-            montagens[t.id] = nil
-            if v != t.valor { escolherCombinacao(v) }
-        } else {
-            montagens[t.id] = mont
-        }
     }
 
     // MARK: Testar comando

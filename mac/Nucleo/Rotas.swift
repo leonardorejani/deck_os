@@ -248,7 +248,8 @@ struct Roteador: Sendable {
             return somente(["GET"], r) ?? rotaDeApps(r)
         }
         if r.caminho == "/api/controles" {
-            return somente(["GET"], r) ?? controles.map { .codificar(200, $0.estado()) } ?? .erro(404, "Essa rota não existe.")
+            // O que a pessoa desligou na tecla Controles do Mac não sai daqui: a barra some no iPhone, como a que o Mac não oferece.
+            return somente(["GET"], r) ?? controles.map { .codificar(200, $0.estado().somente(config.ler().controles)) } ?? .erro(404, "Essa rota não existe.")
         }
         if r.caminho == "/api/processos" {
             return somente(["GET"], r) ?? processos.map { .codificar(200, $0.maiores()) } ?? .erro(404, "Essa rota não existe.")
@@ -334,7 +335,9 @@ struct Roteador: Sendable {
     private func destinosDaAgenda(_ r: HttpRequisicao) -> RespostaRota {
         guard let criadorDeAgenda else { return .erro(404, "Essa rota não existe.") }
         var d = criadorDeAgenda.destinos(pedirPermissao: r.query["pedir"] == "1")
-        if let p = config.ler().agendaPadrao {
+        if var p = config.ler().agendaPadrao {
+            // "Calendário padrão do Mac" vira o calendário de verdade, que é o que a lista do iPhone sabe mostrar.
+            if p.ehPadraoDoMac, let id = criadorDeAgenda.idDoCalendarioPadrao() { p = DestinoAgenda(tipo: "calendario", id: id) }
             // Padrão que sumiu (calendário apagado) não vai para a tela, mas só dá para saber com a lista liberada.
             let existe = p.tipo == "calendario"
                 ? d.permissaoCalendario != "liberado" || d.calendarios.contains { $0.id == p.id }
@@ -350,7 +353,13 @@ struct Roteador: Sendable {
         guard let criadorDeAgenda else { return .erro(404, "Essa rota não existe.") }
         switch NovoCompromisso.ler(corpo: r.corpo, padrao: config.ler().agendaPadrao) {
         case .failure(let e): return .erro(e.status, e.texto)
-        case .success(let novo):
+        case .success(var novo):
+            if novo.destino.ehPadraoDoMac {
+                guard let id = criadorDeAgenda.idDoCalendarioPadrao() else {
+                    return .erro(409, "O Mac não disse qual é o calendário padrão. Libere o Calendário para o Deck ou escolha onde salvar.")
+                }
+                novo.destino = DestinoAgenda(tipo: "calendario", id: id)
+            }
             if case .failure(let e) = criadorDeAgenda.criar(novo) { return .erro(e.status, e.texto) }
             var padraoSalvo = false
             if novo.definirPadrao {

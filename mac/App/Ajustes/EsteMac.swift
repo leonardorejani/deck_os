@@ -45,8 +45,6 @@ struct EsteMac: View {
                     }
                 }
             }
-            GrupoAgenda(modelo: modelo)
-            GrupoMonitor(modelo: modelo)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .onAppear { abrirComMac.atualizar() }
