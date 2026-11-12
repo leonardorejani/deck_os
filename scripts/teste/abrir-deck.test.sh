@@ -59,6 +59,8 @@ mkdir -p "$tmp/repo/scripts" "$tmp/repo/mac/App" "$tmp/home"
 cp "$raiz/build.sh" "$tmp/repo/build.sh"; cp "$raiz/scripts/abrir-deck.sh" "$tmp/repo/scripts/"
 # a assinatura tem teste próprio (assinatura.test.sh): aqui o app de mentira não tem o que assinar
 printf '#!/usr/bin/env bash\nexit 0\n' > "$tmp/repo/scripts/assinar-deck.sh"
+# o ajudante do WhatsApp por QR (Go) não é assunto deste teste: sem Go o build.sh segue sem ele (o script sai com 3)
+mkdir -p "$tmp/repo/helpers/whatsapp"; printf '#!/usr/bin/env bash\nexit 3\n' > "$tmp/repo/helpers/whatsapp/build.sh"
 for f in xcodegen hdiutil defaults; do printf '#!/usr/bin/env bash\nexit 0\n' > "$fakes/$f"; done
 printf '#!/usr/bin/env bash\ncp -R "$1" "$2"\n' > "$fakes/ditto"
 cat > "$fakes/xcodebuild" <<'F'

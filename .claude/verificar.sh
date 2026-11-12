@@ -21,6 +21,8 @@ if [ -d ~/.claude/skills/tatile ]; then
 fi
 # testes de tela do painel contra o Mac de mentira (precisam do Chrome, por isso só rodam onde ele existe)
 if [ -d "/Applications/Google Chrome.app" ]; then DECK_TESTE_PORTA="${DECK_TESTE_PORTA:-4981}" node painel/teste/rodar.mjs | tail -1; fi
+# ajudante do WhatsApp por QR (Go): vet e testes (só onde o Go existe)
+if command -v go >/dev/null 2>&1; then (cd helpers/whatsapp && go vet ./... && go test ./... | tail -1); fi
 swift test --package-path mac 2>&1 | grep -E "error:|failed|Executed [0-9]+ tests" | tail -3
 # App do Mac (SwiftUI): compila e roda os testes só onde o Xcode existe (o CI Linux não tem).
 # DECK_SEM_APP=1 pula este bloco (agentes em paralelo): o coordenador roda o teste do app uma vez no final.

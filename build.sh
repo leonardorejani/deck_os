@@ -27,6 +27,11 @@ xcodebuild -project Deck.xcodeproj -scheme Deck -configuration Release -derivedD
   | grep -E "error:|\*\* BUILD" | tail -5
 app="$raiz/mac/App/build/Build/Products/Release/Deck.app"
 [ -d "$app" ] || { echo "A compilação não gerou o Deck.app" >&2; exit 1; }
+# Ajudante do WhatsApp por QR (Go): vai dentro do app, em Contents/Helpers, antes da assinatura. Sem Go neste Mac o Deck
+# sai sem ele e a opção de QR avisa que não está disponível (o resto do Deck não muda).
+if bash "$raiz/helpers/whatsapp/build.sh" "$app/Contents/Helpers"; then :; else
+  [ "$?" = 3 ] || { echo "O ajudante do WhatsApp não compilou" >&2; exit 1; }
+fi
 # Requisito de assinatura estável: sem isso cada build é "outro app" para o macOS e perde Acessibilidade e Acesso Total ao Disco.
 bash "$raiz/scripts/assinar-deck.sh" "$app"
 
