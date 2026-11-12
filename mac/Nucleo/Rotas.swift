@@ -158,6 +158,8 @@ struct Roteador: Sendable {
     var apps: (any ProvedorDeApps)? = nil
     /// Volume, brilho da tela e da luz do teclado do Mac. Nil: as rotas /api/controles não existem (404).
     var controles: (any ControlesDoMac)? = nil
+    /// Os processos que mais usam processador e memória, e o encerrar (tela do Monitor de Atividade). Nil: as rotas /api/processos não existem (404).
+    var processos: (any ProcessosDoMac)? = nil
     /// A tela do Mail (últimas mensagens). Nil: as rotas /api/mail não existem (404).
     var mail: (any ProvedorDeMail)? = nil
 
@@ -247,6 +249,13 @@ struct Roteador: Sendable {
         }
         if r.caminho == "/api/controles" {
             return somente(["GET"], r) ?? controles.map { .codificar(200, $0.estado()) } ?? .erro(404, "Essa rota não existe.")
+        }
+        if r.caminho == "/api/processos" {
+            return somente(["GET"], r) ?? processos.map { .codificar(200, $0.maiores()) } ?? .erro(404, "Essa rota não existe.")
+        }
+        if r.caminho.hasPrefix("/api/processos/"), r.caminho.hasSuffix("/encerrar") {
+            let pid = String(r.caminho.dropFirst("/api/processos/".count).dropLast("/encerrar".count))
+            return somente(["POST"], r) ?? encerrarProcesso(pid, r)
         }
         if let item = sufixo(r.caminho, "/api/controles/") {
             return somente(["POST"], r) ?? controlar(item, r)
@@ -403,6 +412,15 @@ struct Roteador: Sendable {
             }
         }
         if let erro { return .erro(422, erro) }
+        return .json(200, Data("{\"ok\":true}".utf8))
+    }
+
+    /// POST /api/processos/<pid>/encerrar?nome=<o nome que a tela mostrava>. O nome evita fechar o programa errado se o pid foi reaproveitado.
+    private func encerrarProcesso(_ texto: String, _ r: HttpRequisicao) -> RespostaRota {
+        guard let processos else { return .erro(404, "Essa rota não existe.") }
+        guard let pid = Int(texto), pid > 1 else { return .erro(400, "Informe o número do processo.") }
+        guard let nome = r.query["nome"], !nome.isEmpty, nome.count <= 200 else { return .erro(400, "Informe o nome do processo, por exemplo encerrar?nome=Safari.") }
+        if let erro = processos.encerrar(pid: pid, nome: nome) { return .erro(422, erro) }
         return .json(200, Data("{\"ok\":true}".utf8))
     }
 

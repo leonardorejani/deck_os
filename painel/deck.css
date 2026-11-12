@@ -763,3 +763,44 @@ button.item-lista:disabled { opacity: .5; cursor: default }
 .ctl-num { flex: none; min-width: 3ch; text-align: right }
 .ctl-linha .btn[aria-pressed="true"] { background: var(--destaque-suave); color: var(--texto) }
 .ctl-linha.esq .barra { display: block; height: 10px }
+
+/* ---------- Monitor de Atividade (monitor.js): os dados do monitor em tamanho grande e os 5 maiores processos ---------- */
+.mn-grade { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--grade); padding-bottom: var(--secao) }
+.mn-grade[data-n="1"] { grid-template-columns: minmax(0, 1fr) }
+.mn-grade[data-n="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)) }
+.mn-grade[data-n="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)) }
+.vertical .mn-grade { grid-template-columns: repeat(2, minmax(0, 1fr)) }
+.vertical .mn-grade[data-n="1"] { grid-template-columns: minmax(0, 1fr) }
+.mn-cartao { display: grid; gap: var(--item); align-content: start; padding: var(--pad); border-radius: var(--raio); background: var(--superficie-2); min-width: 0; font-variant-numeric: tabular-nums }
+.mn-rot { font-size: var(--texto-sm); color: var(--texto-2) }
+.mn-num { font-size: var(--texto-2xl); font-weight: 700; line-height: 1; color: var(--texto); white-space: nowrap }
+.mn-num small { font-size: var(--texto-md); font-weight: 600; color: var(--texto-2); margin-left: 2px }
+.mn-vel { font-size: var(--texto-lg) }
+.mn-barra { display: block; height: 8px; border-radius: var(--raio-pilula); background: var(--superficie); overflow: hidden }
+.mn-barra i { display: block; height: 100%; border-radius: inherit; background: var(--texto-2) }
+.mn-cartao.alto .mn-barra i { background: var(--aviso) }
+.mn-cartao.alto .mn-num { color: var(--aviso) }
+.mn-cartao.cheio .mn-barra i { background: var(--perigo) }
+.mn-cartao.cheio .mn-num { color: var(--perigo) }
+.mn-duas { display: grid; gap: var(--item) }
+.mn-duas > span { display: flex; align-items: center; gap: var(--item); min-width: 0 }
+.mn-seta { display: inline-flex; color: var(--texto-2) }
+.mn-seta svg { width: 18px; height: 18px }
+.mn-vazio { height: auto; min-height: 120px; padding-bottom: var(--secao) }
+.mn-listas { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--secao); align-items: start }
+.vertical .mn-listas { grid-template-columns: minmax(0, 1fr); gap: var(--pad) }
+.mn-secao h3 { margin: 0 0 var(--item); font-size: var(--texto-sm); font-weight: 600; color: var(--texto-2) }
+.mn-lista { list-style: none; margin: 0; padding: 0 }
+.mn-proc { display: flex; align-items: center; gap: var(--icone); min-height: var(--linha); font-size: var(--texto-base); font-variant-numeric: tabular-nums }
+.mn-proc + .mn-proc { border-top: 1px solid var(--superficie-2) }
+.mn-nome { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--texto) }
+.mn-valor { flex: none; color: var(--texto-2); font-size: var(--texto-sm) }
+.mn-fim { flex: none; width: 88px; display: flex; justify-content: flex-end } /* a coluna do botão fica reservada: o valor não anda quando a linha não tem Encerrar */
+.mn-proc.confirmando { flex-wrap: wrap; padding: var(--icone) 0; background: none }
+.mn-pergunta { flex: 1 1 100%; color: var(--texto); font-size: var(--texto-sm) }
+.mn-acoes { display: flex; gap: var(--item); margin-left: auto }
+.mn-sim { background: var(--perigo); color: var(--fundo) }
+.mn-sim:disabled, .mn-acoes .btn:disabled { opacity: .5 }
+.mn-nada { margin: 0; color: var(--texto-2); font-size: var(--texto-sm) }
+.mn-proc.esq { gap: var(--pad) }
+.mn-proc.esq .barra { display: block; height: 10px }
