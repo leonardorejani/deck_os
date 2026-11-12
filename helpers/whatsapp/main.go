@@ -7,8 +7,10 @@
 //
 //	saída (stdout): {"t":"fase","fase":"iniciando|aguardando_qr|conectado|desconectado|erro|qr_expirou","detalhe":""}
 //	                {"t":"qr","codigo":"..."}
-//	                {"t":"conversas","lista":[{id,nome,grupo,naoLidas,ultima,mensagens:[{de,texto,hora}]}]}
+//	                {"t":"conversas","lista":[{id,nome,grupo,naoLidas,ultima,arquivada,numero,foto,mensagens:[{de,texto,hora,id,tipo,unica,midia}]}]}
+//	                {"t":"midia","req":"...","arquivo":"...","tipo":"image/jpeg"} ou {"t":"midia","req":"...","erro":"..."}
 //	entrada (stdin): {"c":"apagar"} sai do aparelho (Logout) e apaga a sessão. Fim do stdin = o Deck fechou: sai.
+//	                {"c":"midia","req":"...","chat":"...","id":"..."} baixa a foto ou o áudio de uma mensagem (até 8 MB) para a pasta midia.
 //
 // Nada de nome, número ou texto vai para o stderr (o log do Deck é público em relatos de erro).
 package main
@@ -20,6 +22,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -32,6 +35,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"go.mau.fi/whatsmeow"
+	"go.mau.fi/whatsmeow/proto/waCompanionReg"
 	"go.mau.fi/whatsmeow/proto/waHistorySync"
 	"go.mau.fi/whatsmeow/store"
 	"go.mau.fi/whatsmeow/store/sqlstore"
@@ -45,7 +49,8 @@ var saida = struct {
 	enc *json.Encoder
 }{enc: json.NewEncoder(os.Stdout)}
 
-func emitir(v any) {
+// emitir é uma variável só para o teste poder escutar o que sai.
+var emitir = func(v any) {
 	if prova {
 		mostrarProva(v)
 		return
@@ -85,6 +90,19 @@ type ajudante struct {
 
 	mu     sync.Mutex
 	grupos map[string]string // nome de grupo por JID, para não perguntar de novo
+	// Quando se tentou pela última vez (e falhou) pegar o nome de um grupo ou a foto de uma conversa.
+	tentadas  map[string]time.Time
+	filaFotos chan string
+}
+
+// Como o aparelho aparece em "Aparelhos conectados" no WhatsApp do celular. Com o tipo "desconhecido" (o padrão da
+// biblioteca) o celular escreve "Outro dispositivo".
+const nomeDoAparelho = "Deck OS"
+
+func definirAparelho() {
+	n := nomeDoAparelho
+	store.DeviceProps.Os = &n
+	store.DeviceProps.PlatformType = waCompanionReg.DeviceProps_DESKTOP.Enum()
 }
 
 func (a *ajudante) marcarSujo() {
@@ -94,48 +112,236 @@ func (a *ajudante) marcarSujo() {
 	}
 }
 
-// publicar manda a lista pro núcleo e grava no disco, no máximo umas 3 vezes por segundo.
+// publicar manda a lista pro núcleo assim que algo muda (mensagem nova não espera) e grava no disco. Mudanças que
+// chegam logo atrás se juntam na próxima, no máximo umas 4 vezes por segundo.
 func (a *ajudante) publicar(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-a.sujo:
-			time.Sleep(300 * time.Millisecond)
-			select {
-			case <-a.sujo:
-			default:
-			}
 			emitir(map[string]any{"t": "conversas", "lista": a.estado.Lista()})
 			_ = a.estado.Salvar()
+			// Nome, número e foto das conversas da lista: depois de entregar, para a mensagem nova não esperar a rede.
+			if a.completar(ctx) {
+				a.marcarSujo()
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(250 * time.Millisecond):
+			}
 		}
 	}
 }
 
-func (a *ajudante) nome(ctx context.Context, j types.JID, push string) string {
-	if j.Server == types.GroupServer {
-		a.mu.Lock()
-		n, ok := a.grupos[j.String()]
-		a.mu.Unlock()
-		if ok {
+const (
+	esperaGrupo      = 10 * time.Minute
+	esperaFoto       = 6 * time.Hour
+	validadeFoto     = 24 * time.Hour
+	limiteMidia      = 8 << 20
+	maxArquivosMidia = 100
+)
+
+func primeiro(nomes ...string) string {
+	for _, n := range nomes {
+		if n = strings.TrimSpace(n); n != "" {
 			return n
 		}
-		if info, err := a.cli.GetGroupInfo(ctx, j); err == nil && info.Name != "" {
-			a.mu.Lock()
-			a.grupos[j.String()] = info.Name
-			a.mu.Unlock()
-			return info.Name
-		}
-		return ""
 	}
-	if c, err := a.cli.Store.Contacts.GetContact(ctx, j); err == nil {
-		for _, n := range []string{c.FullName, c.FirstName, c.PushName, c.BusinessName} {
-			if n != "" {
-				return n
+	return ""
+}
+
+// identificar descobre o nome e o telefone de uma conversa direta. O contato pode vir só com o LID: aí o telefone sai
+// da tabela de LIDs (ou da dica que a mensagem trouxe), e o nome do contato salvo, do nome que a pessoa se deu
+// (push name) ou, no fim, só o número.
+func (a *ajudante) identificar(ctx context.Context, j, dica types.JID, push string) (nome, numero string) {
+	pn := j
+	if j.Server == types.HiddenUserServer {
+		pn = types.EmptyJID
+		if dica.Server == types.DefaultUserServer {
+			pn = dica
+		} else if a.cli != nil && a.cli.Store != nil && a.cli.Store.LIDs != nil {
+			if p, err := a.cli.Store.LIDs.GetPNForLID(ctx, j); err == nil && !p.IsEmpty() {
+				pn = p
 			}
 		}
 	}
-	return push
+	if pn.Server == types.DefaultUserServer {
+		numero = pn.User
+	}
+	var nomes []string
+	if a.cli != nil && a.cli.Store != nil && a.cli.Store.Contacts != nil {
+		for _, k := range []types.JID{pn, j} {
+			if k.IsEmpty() {
+				continue
+			}
+			if c, err := a.cli.Store.Contacts.GetContact(ctx, k); err == nil {
+				nomes = append(nomes, c.FullName, c.FirstName, c.PushName, c.BusinessName)
+			}
+		}
+	}
+	return primeiro(append(nomes, push)...), numero
+}
+
+// nomeDeQuem é o nome de quem mandou, para mostrar em grupo: o contato, o nome que a pessoa se deu ou o número.
+func (a *ajudante) nomeDeQuem(ctx context.Context, j types.JID, dica types.JID, push string) string {
+	n, num := a.identificar(ctx, j, dica, push)
+	return primeiro(n, formatarNumero(num))
+}
+
+// completar acha o que falta nas conversas da lista (nome, telefone, foto). Devolve true se algo mudou.
+func (a *ajudante) completar(ctx context.Context) bool {
+	if a.cli == nil {
+		return false
+	}
+	mudou := false
+	for _, c := range a.estado.Pendentes() {
+		if ctx.Err() != nil {
+			return mudou
+		}
+		j, err := types.ParseJID(c.ID)
+		if err != nil {
+			continue
+		}
+		if c.Grupo || j.Server == types.GroupServer {
+			if strings.TrimSpace(c.Nome) == "" {
+				if n := a.nomeDoGrupo(ctx, j, true); n != "" {
+					a.estado.Nome(c.ID, n)
+					mudou = true
+				}
+			}
+		} else {
+			nome, numero := a.identificar(ctx, j, types.EmptyJID, "")
+			if numero != "" && numero != c.Numero {
+				a.estado.Numero(c.ID, numero)
+				mudou = true
+			}
+			if nome != "" && nome != c.Nome {
+				a.estado.Nome(c.ID, nome)
+				mudou = true
+			}
+		}
+		if a.agendarFoto(c) {
+			mudou = true
+		}
+	}
+	return mudou
+}
+
+// agendarFoto põe a conversa na fila da foto de perfil quando falta (ou venceu). Devolve true se achou uma já guardada.
+func (a *ajudante) agendarFoto(c Conversa) bool {
+	arq := arquivoDaFoto(c.ID)
+	if info, err := os.Stat(filepath.Join(a.pasta, "fotos", arq)); err == nil {
+		achou := c.Foto != arq
+		if achou {
+			a.estado.Foto(c.ID, arq)
+		}
+		if time.Since(info.ModTime()) < validadeFoto {
+			return achou
+		}
+		a.enfileirarFoto(c.ID)
+		return achou
+	}
+	a.enfileirarFoto(c.ID)
+	return false
+}
+
+func (a *ajudante) enfileirarFoto(id string) {
+	a.mu.Lock()
+	t, visto := a.tentadas["foto:"+id]
+	if visto && time.Since(t) < esperaFoto {
+		a.mu.Unlock()
+		return
+	}
+	a.tentadas["foto:"+id] = time.Now()
+	a.mu.Unlock()
+	select {
+	case a.filaFotos <- id:
+	default:
+	}
+}
+
+// trabalhadorDeFotos baixa uma foto de perfil por vez, com uma pausa entre elas para não irritar o WhatsApp.
+func (a *ajudante) trabalhadorDeFotos(ctx context.Context) {
+	cliente := &http.Client{Timeout: 15 * time.Second}
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case id := <-a.filaFotos:
+			if a.buscarFoto(ctx, cliente, id) {
+				a.marcarSujo()
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(400 * time.Millisecond):
+			}
+		}
+	}
+}
+
+func (a *ajudante) buscarFoto(ctx context.Context, cliente *http.Client, id string) bool {
+	j, err := types.ParseJID(id)
+	if err != nil {
+		return false
+	}
+	c, cancelar := context.WithTimeout(ctx, 20*time.Second)
+	defer cancelar()
+	info, err := a.cli.GetProfilePictureInfo(c, j, &whatsmeow.GetProfilePictureParams{Preview: true})
+	if err != nil || info == nil || info.URL == "" {
+		return false // sem foto (ou sem permissão de ver): tenta de novo só daqui a algumas horas
+	}
+	dados, err := baixarFoto(c, cliente, info.URL)
+	if err != nil {
+		return false
+	}
+	arq := arquivoDaFoto(id)
+	if err := guardarArquivo(filepath.Join(a.pasta, "fotos"), arq, dados); err != nil {
+		return false
+	}
+	a.estado.Foto(id, arq)
+	return true
+}
+
+// baixarMidiaPedida atende o pedido do núcleo e responde com uma linha. Nada de nome nem texto vai para o erro.
+func (a *ajudante) baixarMidiaPedida(ctx context.Context, req, chat, id string) {
+	resp := map[string]string{"t": "midia", "req": req}
+	m, ok := a.estado.Achar(chat, id)
+	if !ok {
+		resp["erro"] = "Não achei essa mensagem."
+	} else {
+		c, cancelar := context.WithTimeout(ctx, 40*time.Second)
+		arq, tipo, err := baixarMidia(c, a.cli, filepath.Join(a.pasta, "midia"), chat, m)
+		cancelar()
+		if err != nil {
+			resp["erro"] = err.Error()
+		} else {
+			resp["arquivo"], resp["tipo"] = arq, tipo
+		}
+	}
+	emitir(resp)
+}
+
+// nomeDoGrupo devolve o nome do grupo. Sem `rede`, só olha o que já se sabe: quem recebe evento não espera a rede.
+func (a *ajudante) nomeDoGrupo(ctx context.Context, j types.JID, rede bool) string {
+	a.mu.Lock()
+	n, ok := a.grupos[j.String()]
+	falhou, tentou := a.tentadas["grupo:"+j.String()]
+	a.mu.Unlock()
+	if ok || !rede || a.cli == nil || (tentou && time.Since(falhou) < esperaGrupo) {
+		return n
+	}
+	info, err := a.cli.GetGroupInfo(ctx, j)
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if err != nil || info.Name == "" {
+		a.tentadas["grupo:"+j.String()] = time.Now()
+		return ""
+	}
+	a.grupos[j.String()] = info.Name
+	return info.Name
 }
 
 func (a *ajudante) tratar(ctx context.Context, ev any) {
@@ -150,6 +356,8 @@ func (a *ajudante) tratar(ctx context.Context, ev any) {
 		marcarPareado(a.pasta, false)
 		// Sem a sessão, as conversas guardadas viram lixo de outra conta: somem do disco e da memória.
 		a.estado.Limpar()
+		_ = os.RemoveAll(filepath.Join(a.pasta, "fotos"))
+		_ = os.RemoveAll(filepath.Join(a.pasta, "midia"))
 		a.marcarSujo()
 		fase("erro", "O aparelho foi desconectado pelo WhatsApp. Gere um QR novo.")
 	case *events.StreamReplaced:
@@ -158,6 +366,14 @@ func (a *ajudante) tratar(ctx context.Context, ev any) {
 		a.mensagem(ctx, e)
 	case *events.HistorySync:
 		a.historico(ctx, e)
+	case *events.Archive:
+		if e.Action != nil {
+			a.estado.Arquivar(e.JID.String(), e.Action.GetArchived())
+			a.marcarSujo()
+		}
+	case *events.PushName, *events.Contact:
+		// Nome novo no celular ou na conta: as conversas sem nome tentam de novo.
+		a.marcarSujo()
 	case *events.MarkChatAsRead:
 		if e.Action != nil && e.Action.GetRead() {
 			a.estado.Lida(e.JID.String())
@@ -184,17 +400,32 @@ func (a *ajudante) mensagem(ctx context.Context, e *events.Message) {
 		a.marcarSujo()
 		return
 	}
-	texto, ok := Texto(e.Message)
+	c, ok := Analisar(e.Message, e.IsViewOnce)
 	if !ok {
 		return
 	}
 	de := ""
 	if e.Info.IsGroup {
-		de = a.nome(ctx, e.Info.Sender, e.Info.PushName)
+		de = a.nomeDeQuem(ctx, e.Info.Sender, e.Info.SenderAlt, e.Info.PushName)
 	}
-	nome := a.nome(ctx, chat, e.Info.PushName)
-	a.estado.Recebida(chat.String(), nome, e.Info.IsGroup, Msg{De: de, Texto: texto, Hora: hora(e.Info.Timestamp)}, e.Info.Timestamp)
+	nome, numero, grupo := "", "", e.Info.IsGroup
+	if grupo {
+		nome = a.nomeDoGrupo(ctx, chat, false)
+	} else {
+		nome, numero = a.identificar(ctx, chat, e.Info.SenderAlt, e.Info.PushName)
+	}
+	a.estado.Recebida(chat.String(), nome, grupo, a.mensagemDe(c, de, e.Info.ID, e.Info.Timestamp), e.Info.Timestamp)
+	a.estado.Numero(chat.String(), numero)
 	a.marcarSujo()
+}
+
+// mensagemDe monta a mensagem para a lista. Visualização única nunca guarda a referência do conteúdo.
+func (a *ajudante) mensagemDe(c Conteudo, de, id string, quando time.Time) Msg {
+	m := Msg{De: de, Texto: c.Texto, Hora: hora(quando), ID: id, Tipo: c.Tipo, Unica: c.Unica}
+	if !c.Unica && c.Ref != nil && id != "" {
+		m.Midia, m.Ref = true, c.Ref
+	}
+	return m
 }
 
 func (a *ajudante) historico(ctx context.Context, e *events.HistorySync) {
@@ -207,21 +438,29 @@ func (a *ajudante) historico(ctx context.Context, e *events.HistorySync) {
 		if nome == "" {
 			nome = c.GetName()
 		}
+		grupo := j.Server == types.GroupServer
+		numero := ""
 		if nome == "" {
-			nome = a.nome(ctx, j, "")
+			if grupo {
+				nome = a.nomeDoGrupo(ctx, j, false)
+			} else {
+				nome, numero = a.identificar(ctx, j, types.EmptyJID, "")
+			}
+		} else if !grupo {
+			_, numero = a.identificar(ctx, j, types.EmptyJID, "")
 		}
 		nao := int(c.GetUnreadCount())
 		if c.GetMarkedAsUnread() && nao == 0 {
 			nao = 1
 		}
-		if c.GetArchived() {
-			nao = 0
-		}
 		var msgs []Msg
 		if nao > 0 {
 			msgs = a.mensagensDoHistorico(ctx, j, c.GetMessages())
 		}
-		a.estado.Historico(j.String(), nome, j.Server == types.GroupServer, nao, time.Unix(int64(c.GetConversationTimestamp()), 0), msgs)
+		a.estado.Historico(j.String(), nome, grupo, nao, time.Unix(int64(c.GetConversationTimestamp()), 0), msgs)
+		a.estado.Numero(j.String(), numero)
+		// Arquivada: fica fora de Todas, Contatos e Grupos e só aparece no filtro Arquivadas.
+		a.estado.Arquivar(j.String(), c.GetArchived())
 	}
 	a.marcarSujo()
 }
@@ -238,7 +477,7 @@ func (a *ajudante) mensagensDoHistorico(ctx context.Context, chat types.JID, lis
 		if w == nil || w.GetKey().GetFromMe() {
 			continue
 		}
-		texto, ok := Texto(w.GetMessage())
+		c, ok := Analisar(w.GetMessage(), false)
 		if !ok {
 			continue
 		}
@@ -246,10 +485,10 @@ func (a *ajudante) mensagensDoHistorico(ctx context.Context, chat types.JID, lis
 		de := ""
 		if chat.Server == types.GroupServer {
 			if p, err := types.ParseJID(w.GetParticipant()); err == nil {
-				de = a.nome(ctx, p, w.GetPushName())
+				de = a.nomeDeQuem(ctx, p, types.EmptyJID, w.GetPushName())
 			}
 		}
-		itens = append(itens, item{t, Msg{De: de, Texto: texto, Hora: hora(time.Unix(t, 0))}})
+		itens = append(itens, item{t, a.mensagemDe(c, de, w.GetKey().GetID(), time.Unix(t, 0))})
 	}
 	sort.Slice(itens, func(i, j int) bool { return itens[i].t < itens[j].t })
 	saida := make([]Msg, len(itens))
@@ -349,15 +588,17 @@ func main() {
 		fase("erro", "Não consegui ler o aparelho guardado.")
 		os.Exit(1)
 	}
-	// É assim que o aparelho aparece em "Aparelhos conectados" no WhatsApp do celular.
-	name := "Deck (só leitura)"
-	store.DeviceProps.Os = &name
+	definirAparelho()
+	// Mídia baixada de uma execução anterior não fica no disco: só o que a pessoa pedir agora.
+	_ = os.RemoveAll(filepath.Join(*pasta, "midia"))
 
 	cli := whatsmeow.NewClient(dev, waLog.Noop)
 	a := &ajudante{cli: cli, estado: NovoEstado(filepath.Join(*pasta, "conversas.json")), pasta: *pasta,
-		sujo: make(chan struct{}, 1), grupos: map[string]string{}}
+		sujo: make(chan struct{}, 1), grupos: map[string]string{},
+		tentadas: map[string]time.Time{}, filaFotos: make(chan string, 64)}
 	cli.AddEventHandler(func(ev any) { a.tratar(ctx, ev) })
 	go a.publicar(ctx)
+	go a.trabalhadorDeFotos(ctx)
 	a.marcarSujo()
 
 	// Comandos do núcleo. Fim do stdin: o Deck fechou, então este ajudante também.
@@ -366,13 +607,22 @@ func main() {
 		sc := bufio.NewScanner(os.Stdin)
 		for sc.Scan() {
 			var c struct {
-				C string `json:"c"`
+				C    string `json:"c"`
+				Req  string `json:"req"`
+				Chat string `json:"chat"`
+				ID   string `json:"id"`
 			}
-			if json.Unmarshal([]byte(strings.TrimSpace(sc.Text())), &c) == nil && c.C == "apagar" {
+			if json.Unmarshal([]byte(strings.TrimSpace(sc.Text())), &c) != nil {
+				continue
+			}
+			switch c.C {
+			case "apagar":
 				select {
 				case apagar <- struct{}{}:
 				default:
 				}
+			case "midia":
+				go a.baixarMidiaPedida(ctx, c.Req, c.Chat, c.ID)
 			}
 		}
 		parar()
