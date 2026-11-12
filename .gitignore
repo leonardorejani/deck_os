@@ -33,3 +33,4 @@ dist/
 
 # cache do auditor de PWA da tatile
 .pwa-nativo/
+*-e
