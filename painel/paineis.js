@@ -189,11 +189,13 @@ $('#se-rodape').addEventListener('click', e => {
 /* As últimas mensagens da caixa de entrada de uma conta do Mail do Mac, lidas e não lidas. Só leitura: o Deck não marca
    como lida nem apaga. Tocar numa mensagem abre ela no Mail do Mac. A conta escolhida fica guardada no aparelho. */
 const CHAVE_CONTA_MAIL = 'deck-mail-conta-v1';
-const ma = { dados: null, json: '', conta: '', erro: '', seq: 0, abrindo: false };
+const ma = { dados: null, json: '', conta: '', erro: '', seq: 0, abrindo: false, contas: [], lendo: null };
 const dadosMailVazios = { estado: 'ok', contas: [], conta: '', mensagens: [] };
 function horaMail(iso) { return horaConversa(iso) } // hoje HH:MM, "ontem", dia da semana ou dd/mm, como no WhatsApp
 function abrirMail() { ma.dados = null; ma.json = ''; ma.erro = ''; ma.conta = lerGuardado(CHAVE_CONTA_MAIL) || ''; pintarMail(); abrirFolha('#f-mail'); lerMail() }
 async function lerMail() {
+  if (ma.lendo === ma.conta) return; // o relógio de 4 s não empilha leitura: se a desta conta ainda não voltou, espera ela
+  const quem = ma.conta; ma.lendo = quem;
   const n = ++ma.seq;
   try {
     const d = await canal.mail(ma.conta); if (n !== ma.seq) return;
@@ -207,7 +209,7 @@ async function lerMail() {
     // Mac antigo, sem a rota do Mail, diz isso em vez de "não deu para ler"
     ma.erro = e.status === 404 ? 'Esta versão do Deck no Mac ainda não lê o Mail. Atualize o Deck no Mac.' : msgErro(e);
     if (!ma.dados) pintarMail(); else if (!era) avisar(ma.erro, { erro: true });
-  }
+  } finally { if (ma.lendo === quem) ma.lendo = null }
 }
 const esqueletoMail = () => '<div class="esq-lista" aria-hidden="true">' + '<div class="conversa esq"><span class="avatar"></span><span><i class="barra" style="width:40%"></i><i class="barra" style="width:70%"></i><i class="barra" style="width:90%"></i></span><i class="barra" style="width:32px"></i></div>'.repeat(5) + '</div>';
 const linhaMail = m => `<button class="conversa mail${m.lida ? '' : ' nao-lida'}" data-mail="${esc(m.id)}" aria-label="${m.lida ? '' : 'Não lida. '}${esc(m.remetente)}, ${esc(m.assunto)}">
@@ -215,11 +217,13 @@ const linhaMail = m => `<button class="conversa mail${m.lida ? '' : ' nao-lida'}
   <span style="min-width:0"><div class="nome-c">${esc(m.remetente)}</div><div class="assunto-m">${esc(m.assunto)}</div><div class="previa">${esc(m.previa)}</div></span>
   <span class="lado"><span>${esc(horaMail(m.data))}</span><span class="ponto-nl" ${m.lida ? 'hidden' : ''}></span></span></button>`;
 function pintarMail() {
-  const d = ma.dados, caixa = $('#ma-lista'), contas = d?.contas || [];
+  const d = ma.dados, caixa = $('#ma-lista');
+  if (d?.contas?.length) ma.contas = d.contas;
+  const contas = ma.contas, atual = d ? d.conta : ma.conta; // com a leitura falha o seletor fica: é por ele que se volta para uma conta que funciona
   $('#ma-lista').setAttribute('aria-busy', String(!d && !ma.erro));
   // troca de conta no topo (só com mais de uma)
   const seletor = $('#ma-contas'); seletor.hidden = contas.length < 2;
-  const htmlContas = contas.map(c => `<button data-conta="${esc(c.id)}" aria-pressed="${c.id === d.conta}" title="${esc(c.email || '')}">${esc(c.nome)}</button>`).join('');
+  const htmlContas = contas.map(c => `<button data-conta="${esc(c.id)}" aria-pressed="${c.id === atual}" title="${esc(c.email || '')}">${esc(c.nome)}</button>`).join('');
   if (seletor.dataset.html !== htmlContas) { seletor.dataset.html = htmlContas; seletor.innerHTML = htmlContas }
   if (!d) { $('#ma-titulo').textContent = 'Mail'; if (ma.erro) caixa.innerHTML = erroLista(ma.erro); else if (!caixa.querySelector('.esq-lista')) caixa.innerHTML = esqueletoMail(); return }
   const msgs = d.mensagens || [], nl = msgs.filter(m => !m.lida).length, conta = contas.find(c => c.id === d.conta);

@@ -953,12 +953,15 @@ Ajustes de UX (11/11/2026, teste do Leonardo no iPhone):
       o Deck sai da frente e depois de 30 s. Sem Acessibilidade cai no monitor local, e a tela avisa que, se o atalho
       abrir outro app, é para montar escolhendo as teclas.
     - Ao usar a tecla, o Deck posta a tecla descendo e subindo no HID, com os modificadores nos dois eventos.
-34. Mail no iPhone (12/11/2026). Palavras dele, na revisão das telas de fábrica: "mail ok mostrando a lista das última que
+35. Mail no iPhone (12/11/2026). Palavras dele, na revisão das telas de fábrica: "mail ok mostrando a lista das última que
     chegaram, lidas e nao lidas podendo trocar de conta também, aí tem que logar ou já puxa do pc".
     - A tecla do app Mail abre a lista das últimas mensagens (remetente, assunto, prévia, hora, marca de não lida), com troca de
       conta no topo. As contas são as do app Mail do Mac, sem login: o Mac lê por AppleScript. Só leitura, e tocar numa mensagem
       abre ela no Mail do Mac. Detalhes na seção 5, "Mail".
     - Mail fechado: o Deck avisa "Abra o Mail no Mac" e não abre o app sozinho (decisão desta frente, ver seção 5).
+    - Conta que falha ou demora não prende a tela: a troca de conta continua no topo (o Mac devolve a lista de contas mesmo na falha)
+      e dá para voltar para outra. O Mac relê no máximo uma vez a cada 20 s, e uma leitura que falhou também vale por 10 s, para
+      o iPhone não empilhar leituras no Mail. O iPhone não pede de novo enquanto a leitura anterior não voltou.
     - Na mesma conversa ele descartou outras telas (mensagens "acho que nao", navegadores, ajustes, música e IDE "nao") e disse que
       lembretes "é feito na agenda". Captura de tela e controles do Mac (volume, brilho) são outras frentes.
 

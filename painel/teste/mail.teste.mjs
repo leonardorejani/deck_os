@@ -91,6 +91,39 @@ export default async function (h) {
   h.ok(await h.espera(p, () => document.querySelectorAll('#ma-lista .conversa.mail').length === 4), '"Tentar de novo" traz a lista quando o Mac volta');
   await p.close();
 
+  /* conta que falha não prende a tela: o seletor continua e dá para voltar */
+  await h.cenario({ mail: 'normal', mailFalha: 'conta-2' });
+  p = await h.pagina(); await pronta(h, p); await abrir(h, p);
+  h.ok(await h.espera(p, () => document.querySelectorAll('#ma-lista .conversa.mail').length === 4), 'a primeira conta abre normal');
+  await p.click('#ma-contas [data-conta="conta-2"]');
+  h.ok(await h.espera(p, () => document.querySelector('#ma-lista [data-tentar]') !== null || document.querySelector('#ma-lista')?.textContent.includes('Não deu para ler')), 'a conta que falha mostra o erro');
+  const sel = await p.evaluate(() => ({ escondido: document.querySelector('#ma-contas').hidden, n: document.querySelectorAll('#ma-contas button').length, marcada: document.querySelector('#ma-contas [aria-pressed="true"]')?.dataset.conta }));
+  h.ok(!sel.escondido && sel.n === 3 && sel.marcada === 'conta-2', `com a conta falhando a troca de conta continua na tela (${JSON.stringify(sel)})`);
+  await p.click('#ma-contas [data-conta="conta-1"]');
+  h.ok(await h.espera(p, () => document.querySelectorAll('#ma-lista .conversa.mail').length === 4), 'dá para voltar para uma conta que funciona');
+  await p.close();
+
+  /* mesma falha, com um Mac que não devolve as contas junto: o iPhone guarda as que já viu */
+  await h.cenario({ mail: 'normal', mailFalha: 'conta-2', mailFalhaSemContas: true, atrasoMail: 0 });
+  p = await h.pagina(); await pronta(h, p); await abrir(h, p);
+  await h.espera(p, () => document.querySelectorAll('#ma-lista .conversa.mail').length === 4);
+  await p.click('#ma-contas [data-conta="conta-2"]');
+  await h.espera(p, () => document.querySelector('#ma-lista')?.textContent.includes('Não deu para ler'));
+  h.ok(await p.evaluate(() => !document.querySelector('#ma-contas').hidden && document.querySelectorAll('#ma-contas button').length === 3), 'mesmo sem contas na resposta que falhou, o seletor fica');
+  await h.cenario({ mailFalhaSemContas: false, mailFalha: '' });
+  await p.close();
+
+  /* o relógio de 4 s não empilha leitura quando o Mac demora */
+  await h.cenario({ mail: 'normal', mailFalha: '', atrasoMail: 9000 });
+  p = await h.pagina(); await pronta(h, p);
+  const antesLento = (await h.contadores()).mail.length;
+  await abrir(h, p);
+  await new Promise(r => setTimeout(r, 9500));
+  const pedidos = (await h.contadores()).mail.length - antesLento;
+  h.ok(pedidos >= 1 && pedidos <= 2, `com o Mac lento (9 s) a folha aberta por 9,5 s não empilha pedidos (${pedidos})`);
+  await h.cenario({ atrasoMail: 0 });
+  await p.close();
+
   await h.cenario({ mail: 'antigo' });
   p = await h.pagina(); await pronta(h, p); await abrir(h, p);
   h.ok(await h.espera(p, () => document.querySelector('#ma-lista')?.textContent.includes('Atualize o Deck no Mac')), 'Mac antigo, sem a rota do Mail, pede para atualizar o Deck');

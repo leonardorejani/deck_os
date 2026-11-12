@@ -7,10 +7,13 @@ private final class ExecutorDoMail: Executor, @unchecked Sendable {
     private var _comandos: [String] = []
     var aberto = true
     var leitura = SaidaShell(status: 0, saida: "")
+    /// A resposta do script que só lista as contas (o que não tem `mailbox`).
+    var listaDeContas = SaidaShell(status: 1, saida: "")
     var comandos: [String] { trava.lock(); defer { trava.unlock() }; return _comandos }
     func rodar(_ comando: String) -> SaidaShell {
         trava.lock(); _comandos.append(comando); trava.unlock()
         if comando.hasPrefix("pgrep") { return SaidaShell(status: aberto ? 0 : 1, saida: "") }
+        if comando.contains("osascript") && !comando.contains("mailbox") { return listaDeContas }
         return leitura
     }
 }
@@ -88,7 +91,7 @@ final class MailTestes: XCTestCase {
     func testCacheCurtoNaoRelePeloMesmoMinutoERelePassadaAValidade() {
         let f = ExecutorDoMail(); f.leitura = SaidaShell(status: 0, saida: saidaDeExemplo())
         let relogio = Relogio()
-        let l = LeitorDeMail(executor: f, agora: { relogio.agora }, validade: 20)
+        let l = LeitorDeMail(executor: f, agora: { relogio.agora }, validade: 20, validadeFalha: 10)
         _ = l.caixa(conta: nil); _ = l.caixa(conta: nil)
         XCTAssertEqual(f.comandos.filter { $0.contains("perl") }.count, 1)
         _ = l.caixa(conta: "ID-2")
@@ -113,6 +116,43 @@ final class MailTestes: XCTestCase {
         let l = LeitorDeMail(executor: f)
         XCTAssertEqual(l.caixa(conta: nil).estado, "erro")
         XCTAssertEqual(l.caixa(conta: nil).aviso, "O Mail demorou demais para responder. Tente de novo em instantes.")
+    }
+
+    func testFalhaDeUmaContaDevolveAsContasParaATrocaNaoSumir() {
+        let f = ExecutorDoMail(); f.leitura = SaidaShell(status: 0, saida: saidaDeExemplo())
+        let l = LeitorDeMail(executor: f)
+        _ = l.caixa(conta: nil)
+        f.leitura = SaidaShell(status: ExecutorAcoes.statusTempoEsgotado, saida: "")
+        let c = l.caixa(conta: "ID-2")
+        XCTAssertEqual(c.estado, "erro")
+        XCTAssertEqual(c.contas.map(\.id), ["ID-1", "ID-2"], "a troca de conta continua na tela")
+        XCTAssertEqual(c.conta, "ID-2")
+    }
+
+    func testPrimeiraLeituraQueFalhaListaAsContasPorUmScriptLeve() {
+        let f = ExecutorDoMail(); f.leitura = SaidaShell(status: 1, saida: "execution error")
+        f.listaDeContas = SaidaShell(status: 0, saida: linha(["C", "ID-1", "iCloud", ""]) + linha(["C", "ID-2", "Trabalho", ""]))
+        let c = LeitorDeMail(executor: f).caixa(conta: "ID-1")
+        XCTAssertEqual(c.estado, "erro")
+        XCTAssertEqual(c.contas.map(\.id), ["ID-1", "ID-2"], "com a primeira conta quebrada as outras continuam acessíveis")
+        XCTAssertFalse(f.comandos.last?.contains("mailbox") ?? true, "o script de contas não abre caixa nenhuma")
+    }
+
+    func testScriptTemFallbackSemTryNoMailboxEPulaCaixaAusente() {
+        let osa = AppleScript.caixaDeEntradaDoMail.joined(separator: "\n")
+        XCTAssertTrue(osa.contains("if caixa is missing value then return saida"), "conta sem INBOX devolve só as contas, sem erro")
+        XCTAssertFalse(osa.contains("on error"), "nenhum on error dispara o Inbox sem try")
+    }
+
+    func testLeituraQueFalhaNaoEmpilhaOsascriptQuandoOIphoneInsiste() {
+        let f = ExecutorDoMail(); f.leitura = SaidaShell(status: ExecutorAcoes.statusTempoEsgotado, saida: "")
+        let relogio = Relogio()
+        let l = LeitorDeMail(executor: f, agora: { relogio.agora }, validade: 20, validadeFalha: 10)
+        for _ in 0..<5 { _ = l.caixa(conta: nil); relogio.agora.addTimeInterval(2) }
+        XCTAssertEqual(f.comandos.filter { $0.contains("perl") && $0.contains("mailbox") }.count, 1, "uma leitura por janela, mesmo com falha")
+        relogio.agora.addTimeInterval(11)
+        _ = l.caixa(conta: nil)
+        XCTAssertEqual(f.comandos.filter { $0.contains("perl") && $0.contains("mailbox") }.count, 2, "passada a janela, tenta de novo")
     }
 
     func testContaComTracoNoComecoNaoViraOpcaoDoOsascript() {

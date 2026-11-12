@@ -60,6 +60,8 @@ const padrao = () => ({
   mailTecla: false,          // uma tecla do app Mail (abre a lista no iPhone) e uma do Mail com acao (vai pro Mac)
   mailAbreRecusa: '',        // POST /api/mail/abrir falha (422) com esse motivo
   atrasoMail: 0,             // ms de espera antes de o Mac responder a lista do Mail
+  mailFalhaSemContas: false, // a leitura que falha vem sem a lista de contas (Mac antigo)
+  mailFalha: '',             // id da conta do Mail cuja leitura falha (estado erro, com a lista de contas como o Mac devolve)
   mailAviso: '',             // a lista de contas do Mail não pôde ser lida: o motivo vem no aviso da ação
   spotifyModos: 'sim',       // sim | sem (Mac antigo: o estado não traz álbum, repetir nem aleatório)
 });
@@ -355,13 +357,14 @@ async function api(req, res, url) {
   }
   if (rota === '/api/mail' && m === 'GET') {
     if (c.mail === 'antigo') return json(res, 404, { erro: 'Essa rota não existe.' });
-    if (c.atrasoMail) await new Promise(r => setTimeout(r, c.atrasoMail));
     const pedida = url.searchParams.get('conta') || '';
-    cont.mail.push(pedida);
+    cont.mail.push(pedida); // conta o pedido que chegou, não só o que terminou: é o que prova que o iPhone não empilha
+    if (c.atrasoMail) await new Promise(r => setTimeout(r, c.atrasoMail));
     if (c.mail === 'erro') return json(res, 500, { erro: 'O Mail não respondeu no Mac.' });
     if (c.mail === 'fechado') return json(res, 200, { estado: 'fechado', aviso: 'Abra o Mail no Mac para ver as mensagens aqui.', contas: [], conta: '', mensagens: [] });
     if (c.mail === 'sem-permissao') return json(res, 200, { estado: 'sem-permissao', aviso: 'O Deck não tem permissão para controlar o Mail. Libere em Ajustes do Sistema > Privacidade e Segurança > Automação.', contas: [], conta: '', mensagens: [] });
     const contas = MAIL_CONTAS(), conta = (contas.find(x => x.id === pedida) || contas[0]).id; // conta que sumiu: o Mac devolve a primeira
+    if (c.mailFalha && conta === c.mailFalha) return json(res, 200, { estado: 'erro', aviso: 'O Mail demorou demais para responder. Tente de novo em instantes.', contas: c.mailFalhaSemContas ? [] : contas, conta: c.mailFalhaSemContas ? '' : conta, mensagens: [] });
     return json(res, 200, { estado: 'ok', contas, conta, mensagens: MAIL_MENSAGENS(conta) });
   }
   if (rota === '/api/mail/abrir' && m === 'POST') {

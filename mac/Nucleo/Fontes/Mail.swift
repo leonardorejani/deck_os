@@ -46,6 +46,23 @@ protocol ProvedorDeMail: Sendable {
 }
 
 extension AppleScript {
+    /// Só a lista de contas, sem abrir caixa nenhuma: serve para a troca de conta continuar na tela quando a leitura falha.
+    static let listaDeContasDoMail = [
+        "set f to (ASCII character 31)",
+        "set r to (ASCII character 30)",
+        "set saida to \"\"",
+        #"tell application id "com.apple.mail""#,
+        "repeat with c in accounts",
+        "set e to \"\"",
+        "try",
+        "set e to item 1 of (email addresses of c)",
+        "end try",
+        "set saida to saida & \"C\" & f & (id of c) & f & (name of c) & f & e & r",
+        "end repeat",
+        "end tell",
+        "return saida",
+    ]
+
     /// Separadores que não aparecem em e-mail: campo (US, 31) e registro (RS, 30). Assim assunto e prévia
     /// podem ter tab e quebra de linha sem estragar a leitura.
     static let campoMail = "\u{1F}"
@@ -79,10 +96,14 @@ extension AppleScript {
         "set caixa to missing value",
         "try",
         #"set caixa to mailbox "INBOX" of alvo"#,
-        "on error",
+        "end try",
+        "if caixa is missing value then",
+        "try",
         #"set caixa to mailbox "Inbox" of alvo"#,
         "end try",
+        "end if",
         "set saida to saida & \"A\" & f & (id of alvo) & r",
+        "if caixa is missing value then return saida",
         "set n to count of messages of caixa",
         "if n > limite then set n to limite",
         "if n > 0 then",
@@ -116,27 +137,60 @@ final class LeitorDeMail: ProvedorDeMail, @unchecked Sendable {
     static let validade: TimeInterval = 20
     static let avisoFechado = "Abra o Mail no Mac para ver as mensagens aqui."
 
+    static let validadeFalha: TimeInterval = 10
+    static let limiteContasSegundos = 3
+
     private let executor: any Executor
     private let agora: @Sendable () -> Date
     private let validade: TimeInterval
+    private let validadeFalha: TimeInterval
+    /// Guarda só o cache e as contas conhecidas, por um instante. Nunca fica presa durante o osascript.
     private let trava = NSLock()
+    /// Uma leitura de cada vez: quem chega com outra já em andamento espera e, ao pegar a vez, acha o resultado no cache
+    /// (inclusive o de falha) em vez de rodar o osascript de novo.
+    private let leitura = NSLock()
     private var cache: [String: (em: Date, caixa: CaixaDeMail)] = [:]
+    private var contasConhecidas: [ContaMail] = []
 
     init(executor: any Executor = ExecutorShell(), agora: @escaping @Sendable () -> Date = { Date() },
-         validade: TimeInterval = LeitorDeMail.validade) {
+         validade: TimeInterval = LeitorDeMail.validade, validadeFalha: TimeInterval = LeitorDeMail.validadeFalha) {
         self.executor = executor
         self.agora = agora
         self.validade = validade
+        self.validadeFalha = validadeFalha
+    }
+
+    private func guardado(_ chave: String) -> CaixaDeMail? {
+        trava.lock(); defer { trava.unlock() }
+        guard let c = cache[chave] else { return nil }
+        let limite = c.caixa.estado == "ok" ? validade : validadeFalha
+        return agora().timeIntervalSince(c.em) < limite ? c.caixa : nil
     }
 
     func caixa(conta: String?) -> CaixaDeMail {
         let chave = conta ?? ""
-        // A trava vale pela leitura inteira: dois pedidos juntos viram uma leitura só e o segundo pega o cache.
-        trava.lock(); defer { trava.unlock() }
-        if let c = cache[chave], agora().timeIntervalSince(c.em) < validade { return c.caixa }
+        if let c = guardado(chave) { return c }
+        leitura.lock(); defer { leitura.unlock() }
+        if let c = guardado(chave) { return c }
         let nova = ler(chave)
-        if nova.estado == "ok" { cache[chave] = (agora(), nova) } else { cache[chave] = nil }
+        trava.lock(); defer { trava.unlock() }
+        if nova.estado == "ok" {
+            cache[chave] = (agora(), nova)
+            if !nova.contas.isEmpty { contasConhecidas = nova.contas }
+        } else if nova.estado == "erro" { cache[chave] = (agora(), nova) } // o iPhone relê a cada 4 s: sem isso cada leitura lenta vira outra de 10 s
+        else { cache[chave] = nil }
         return nova
+    }
+
+    /// Falha com a troca de conta junto: sem ela o iPhone esconde o seletor e a conta que falha vira beco sem saída.
+    private func falha(_ estado: String, _ aviso: String, conta: String) -> CaixaDeMail {
+        trava.lock(); var contas = contasConhecidas; trava.unlock()
+        if contas.isEmpty, estado == "erro", let osa = AppleScript.comando(AppleScript.listaDeContasDoMail, argumentos: [], segundos: Self.limiteContasSegundos) {
+            let r = executor.rodar(osa)
+            if r.status == 0 { contas = Self.interpretar(r.saida).contas }
+        }
+        let alvo = contas.contains { $0.id == conta } ? conta : (contas.first?.id ?? "")
+        return CaixaDeMail(estado: estado, aviso: aviso, contas: contas, conta: alvo)
     }
 
     private func ler(_ conta: String) -> CaixaDeMail {
@@ -150,7 +204,7 @@ final class LeitorDeMail: ProvedorDeMail, @unchecked Sendable {
         let r = executor.rodar(osa)
         if r.status != 0 {
             let semPermissao = r.saida.contains("-1743")
-            return CaixaDeMail(estado: semPermissao ? "sem-permissao" : "erro", aviso: Self.motivo(r))
+            return falha(semPermissao ? "sem-permissao" : "erro", Self.motivo(r), conta: conta)
         }
         let lido = Self.interpretar(r.saida)
         guard !lido.contas.isEmpty else {
