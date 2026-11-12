@@ -21,6 +21,8 @@ struct DeckApp: App {
         _modelo = StateObject(wrappedValue: m)
         if !testando {
             m.iniciar()
+            // A lista de apps (e os ícones das teclas) carrega ao abrir o Deck, não só ao abrir os Ajustes.
+            Task { @MainActor in CatalogoDeApps.compartilhado.carregarSeFaltar() }
             // A bancada não renova o app do iPhone.
             if Variante.atual.ligaIphone { m.ligarRenovacao() }
             // Só para a prova: `--renovar-agora` reinstala o app no iPhone assim que o Deck abre, e o resultado vai para o log.

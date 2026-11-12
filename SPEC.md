@@ -984,6 +984,37 @@ Ajustes de UX (11/11/2026, teste do Leonardo no iPhone):
     - Precisa atualizar o app do iPhone e o Deck do Mac. Testes: `ios/Pacote/Tests/DeckCascaTests/BluetoothTestes.swift`
       (id que nunca conecta, situação da busca, vizinho que recusa) e `mac/Testes/BluetoothTestes.swift` (vigia do anúncio).
 
+33. Conexões e uma fonte de verdade por estado (12/11/2026, frente mac-conexoes). Palavras dele: "pode manter a conexão
+    com spotify entao se a pessoa quiser conectar essas opções aparecem nos controles", "quando ia parear pelo celular
+    aparecia um código nada a ver e às vezes era o mesmo do PWA", "os ícones demoram e só aparecem ao alternar de perfil",
+    "quando clico em liberar (botão azul) ele leva o app pra baixo de tudo ao invés de só liberar e manter o app na frente",
+    "mostra nenhum iPhone pareado mas estou conectado" e "temos muitas coisas dentro do app que estão se contradizendo. Coisas
+    funcionando mas diz que não, conexões que aparecem desconectadas. Tem que ver o app e painel inteiros." Decidido:
+    - "Conectar iPhone" vira "Conexões", com o método no topo: Cabo e Bluetooth, WhatsApp e PWA (Wi-Fi). Cada método mostra
+      só o que é dele. O Spotify (login opcional) e o WhatsApp saíram de Este Mac. O Spotify fica num grupo à parte no fim
+      de Conexões, porque não é um jeito de conectar o iPhone (decisão minha, a confirmar com ele). WhatsApp tem a escolha
+      de origem de sempre e o espaço reservado "Conectar pelo QR", sem ação até a frente do QR existir.
+    - Um código por tela: o pedido de Bluetooth mostra o código de confirmação (igual nas duas telas), e o cartão "Código do
+      cabo" só aparece quando não há pedido na tela. O código do cabo é o mesmo do PWA por construção (o iPhone prova ao Mac
+      que o conhece, `ProvaCabo.modoCodigo`). PENDENTE DE DECISÃO DELA: ele reclamou de "às vezes era o mesmo do PWA", e
+      sem pedido de Bluetooth os dois métodos ainda mostram o mesmo número. Foi só reposicionado (nunca dois códigos na mesma
+      tela). Para ser outro código teria de existir um segundo segredo no núcleo, o que muda a prova do cabo. Perguntar.
+    - Fonte única de "tem iPhone": `ModeloApp.iphoneAtivo` (cabo ou Bluetooth primeiro, depois Wi-Fi), usada pelo cabeçalho,
+      pelo menu, por Conexões e pela configuração inicial. "Falando agora" é o `visto` (última resposta boa da API, pelo Wi-Fi,
+      cabo ou Bluetooth) dentro de 30 s, senão o texto diz "fora de alcance". A tela de Conexões e a configuração inicial
+      releem isso no mesmo relógio de 5 s do cabeçalho (o iPhone lembrado de uma abertura anterior, que ainda não falou,
+      não é "conectado"), e "Último canal" só diz "agora" dentro dos mesmos 30 s. Resposta boa pelo Wi-Fi sem registro cria o
+      iPhone (o Mac reabriu): estar falando é estar conectado.
+    - Sobre: sem o título "Sobre o Deck" em cima e sem as linhas Mac, iPhone e Licença (a licença fica só no texto do grupo).
+    - Teclas: a lista de apps carrega ao abrir o Deck e o ícone observa a lista (antes só aparecia ao trocar de perfil).
+    - Permissões: terminado o pedido, o Deck volta para a frente. Se foi preciso abrir os Ajustes do Sistema (inclusive pelo
+      diálogo de Acessibilidade), o Deck não volta antes: olha a permissão a cada segundo (até 3 minutos) e volta quando ela
+      muda. Rede Local e Automação com o app alvo fechado o macOS não deixa reler, então não há espera: o Deck só volta
+      quando a pessoa clicar nele.
+    - Os avisos do menu e o selo da barra lateral abrem Conexões já no método onde o cartão aparece (renovação em Cabo e
+      Bluetooth, servidor e porta em PWA).
+    - Nome deste Mac: o campo passou de 170 para 280 pt.
+
 Nada em aberto que trave a fase 1. Falta só confirmar, na construção, o link que abre uma sessão
 específica no app do Claude do iPhone (se não existir, cai no "mostra a pergunta").
 

@@ -6,8 +6,9 @@ import AppKit
 /// pedir ao macOS, e "Abrir Ajustes do Sistema", que abre a página certa. A lista se atualiza sozinha.
 struct Acessos: View {
     @ObservedObject var modelo: ModeloApp
-    /// O que os botões fazem. Nas fotos e nos testes não abrem nada.
-    var abrir: (AcessoMac) -> Void = { NSWorkspace.shared.open($0.enderecoDosAjustes) }
+    /// O que os botões fazem. Nas fotos e nos testes não abrem nada. Sem nada passado, "Abrir Ajustes do Sistema" abre a
+    /// página e traz o Deck de volta quando a permissão mudar.
+    var abrir: ((AcessoMac) -> Void)?
     var permitir: ((AcessoMac) -> Void)?
     @Environment(\.fotografando) private var fotografando
 
@@ -22,7 +23,7 @@ struct Acessos: View {
                             if lido.podePermitir {
                                 BotaoDeAjuste(texto: "Permitir", estilo: .primario) { pedir(lido.acesso) }
                             }
-                            BotaoDeAjuste(texto: "Abrir Ajustes do Sistema", estilo: lido.situacao == .recusado ? .primario : .secundario) { abrir(lido.acesso) }
+                            BotaoDeAjuste(texto: "Abrir Ajustes do Sistema", estilo: lido.situacao == .recusado ? .primario : .secundario) { abrirAjustes(lido.acesso) }
                         }
                     }
                 }
@@ -31,6 +32,10 @@ struct Acessos: View {
         .frame(maxWidth: .infinity, alignment: .topLeading)
         // Ao abrir a seção lê de novo, mas nas fotos vale o que o modelo de exemplo diz.
         .onAppear { if !fotografando { modelo.atualizarAcessos() } }
+    }
+
+    private func abrirAjustes(_ acesso: AcessoMac) {
+        if let abrir { abrir(acesso) } else { PedidosDoMac(defaults: modelo.defaults).abrirAjustes(acesso) }
     }
 
     private func pedir(_ acesso: AcessoMac) {
