@@ -127,6 +127,8 @@ nav button[aria-current="page"] .ic-sec { color: var(--led) }
 .falta-perm svg { width: 13px; height: 13px }
 .chips { display: flex; flex-wrap: wrap; gap: var(--item); margin-top: var(--item) }
 .chip { font: inherit; font-size: var(--texto-xs); min-height: 28px; padding: 0 var(--icone); border-radius: var(--raio-pilula); border: 0; background: var(--superficie-2); color: var(--texto-2); cursor: pointer }
+.passo h5.titulinho { margin: var(--item) 0 0; font-size: var(--texto-xs); font-weight: 600; color: var(--texto-2) }
+.chips.pequenos { gap: var(--micro) }
 .chip[aria-pressed="true"] { background: var(--sucesso-suave); color: var(--texto); box-shadow: inset 0 0 0 1px var(--led) }
 .entrada { font: inherit; font-size: var(--texto-sm); min-height: var(--alvo-sm); border-radius: var(--raio-sm); border: 1px solid var(--borda); background: var(--tela-fundo); color: var(--texto); padding: 0 var(--icone); min-width: 0 }
 .entrada:focus-visible { outline: 2px solid var(--destaque); outline-offset: 1px }

@@ -50,6 +50,35 @@ enum CapaPequena {
     }
 }
 
+/// Garante que o Mac volte a anunciar o serviço depois de qualquer queda. O macOS pode parar o anúncio sem avisar
+/// (conexão que acabou, suspensão, rádio que reiniciou) e, parado, nenhum iPhone acha o Mac nem conecta: o log
+/// ficava mudo por horas. Quem usa chama `conferir` depois de cada queda e num relógio, e cada retomada vai para o log.
+final class VigiaDoAnuncio: @unchecked Sendable {
+    private let anunciando: () -> Bool
+    private let iniciar: () -> Void
+    private let log: @Sendable (String) -> Void
+    private let trava = NSLock()
+    private var _retomadas = 0
+
+    init(anunciando: @escaping () -> Bool, iniciar: @escaping () -> Void, log: @escaping @Sendable (String) -> Void) {
+        self.anunciando = anunciando
+        self.iniciar = iniciar
+        self.log = log
+    }
+
+    var retomadas: Int { trava.withLock { _retomadas } }
+
+    /// Se o anúncio parou, anuncia de novo e registra o motivo. Devolve true quando precisou retomar.
+    @discardableResult
+    func conferir(_ motivo: String) -> Bool {
+        guard !anunciando() else { return false }
+        trava.withLock { _retomadas += 1 }
+        log("bluetooth: o anúncio tinha parado (\(motivo)). Anunciando de novo.")
+        iniciar()
+        return true
+    }
+}
+
 #if canImport(CryptoKit)
 /// O que acontece com cada iPhone que conecta pelo Bluetooth: aperto de mão cifrado e, se passar, a sessão
 /// de pedidos e respostas (a mesma do cabo, em cima do fio cifrado).
@@ -227,6 +256,12 @@ final class RadioPeriferico: NSObject, CBPeripheralManagerDelegate, @unchecked S
     private var resposta: CBMutableCharacteristic?
     private var sessoes: [UUID: Sessao] = [:]
     private var montado = false
+    private var semSessao: Set<UUID> = []
+    private var vigia: VigiaDoAnuncio!
+    private var relogio: DispatchSourceTimer?
+    private var ultimoEstado: CBManagerState?
+    /// De quanto em quanto tempo se confere se o Mac ainda anuncia.
+    static let intervaloDaVigia: TimeInterval = 15
     private let uuidServico = CBUUID(string: EnlaceBle.servico)
     private let uuidPedido = CBUUID(string: EnlaceBle.pedido)
     private let uuidResposta = CBUUID(string: EnlaceBle.resposta)
@@ -242,11 +277,19 @@ final class RadioPeriferico: NSObject, CBPeripheralManagerDelegate, @unchecked S
     func iniciar() {
         fila.async { [self] in
             gerente = CBPeripheralManager(delegate: self, queue: fila, options: [CBPeripheralManagerOptionShowPowerAlertKey: false])
+            vigia = VigiaDoAnuncio(anunciando: { [self] in gerente.isAdvertising }, iniciar: { [self] in anunciar() }, log: log)
+            let t = DispatchSource.makeTimerSource(queue: fila)
+            t.schedule(deadline: .now() + Self.intervaloDaVigia, repeating: Self.intervaloDaVigia)
+            t.setEventHandler { [weak self] in self?.vigiar("conferência periódica") }
+            t.resume()
+            relogio = t
         }
     }
 
     func parar() {
         fila.async { [self] in
+            relogio?.cancel()
+            relogio = nil
             gerente?.stopAdvertising()
             for s in sessoes.values { s.fluxo.fechar() }
             sessoes = [:]
@@ -255,17 +298,39 @@ final class RadioPeriferico: NSObject, CBPeripheralManagerDelegate, @unchecked S
 
     // MARK: Estado e anúncio
 
+    /// Anuncia o serviço do Deck. Só roda com o serviço publicado e o rádio ligado.
+    private func anunciar() {
+        guard montado, gerente.state == .poweredOn else { return }
+        gerente.startAdvertising([CBAdvertisementDataServiceUUIDsKey: [uuidServico], CBAdvertisementDataLocalNameKey: nome()])
+    }
+
+    /// Roda na fila: refaz o anúncio parado e, se o serviço não chegou a ser publicado, publica de novo.
+    private func vigiar(_ motivo: String) {
+        guard let gerente, gerente.state == .poweredOn else { return }
+        if !montado {
+            log("bluetooth: o serviço não estava publicado (\(motivo)). Publicando de novo.")
+            montar(gerente)
+            return
+        }
+        vigia.conferir(motivo)
+    }
+
+    private func montar(_ p: CBPeripheralManager) {
+        montado = true
+        let pedido = CBMutableCharacteristic(type: uuidPedido, properties: [.write, .writeWithoutResponse], value: nil, permissions: [.writeable])
+        let resp = CBMutableCharacteristic(type: uuidResposta, properties: [.notify], value: nil, permissions: [.readable])
+        resposta = resp
+        let servico = CBMutableService(type: uuidServico, primary: true)
+        servico.characteristics = [pedido, resp]
+        p.add(servico)
+    }
+
     func peripheralManagerDidUpdateState(_ p: CBPeripheralManager) {
+        if p.state != ultimoEstado { log("bluetooth: estado do rádio do Mac \(p.state.rawValue)"); ultimoEstado = p.state }
         switch p.state {
         case .poweredOn:
-            guard !montado else { return }
-            montado = true
-            let pedido = CBMutableCharacteristic(type: uuidPedido, properties: [.write, .writeWithoutResponse], value: nil, permissions: [.writeable])
-            let resp = CBMutableCharacteristic(type: uuidResposta, properties: [.notify], value: nil, permissions: [.readable])
-            resposta = resp
-            let servico = CBMutableService(type: uuidServico, primary: true)
-            servico.characteristics = [pedido, resp]
-            p.add(servico)
+            guard !montado else { vigia.conferir("o rádio voltou a ligar"); return }
+            montar(p)
         case .unauthorized:
             log("bluetooth: o Mac não deixou o Deck usar o Bluetooth. Libere em Ajustes do Sistema > Privacidade e Segurança > Bluetooth.")
         case .poweredOff:
@@ -303,21 +368,33 @@ final class RadioPeriferico: NSObject, CBPeripheralManagerDelegate, @unchecked S
                 self?.fila.async { if let s = sessao, self?.sessoes[id] === s { self?.sessoes[id] = nil } }
             })
         sessoes[id] = sessao
+        semSessao.remove(id)
         let rotulo = String(id.uuidString.prefix(8))
         log("bluetooth \(rotulo): iPhone assinou (pacote de até \(central.maximumUpdateValueLength) bytes)")
-        let t = Thread { [aoAbrir] in aoAbrir(sessao.fluxo, rotulo) }
+        let t = Thread { [aoAbrir, weak self] in
+            aoAbrir(sessao.fluxo, rotulo)
+            // A sessão acabou (o iPhone saiu ou o aperto de mão falhou): confere o anúncio, que o macOS pode ter parado.
+            self?.fila.async { self?.vigiar("sessão \(rotulo) acabou") }
+        }
         t.name = "deck.bluetooth.\(rotulo)"
         t.start()
     }
 
     func peripheralManager(_ p: CBPeripheralManager, central: CBCentral, didUnsubscribeFrom c: CBCharacteristic) {
         guard c.uuid == uuidResposta else { return }
+        log("bluetooth \(String(central.identifier.uuidString.prefix(8))): iPhone saiu")
         if let s = sessoes.removeValue(forKey: central.identifier) { s.fluxo.fechar() }
+        vigiar("iPhone saiu")
     }
 
     func peripheralManager(_ p: CBPeripheralManager, didReceiveWrite requests: [CBATTRequest]) {
         for r in requests where r.characteristic.uuid == uuidPedido {
             if let dados = r.value, let s = sessoes[r.central.identifier] { s.fluxo.fila.empurrar(dados) }
+            else if sessoes[r.central.identifier] == nil, !semSessao.contains(r.central.identifier) {
+                // Pedido de quem ainda está conectado mas cuja sessão acabou: o iPhone detecta o silêncio e refaz a conexão.
+                semSessao.insert(r.central.identifier)
+                log("bluetooth \(String(r.central.identifier.uuidString.prefix(8))): pedido de iPhone sem sessão aberta, ignorei")
+            }
         }
         if let primeiro = requests.first { p.respond(to: primeiro, withResult: .success) }
     }
