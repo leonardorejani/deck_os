@@ -45,6 +45,18 @@ struct PaineisFalsos: ProvedorPaineis {
         return [Evento(titulo: "Ensaio", inicio: "\(de)T19:00:00Z", diaTodo: false, calendario: "Igreja", cor: "#000000", local: nil)]
     }
     func sessoes() -> [Sessao] { [Sessao(id: "s1", nome: "A", projeto: "deck", pergunta: "Seguir?", desde: "2026-11-10T09:00:00Z")] }
+    func fotoWhatsApp(arquivo: String) -> MidiaBaixada? {
+        registro.anotar("foto \(arquivo)")
+        return arquivo == "0123456789abcdef.jpg" ? MidiaBaixada(tipo: "image/jpeg", dados: Data([1, 2, 3])) : nil
+    }
+    func midiaWhatsApp(chat: String, id: String) -> ResultadoMidia {
+        registro.anotar("midia \(chat) \(id)")
+        return id == "grande" ? .erro("Arquivo grande demais para abrir aqui.") : .pronta(MidiaBaixada(tipo: "audio/ogg", dados: Data("oi".utf8)))
+    }
+    func abrirConversaWhatsApp(id: String) -> AberturaDeConversa {
+        registro.anotar("abrir-conversa \(id)")
+        return id == "g1" ? .aberta(aviso: "Grupo não tem link direto.") : id == "x" ? .falhou("Não achei essa conversa.") : .aberta(aviso: nil)
+    }
     func capa() -> CapaAtual? { temCapa ? CapaAtual(tipo: "image/png", dados: Data([1, 2, 3])) : nil }
 }
 

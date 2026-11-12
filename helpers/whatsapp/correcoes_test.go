@@ -17,7 +17,7 @@ func TestLoggedOutApagaAsConversasGuardadas(t *testing.T) {
 	pasta := t.TempDir()
 	arq := filepath.Join(pasta, "conversas.json")
 	e := NovoEstado(arq)
-	e.Recebida("a", "Ana", false, Msg{"", "segredo", "h"}, t0)
+	e.Recebida("a", "Ana", false, Msg{De: "", Texto: "segredo", Hora: "h"}, t0)
 	if err := e.Salvar(); err != nil {
 		t.Fatal(err)
 	}
@@ -86,9 +86,9 @@ func TestTentativasParamQuandoOContextoAcaba(t *testing.T) {
 func TestSalvarNaoGravaConversaLida(t *testing.T) {
 	arq := filepath.Join(t.TempDir(), "conversas.json")
 	e := NovoEstado(arq)
-	e.Recebida("a", "Ana", false, Msg{"", "texto da lida", "h"}, t0)
-	e.Recebida("b", "Bia", false, Msg{"", "antiga", "h0"}, t0)
-	e.Recebida("b", "Bia", false, Msg{"", "nova", "h1"}, t0.Add(time.Minute))
+	e.Recebida("a", "Ana", false, Msg{De: "", Texto: "texto da lida", Hora: "h"}, t0)
+	e.Recebida("b", "Bia", false, Msg{De: "", Texto: "antiga", Hora: "h0"}, t0)
+	e.Recebida("b", "Bia", false, Msg{De: "", Texto: "nova", Hora: "h1"}, t0.Add(time.Minute))
 	e.Lida("a")
 	if err := e.Salvar(); err != nil {
 		t.Fatal(err)
@@ -100,5 +100,55 @@ func TestSalvarNaoGravaConversaLida(t *testing.T) {
 	}
 	if !strings.Contains(s, "antiga") || !strings.Contains(s, "nova") {
 		t.Fatalf("a nao lida devia ficar: %s", s)
+	}
+}
+
+// Mensagem nova não espera: a lista sai logo que o evento chega (antes esperava 300 ms de "juntar").
+func TestMensagemNovaSaiNaHora(t *testing.T) {
+	saiu := make(chan time.Time, 4)
+	velho := emitir
+	emitir = func(any) { saiu <- time.Now() }
+	defer func() { emitir = velho }()
+	a := &ajudante{estado: NovoEstado(""), sujo: make(chan struct{}, 1), grupos: map[string]string{}, tentadas: map[string]time.Time{}}
+	ctx, parar := context.WithCancel(context.Background())
+	defer parar()
+	go a.publicar(ctx)
+	ini := time.Now()
+	a.marcarSujo()
+	select {
+	case quando := <-saiu:
+		if d := quando.Sub(ini); d > 100*time.Millisecond {
+			t.Fatalf("demorou %v para sair", d)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("a lista nunca saiu")
+	}
+}
+
+// Uma consulta de rede lenta no completar (nome de grupo) nao pode segurar a mensagem nova seguinte.
+func TestCompletarLentoNaoSegraMensagemNova(t *testing.T) {
+	saiu := make(chan struct{}, 8)
+	velho := emitir
+	emitir = func(any) { saiu <- struct{}{} }
+	defer func() { emitir = velho }()
+	travar := make(chan struct{})
+	defer close(travar)
+	a := &ajudante{estado: NovoEstado(""), sujo: make(chan struct{}, 1), grupos: map[string]string{}, tentadas: map[string]time.Time{}}
+	a.completarFn = func(context.Context) bool { <-travar; return false }
+	ctx, parar := context.WithCancel(context.Background())
+	defer parar()
+	go a.publicar(ctx)
+	a.marcarSujo()
+	select {
+	case <-saiu:
+	case <-time.After(2 * time.Second):
+		t.Fatal("a primeira lista nunca saiu")
+	}
+	time.Sleep(50 * time.Millisecond) // o completar ja esta travado
+	a.marcarSujo()
+	select {
+	case <-saiu:
+	case <-time.After(2 * time.Second):
+		t.Fatal("a mensagem nova ficou presa atras do completar lento")
 	}
 }

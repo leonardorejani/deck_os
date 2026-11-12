@@ -24,6 +24,7 @@
   --raio-mini: 4px;
   --ic-vazio: 48px;
   --texto-campo: 16px;
+  --foto-msg: 240px;        /* largura máxima da foto dentro do balão */
   --micro-gap: 2px;         /* entre itens de lista colada */      /* campo com 16 não dá zoom no iPhone */
 }
 
@@ -340,6 +341,19 @@ button.cartao { font: inherit; color: inherit; text-align: left; border: 0; curs
 .mensagens p { overflow-wrap: anywhere; margin: 0; background: var(--superficie-2); border-radius: var(--raio-sm) var(--raio) var(--raio) var(--raio); padding: var(--item) var(--icone); font-size: var(--texto-sm); max-width: 90% }
 .mensagens p small { display: block; color: var(--texto-2); font-size: var(--texto-xs) }
 .mensagens .btn { justify-self: start }
+.avatar { overflow: hidden }
+.avatar img { width: 100%; height: 100%; object-fit: cover; display: block }
+.mensagens p .hora-msg { display: block; text-align: right; color: var(--texto-2); font-size: var(--texto-xs); font-variant-numeric: tabular-nums; margin-top: var(--micro-gap) }
+.mensagens p.midia-msg { display: grid; gap: var(--item) }
+.mensagens .foto-msg { display: block; min-height: var(--alvo); max-width: var(--foto-msg) }
+.mensagens .foto-msg img { display: block; width: 100%; height: auto; border-radius: var(--raio-sm) }
+.mensagens .foto-espera { display: block; color: var(--texto-2); font-size: var(--texto-xs) }
+.mensagens .audio-msg { display: block }
+.mensagens .audio-msg audio { width: 100%; max-width: var(--foto-msg); height: var(--alvo-sm); display: block }
+.mensagens .audio-msg .btn { display: inline-flex; align-items: center; gap: var(--item) }
+.mensagens .audio-msg .btn svg, .mensagens .unica svg { width: var(--ic-mini); height: var(--ic-mini); flex: none }
+.mensagens .audio-msg .btn.carregando { opacity: .6 }
+.mensagens .unica { display: inline-flex; align-items: center; gap: var(--item); color: var(--texto-2) }
 
 /* sessões (folha): um cartão por sessão, e a sessão aberta com o pedido em destaque e o contexto embaixo */
 .grade-sessoes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--grade) }

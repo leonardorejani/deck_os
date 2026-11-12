@@ -288,6 +288,13 @@ struct MensagemWhatsApp: Codable, Equatable, Sendable {
     var de: String
     var texto: String
     var hora: String
+    /// Só na origem "qr". O id da mensagem (serve para pedir a mídia) e o tipo: "foto", "audio" ou "video". Ausente = texto.
+    var id: String? = nil
+    var tipo: String? = nil
+    /// Visualização única: o painel mostra só o balão com o ícone, e o Mac nunca entrega o conteúdo.
+    var unica: Bool? = nil
+    /// Dá para abrir a mídia no iPhone (foto e áudio comuns, até o limite de tamanho).
+    var midia: Bool? = nil
 }
 
 struct ConversaWhatsApp: Codable, Equatable, Sendable {
@@ -298,6 +305,12 @@ struct ConversaWhatsApp: Codable, Equatable, Sendable {
     /// Hora da última mensagem, ISO 8601.
     var ultima: String
     var mensagens: [MensagemWhatsApp]
+    /// Só na origem "qr". Arquivada aparece só no filtro Arquivadas e não entra na conta das não lidas.
+    var arquivada: Bool? = nil
+    /// Só na origem "qr". Os dígitos do telefone (conversa direta), para abrir a conversa no WhatsApp Web.
+    var numero: String? = nil
+    /// Só na origem "qr". O arquivo da foto de perfil (pedida em /api/whatsapp/foto/<arquivo>). Ausente = sem foto.
+    var foto: String? = nil
 }
 
 // MARK: - Rotas (todas exigem o código de acesso, menos os arquivos da página e /api/parear)
@@ -317,6 +330,9 @@ struct ConversaWhatsApp: Codable, Equatable, Sendable {
 //                                  Sem `modo`, `repetir[?v=1|0]` segue sendo o do AppleScript acima.
 // GET  /api/capa                   PNG ou JPEG da capa atual
 // GET  /api/whatsapp               -> [ConversaWhatsApp] (vazia quando Estado.whatsapp.origem é "web": o navegador só dá o total)
+// GET  /api/whatsapp/foto/<arquivo> -> {"tipo", "dados" (base64)}  a foto de perfil (origem "qr"; 404 sem foto)
+// GET  /api/whatsapp/midia?chat=<id>&id=<mensagem> -> {"tipo", "dados" (base64)}  a foto ou o áudio de uma mensagem (origem "qr", até 8 MB, nunca visualização única)
+// POST /api/whatsapp/abrir         <- {"id": "<conversa>"}  abre a conversa no WhatsApp Web do Mac -> {"ok": true, "aviso"?}
 // GET  /api/agenda?de=AAAA-MM-DD&dias=N -> [Evento]
 // GET  /api/sessoes                -> [Sessao]
 // POST /api/sessoes/<id>/abrir     traz para a frente o terminal da sessão no Mac -> SessaoAberta {"ok", "como": "terminal"|"pasta", "app"}

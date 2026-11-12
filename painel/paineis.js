@@ -32,25 +32,32 @@ const esqueletoCal = () => '<div class="esq-lista" aria-hidden="true"><section c
 const msgErro = e => e.rede ? 'Sem conexão com o Mac. Confira o Wi-Fi.' : e.message;
 
 /* ---------- WhatsApp ---------- */
-const wa = { lista: null, json: '', filtro: 'todas', aberta: null, erro: '', mexendo: false, seq: 0 };
+const wa = { lista: null, json: '', filtro: 'todas', aberta: null, erro: '', mexendo: false, seq: 0, pendente: false, lendo: false, total: null, abrindo: false };
 function horaConversa(iso) {
   const d = new Date(iso); if (isNaN(d)) return '';
   const dias = diasEntre(d, V?.ref || Date.now());
   return dias <= 0 ? hhmm(d) : dias === 1 ? 'ontem' : dias < 7 ? d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '') : d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 }
-function abrirWhats() { wa.aberta = null; wa.filtro = 'todas'; wa.lista = null; wa.json = ''; wa.erro = ''; pintarWhats(); abrirFolha('#f-whats'); lerWhats() }
+function abrirWhats() { wa.aberta = null; wa.filtro = 'todas'; wa.lista = null; wa.json = ''; wa.erro = ''; wa.pendente = false; wa.total = null; pintarWhats(); abrirFolha('#f-whats'); lerWhats() }
+/* um player tocando não pode ser derrubado por uma mensagem nova: a lista repinta quando ele pausa ou acaba */
+const waTocando = () => [...document.querySelectorAll('#wa-lista audio')].some(a => !a.paused && !a.ended);
 async function lerWhats() {
+  if (wa.lendo) return; wa.lendo = true;
   const n = ++wa.seq;
   try {
     const l = await canal.whatsapp(); if (n !== wa.seq) return;
     const lista = Array.isArray(l) ? l : [], j = JSON.stringify([lista, V?.whatsapp || null]); // o total e a origem vêm do estado, não da lista
-    if (j !== wa.json || wa.erro) { wa.json = j; wa.lista = lista; wa.erro = ''; if (!wa.mexendo) pintarWhats() }
+    if (j !== wa.json || wa.erro) { wa.json = j; wa.lista = lista; wa.erro = ''; if (!wa.mexendo && !waTocando()) pintarWhats(); else wa.pendente = true }
   } catch (e) {
     if (n !== wa.seq) return;
     if (e.status === 401) return tratarErro(e);
-    const era = wa.erro; wa.erro = msgErro(e); if (!wa.lista) pintarWhats(); else if (!era) avisar(wa.erro, { erro: true }); // o aviso dura 4 s uma vez, não a cada leitura
-  }
+    const era = wa.erro; wa.erro = msgErro(e); if (!wa.lista) { if (wa.erro !== era) pintarWhats() } else if (!era) avisar(wa.erro, { erro: true }); // o aviso dura 4 s uma vez, não a cada leitura. A lista de erro só repinta se o motivo mudou (o botão não pode sumir debaixo do dedo)
+  } finally { wa.lendo = false }
 }
+/* Com a lista de pé a folha acompanha a cada 1 s (o Mac já empurra a mensagem nova na hora, o resto era a espera daqui). Em erro vale só a leitura de 4 s abaixo */
+setInterval(() => { if (folhaAberta?.id === 'f-whats' && wa.lista && !wa.erro && !document.hidden && V && !V.carregando && !semAcesso && !offline) lerWhats() }, 1000);
+$('#wa-lista').addEventListener('pause', () => { if (wa.pendente && !waTocando()) { wa.pendente = false; pintarWhats() } }, true);
+$('#wa-lista').addEventListener('ended', () => { if (wa.pendente && !waTocando()) { wa.pendente = false; pintarWhats() } }, true);
 /* Pelo WhatsApp Web o Mac só enxerga o total (o título da aba), sem lista por conversa: a folha diz isso em vez de inventar linhas */
 function pintarWhatsWeb() {
   const w = V.whatsapp, n = w.total || 0, aberto = w.aberto !== false;
@@ -69,12 +76,15 @@ function pintarWhats() {
   const w = V?.whatsapp;
   /* subindo ou caiu um instante: o Mac reconecta sozinho, não precisa ler QR. A lista de antes continua à vista */
   const reconectando = w?.origem === 'qr' && w.aberto === false && w.reconectando === true;
+  const qr = w?.origem === 'qr'; $('#wa-filtro [data-f=arquivadas]').hidden = !qr; if (!qr && wa.filtro === 'arquivadas') wa.filtro = 'todas'; // só o aparelho conectado entrega as arquivadas
   $('#wa-filtro').hidden = w?.origem === 'web' || (w?.origem === 'qr' && w.aberto === false && !reconectando);
   if (w?.origem === 'web') return pintarWhatsWeb();
   if (w?.origem === 'qr' && w.aberto === false && !reconectando) return pintarWhatsQrCaido();
-  const todas = wa.lista || [], total = todas.reduce((s, c) => s + (c.naoLidas || 0), 0);
-  const lista = todas.filter(c => wa.filtro === 'todas' || (wa.filtro === 'grupos') === !!c.grupo);
-  $('#wa-titulo').innerHTML = wa.lista ? `WhatsApp <small>${total} não lidas em ${todas.length} ${todas.length === 1 ? 'conversa' : 'conversas'}</small>` : 'WhatsApp';
+  const todas = wa.lista || [], contam = todas.filter(c => !c.arquivada), total = contam.reduce((s, c) => s + (c.naoLidas || 0), 0);
+  /* Arquivadas aparecem só no filtro delas: somem de Todas, Contatos e Grupos */
+  const lista = todas.filter(c => wa.filtro === 'arquivadas' ? !!c.arquivada : !c.arquivada && (wa.filtro === 'todas' || (wa.filtro === 'grupos') === !!c.grupo));
+  $('#wa-titulo').innerHTML = wa.lista ? `WhatsApp <small><span class="n-total">${total}</span> não lidas em ${contam.length} ${contam.length === 1 ? 'conversa' : 'conversas'}</small>` : 'WhatsApp';
+  if (wa.lista) animarTotal(total);
   $$('#wa-filtro button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.f === wa.filtro)));
   $('#wa-lista').setAttribute('aria-busy', String(!wa.lista && !wa.erro));
   const notaReconecta = reconectando ? '<div class="vazio-bloco" style="min-height:96px"><strong>Reconectando ao WhatsApp</strong><span>Volta sozinho em instantes. Não precisa ler o QR de novo.</span></div>' : '';
@@ -82,16 +92,106 @@ function pintarWhats() {
   if (!wa.lista) { const el = $('#wa-lista'); if (wa.erro) el.innerHTML = erroLista(wa.erro); else if (!el.querySelector('.esq-lista')) el.innerHTML = esqueletoWa(); return }
   manterRolagem($('#wa-lista'), notaReconecta + lista.map(c => {
     const msgs = c.mensagens || [], ult = msgs[msgs.length - 1] || { de: '', texto: '' }, aberta = wa.aberta === c.id;
-    const corpo = aberta ? `<div class="mensagens">${msgs.map(m => `<p>${m.de ? `<small>${esc(m.de)}</small>` : ''}${esc(m.texto)}</p>`).join('')}<button class="btn secundario pequeno" data-wa-mac="${esc(c.id)}">Responder no Mac</button></div>` : '';
-    return `<button class="conversa" data-wa="${esc(c.id)}" aria-expanded="${aberta}"><span class="avatar">${c.grupo ? SVG.grupo : esc(iniciais(c.nome))}</span>
-      <span style="min-width:0"><div class="nome-c">${esc(c.nome)}${c.grupo ? '<small>grupo</small>' : ''}</div><div class="previa">${ult.de ? esc(ult.de) + ': ' : ''}${esc(ult.texto)}</div></span>
+    const corpo = aberta ? `<div class="mensagens">${msgs.map(m => balaoWa(c, m)).join('')}<button class="btn secundario pequeno" data-wa-mac="${esc(c.id)}">Responder no Mac</button></div>` : '';
+    return `<button class="conversa" data-wa="${esc(c.id)}" aria-expanded="${aberta}">${avatarWa(c)}
+      <span style="min-width:0"><div class="nome-c">${esc(nomeWa(c))}${c.grupo ? '<small>grupo</small>' : ''}</div><div class="previa">${ult.de ? esc(ult.de) + ': ' : ''}${esc(ult.texto)}</div></span>
       <span class="lado"><span>${esc(horaConversa(c.ultima))}</span><span class="qtd">${esc(c.naoLidas)}</span></span></button>${corpo}`;
-  }).join('') || '<div class="vazio-bloco" style="min-height:120px"><strong>Nada aqui</strong><span>Sem não lidas nesse filtro.</span></div>');
+  }).join('') || `<div class="vazio-bloco" style="min-height:120px"><strong>Nada aqui</strong><span>${wa.filtro === 'arquivadas' ? 'Nenhuma arquivada com mensagem nova.' : 'Sem não lidas nesse filtro.'}</span></div>`);
+  carregarMidiasWa();
+}
+/* O total de não lidas conta até o valor novo (tatile, movimento 9). Sem movimento reduzido, 600 ms com ease-out cúbico */
+function animarTotal(para) {
+  const antes = wa.total; wa.total = para;
+  const el = $('#wa-titulo .n-total'); if (!el || antes === null || antes === para || reduzido()) return;
+  const dur = msCss('--mov-contar') || 600, t0 = performance.now(), id = ++animarTotal.id;
+  const passo = t => { if (id !== animarTotal.id || !el.isConnected) return; const k = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - k, 3); el.textContent = Math.round(antes + (para - antes) * e); if (k < 1) requestAnimationFrame(passo) };
+  requestAnimationFrame(passo);
+}
+animarTotal.id = 0;
+/* conversa sem nome nunca vira linha em branco: o Mac já manda o nome, o número ou "Contato", e aqui é a última guarda */
+const nomeWa = c => String(c.nome || '').trim() || (c.grupo ? 'Grupo' : 'Contato');
+const temLetra = n => /\p{L}/u.test(n);
+/* foto de perfil: vem do Mac em base64 sob demanda e fica guardada (a mesma foto não é pedida de novo) */
+const waBlobs = new Map();
+function guardarBlob(chave, url) { waBlobs.set(chave, url); if (waBlobs.size > 60) { const [k, v] = waBlobs.entries().next().value; if (v) URL.revokeObjectURL(v); waBlobs.delete(k) } return url }
+function blobDoMac(r) { const bin = atob(r.dados), u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i); return URL.createObjectURL(new Blob([u8], { type: r.tipo })) }
+function avatarWa(c) {
+  const url = c.foto ? waBlobs.get('foto:' + c.foto) : null;
+  const dentro = url ? `<img alt="" src="${esc(url)}">` : c.grupo ? SVG.grupo : temLetra(nomeWa(c)) && nomeWa(c) !== 'Contato' ? esc(iniciais(nomeWa(c))) : SVG.pessoa; // sem nome (ou só número): o avatar de pessoa, não iniciais inventadas
+  return `<span class="avatar"${c.foto && !url ? ` data-foto="${esc(c.foto)}"` : ''}>${dentro}</span>`;
+}
+/* horário em que a mensagem chegou: hoje só a hora, antes dela o dia e a hora */
+function horaMsg(iso) {
+  const d = new Date(iso); if (isNaN(d)) return '';
+  return mesmoDia(d, new Date(V?.ref || Date.now())) ? hhmm(d) : `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)} ${hhmm(d)}`;
+}
+function balaoWa(c, m) {
+  const quem = m.de ? `<small>${esc(m.de)}</small>` : '', hora = `<time class="hora-msg">${esc(horaMsg(m.hora))}</time>`, chave = esc(c.id) + '|' + esc(m.id || '');
+  if (m.unica) return `<p class="unica-msg">${quem}<span class="unica">${m.tipo === 'audio' ? SVG.audio : SVG.foto}<span>${esc(m.texto)}</span>${SVG.unica}</span>${hora}</p>`;
+  if (m.midia && m.tipo === 'foto') {
+    const url = waBlobs.get('midia:' + c.id + '|' + m.id), legenda = m.texto && m.texto !== 'Foto' ? `<span>${esc(m.texto)}</span>` : '';
+    return `<p class="midia-msg">${quem}<span class="foto-msg" data-foto-msg="${chave}">${url ? `<img alt="Foto" src="${esc(url)}">` : '<span class="foto-espera" aria-busy="true">Carregando a foto...</span>'}</span>${legenda}${hora}</p>`;
+  }
+  if (m.midia && m.tipo === 'audio') {
+    const url = waBlobs.get('midia:' + c.id + '|' + m.id);
+    return `<p class="midia-msg">${quem}<span class="audio-msg" data-audio-msg="${chave}">${url ? `<audio controls preload="metadata" src="${esc(url)}"></audio>` : `<button class="btn secundario pequeno" data-ouvir="${chave}">${SVG.play}Ouvir o áudio</button>`}</span>${hora}</p>`;
+  }
+  return `<p>${quem}${esc(m.texto)}${hora}</p>`;
+}
+const tipoMsg = (chat, id) => { const c = (wa.lista || []).find(x => x.id === chat); return { c, m: c?.mensagens?.find(x => x.id === id) } };
+const baixando = new Set();
+async function baixarMidiaWa(chat, id) {
+  const chave = 'midia:' + chat + '|' + id;
+  if (waBlobs.has(chave)) return waBlobs.get(chave);
+  if (baixando.has(chave)) return null;
+  baixando.add(chave);
+  try { return guardarBlob(chave, blobDoMac(await canal.whatsappMidia(chat, id))) } finally { baixando.delete(chave) }
+}
+let lendoFotos = 0;
+/* depois de pintar: as fotos de perfil que faltam e as fotos da conversa aberta (uma por vez, para não entupir o cabo nem o Bluetooth) */
+async function carregarMidiasWa() {
+  for (const el of $$('#wa-lista [data-foto]')) {
+    const arq = el.dataset.foto; if (waBlobs.has('foto:' + arq) || baixando.has('foto:' + arq)) continue;
+    baixando.add('foto:' + arq);
+    canal.whatsappFoto(arq).then(r => guardarBlob('foto:' + arq, blobDoMac(r)), () => guardarBlob('foto:' + arq, null))
+      .then(url => { if (url) $$('#wa-lista [data-foto]').forEach(a => { if (a.dataset.foto === arq) { a.innerHTML = `<img alt="" src="${esc(url)}">`; a.removeAttribute('data-foto') } }) })
+      .finally(() => baixando.delete('foto:' + arq));
+  }
+  if (lendoFotos) return; lendoFotos = 1;
+  try {
+    for (const el of $$('#wa-lista [data-foto-msg]')) {
+      const [chat, id] = el.dataset.fotoMsg.split('|'); if (!el.querySelector('.foto-espera')) continue;
+      try {
+        const url = await baixarMidiaWa(chat, id); if (!url) continue;
+        $$('#wa-lista [data-foto-msg]').forEach(a => { if (a.dataset.fotoMsg === el.dataset.fotoMsg) a.innerHTML = `<img alt="Foto" src="${esc(url)}">` });
+      } catch (e) { $$('#wa-lista [data-foto-msg]').forEach(a => { if (a.dataset.fotoMsg === el.dataset.fotoMsg) a.innerHTML = `<span class="foto-espera">${esc(e.message || 'Não deu para abrir a foto.')}</span>` }) }
+    }
+  } finally { lendoFotos = 0 }
+}
+async function ouvirAudioWa(botao) {
+  const [chat, id] = botao.dataset.ouvir.split('|'); if (botao.disabled) return;
+  botao.disabled = true; botao.classList.add('carregando');
+  try {
+    const url = await baixarMidiaWa(chat, id);
+    const alvo = botao.closest('.audio-msg'); if (!url || !alvo) return;
+    alvo.innerHTML = `<audio controls preload="metadata" src="${esc(url)}"></audio>`;
+    const a = alvo.querySelector('audio');
+    a.addEventListener('error', () => { alvo.innerHTML = '<span class="foto-espera">Este aparelho não toca esse áudio.</span>' }, { once: true });
+    a.play().catch(() => {}); // se o iPhone barrar o início sozinho, é só tocar no play
+  } catch (e) { botao.disabled = false; botao.classList.remove('carregando'); avisar(e.message || 'Não deu para baixar o áudio.', { erro: true }) }
+}
+/* "Responder no Mac" abre a conversa do contato no WhatsApp Web (grupo não tem link direto: o Mac abre o Web e avisa). Mac antigo cai no jeito de antes */
+async function responderNoMac(id) {
+  if (wa.abrindo) return; wa.abrindo = true;
+  try { const r = await canal.abrirConversa(id); avisar(r?.aviso || 'Abrindo a conversa no WhatsApp Web') }
+  catch (e) { if (e.status === 404) abrirNoMac('whatsapp', 'Abrindo o WhatsApp no Mac'); else if (e.status === 401) tratarErro(e); else avisar(msgErro(e), { erro: true }) }
+  finally { wa.abrindo = false }
 }
 $('#wa-filtro').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { wa.filtro = b.dataset.f; wa.aberta = null; pintarWhats() } });
 $('#wa-lista').addEventListener('click', e => {
   if (e.target.closest('[data-tentar]')) { wa.erro = ''; pintarWhats(); return lerWhats() }
-  if (e.target.closest('[data-wa-mac]')) return abrirNoMac('whatsapp', 'Abrindo o WhatsApp no Mac');
+  const resp = e.target.closest('[data-wa-mac]'); if (resp) return responderNoMac(resp.dataset.waMac);
+  const ou = e.target.closest('[data-ouvir]'); if (ou) return ouvirAudioWa(ou);
   const c = e.target.closest('[data-wa]'); if (c) alternarConversa(c.dataset.wa);
 });
 $('#wa-abrir').onclick = () => abrirNoMac('whatsapp', 'Abrindo o WhatsApp no Mac');
