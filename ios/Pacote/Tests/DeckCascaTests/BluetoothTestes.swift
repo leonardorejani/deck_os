@@ -363,6 +363,37 @@ final class BluetoothTestes: XCTestCase {
         XCTAssertTrue(linhas.todas.contains { $0.contains("não reconhece este iPhone") }, "\(linhas.todas)")
     }
 
+    /// Defeito de 11/11/2026: "Desconectar iPhone" no Mac mudou o código, nenhum canal conectava mais, a página nunca
+    /// recebia 401 e o iPhone ficava em "Mac desconectado" para sempre em vez de voltar à tela de parear.
+    func testMacQueDesconectouOIphoneFazOAppEsquecerEVoltarAParear() async throws {
+        let mac = MacDeTeste(codigoAcesso: "OUTROCODIGOOUTROCODI")
+        let cofre = CofreEmMemoria(pareado(codigo: "CODIGOVELHOCODIGOVEL"))
+        let (g, _) = gerente(RadioFalso(mac), cofre: cofre)
+        let (c, _) = casca(g, cofre: cofre)
+        var recarregou = false
+        c.recarregarPagina = { recarregou = true }
+        c.iniciar()
+        await esperar({ cofre.ler() == nil }, segundos: 5)
+        XCTAssertNil(cofre.ler(), "o pareamento acabou")
+        XCTAssertTrue(recarregou, "a página volta à tela de parear")
+        XCTAssertEqual(c.fluxo.estado, EstadoPareamento())
+    }
+
+    /// Mesmo defeito, iPhone pareado só pelo cabo (sem o id do Bluetooth ainda): o ramo "tenta o próximo Mac" nunca
+    /// contava recusa, então a tela ficava presa.
+    func testPareadoSoPeloCaboQueOMacRecusaEsqueceOPareamento() async throws {
+        let mac = MacDeTeste(codigoAcesso: "OUTROCODIGOOUTROCODI")
+        let cofre = CofreEmMemoria(pareado(nil, codigo: "CODIGOVELHOCODIGOVEL"))
+        let (g, _) = gerente(RadioFalso(mac), cofre: cofre)
+        let (c, _) = casca(g, cofre: cofre)
+        var recarregou = false
+        c.recarregarPagina = { recarregou = true }
+        c.iniciar()
+        await esperar({ cofre.ler() == nil }, segundos: 5)
+        XCTAssertNil(cofre.ler(), "o pareamento acabou")
+        XCTAssertTrue(recarregou, "a página volta à tela de parear")
+    }
+
     func testPareadoPeloCaboAchaOMacPeloRadioEGuardaOIdentificador() async throws {
         let mac = MacDeTeste()
         let cofre = CofreEmMemoria(pareado(nil))

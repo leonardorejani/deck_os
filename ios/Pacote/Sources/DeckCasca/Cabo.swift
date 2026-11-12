@@ -74,6 +74,8 @@ final class ConexaoCabo: @unchecked Sendable {
 
     private var _rejeitada = false
     private func rejeitada() -> Bool { trava.withLock { _rejeitada } }
+    /// O Mac do outro lado não provou o código de acesso deste iPhone (não o conhece ou conhece outro).
+    var rejeitadaPeloMac: Bool { rejeitada() }
 
     /// Decide se este "ola" vale como apresentação. Devolve true quando é a primeira apresentação aceita.
     private func receberOla(_ m: MensagemCabo) -> Bool {
@@ -209,6 +211,11 @@ public final class GerenteDoCabo: @unchecked Sendable {
     private var macAtual: MacEncontrado?
     private var inscritos: [UUID: AsyncStream<MacEncontrado>.Continuation] = [:]
     private var aoMudarCabo: (@Sendable (MacEncontrado?) -> Void)?
+    private var aoNaoReconhecidoCabo: (@Sendable () -> Void)?
+    private var recusasSeguidas = 0
+    /// Quantas conexões seguidas o Mac pode deixar sem provar o código antes de o pareamento valer como acabado.
+    /// Uma só poderia ser um instante da troca do código de acesso: a segunda, logo em seguida, confirma.
+    static let recusasParaEsquecer = 2
 
     /// `segredo` devolve o código de acesso guardado (nil enquanto não pareou). Pareado, só o Mac que o prova entra.
     public convenience init(porta: UInt16 = GerenteDoCabo.portaPadrao, segredo: @escaping @Sendable () -> String? = { nil },
@@ -227,6 +234,11 @@ public final class GerenteDoCabo: @unchecked Sendable {
     /// Chamado quando o Mac se apresenta (com ele) e quando o fio cai (com nil).
     public func aoMudar(_ f: @escaping @Sendable (MacEncontrado?) -> Void) {
         trava.withLock { aoMudarCabo = f }
+    }
+
+    /// O Mac que conecta pelo cabo não prova o código deste iPhone várias vezes seguidas: o Mac desconectou o aparelho.
+    public func aoNaoReconhecido(_ f: @escaping @Sendable () -> Void) {
+        trava.withLock { aoNaoReconhecidoCabo = f }
     }
 
     /// Abre a porta. Devolve o texto do problema se não abriu.
@@ -326,6 +338,7 @@ public final class GerenteDoCabo: @unchecked Sendable {
             let a = conexao
             conexao = c
             macAtual = mac
+            if c.autenticada { recusasSeguidas = 0 }
             return (a, Array(inscritos.values), aoMudarCabo, true)
         }
         guard r.ok else { c.fechar(); return }
@@ -343,6 +356,7 @@ public final class GerenteDoCabo: @unchecked Sendable {
     }
 
     private func caiu(_ c: ConexaoCabo) {
+        if c.rejeitadaPeloMac { recusouOMac() }
         // Só avisa se era a conexão em uso: a antiga, trocada por uma nova, cai em silêncio.
         let era: (aviso: (@Sendable (MacEncontrado?) -> Void)?, era: Bool) = trava.withLock {
             candidatas.removeValue(forKey: ObjectIdentifier(c))
@@ -354,6 +368,21 @@ public final class GerenteDoCabo: @unchecked Sendable {
         guard era.era else { return }
         log("cabo: conexão com o Mac caiu")
         era.aviso?(nil)
+    }
+}
+
+extension GerenteDoCabo {
+    /// Sem prova do código, o cabo conecta e cai a cada 2 s e nenhum pedido sai, então a página nunca recebe um 401.
+    fileprivate func recusouOMac() {
+        let aviso: (@Sendable () -> Void)? = trava.withLock {
+            recusasSeguidas += 1
+            guard recusasSeguidas >= Self.recusasParaEsquecer else { return nil }
+            recusasSeguidas = 0
+            return aoNaoReconhecidoCabo
+        }
+        guard let aviso else { return }
+        log("cabo: o Mac não provou o código deste iPhone, o pareamento acabou")
+        aviso()
     }
 }
 

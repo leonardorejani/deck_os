@@ -272,6 +272,68 @@ final class CaboTestes: XCTestCase {
         XCTAssertEqual(mac.vistos.first?.cabecalhos["x-deck-codigo"], "ANTIGO", "a página manda o código no cabeçalho em minúsculas")
     }
 
+    // MARK: Mac que desconectou o iPhone (código de acesso mudou)
+
+    final class Contagem: @unchecked Sendable {
+        private let trava = NSLock()
+        private var n = 0
+        func somar() { trava.withLock { n += 1 } }
+        var valor: Int { trava.withLock { n } }
+    }
+
+    /// Defeito de 11/11/2026: sem Bluetooth, o cabo conectava e caía a cada 2 s com o código velho e o iPhone nunca
+    /// esquecia o pareamento. Duas conexões seguidas sem prova (uma só pode ser a troca do código) é o sinal.
+    func testCaboSoQueNaoProvaOCodigoDuasVezesAvisaQueOPareamentoAcabou() throws {
+        let (g, porta, _) = gerente(segredo: "CODIGOVELHOCODIGOVEL")
+        let avisos = Contagem()
+        g.aoNaoReconhecido { avisos.somar() }
+        _ = try MacFalso(porta: porta, segredo: "OUTROCODIGOOUTROCODI")
+        esperarSync({ avisos.valor == 0 && g.mac == nil }, "a primeira recusa derruba, sem avisar ainda")
+        XCTAssertEqual(avisos.valor, 0, "uma recusa só não basta")
+        _ = try MacFalso(porta: porta, segredo: "OUTROCODIGOOUTROCODI")
+        esperarSync({ avisos.valor == 1 }, "a segunda recusa seguida avisa")
+        XCTAssertNil(g.mac)
+    }
+
+    func testCaboQueProvaOCodigoZeraAContagemDeRecusas() throws {
+        let (g, porta, _) = gerente(segredo: "CODIGOVELHOCODIGOVEL")
+        let avisos = Contagem()
+        g.aoNaoReconhecido { avisos.somar() }
+        _ = try MacFalso(porta: porta, segredo: "OUTROCODIGOOUTROCODI")
+        Thread.sleep(forTimeInterval: 0.3)
+        let bom = try MacFalso(porta: porta, segredo: "CODIGOVELHOCODIGOVEL")
+        esperarSync({ g.mac != nil }, "o Mac certo conectou")
+        bom.cair()
+        esperarSync({ g.mac == nil }, "caiu")
+        _ = try MacFalso(porta: porta, segredo: "OUTROCODIGOOUTROCODI")
+        Thread.sleep(forTimeInterval: 0.5)
+        XCTAssertEqual(avisos.valor, 0, "recusa, prova e recusa de novo não são duas seguidas")
+    }
+
+    @MainActor
+    func testCascaSemBluetoothEsqueceOPareamentoQuandoOCaboNaoProvaOCodigo() async throws {
+        let cofre = CofreEmMemoria(Pareado(codigoAcesso: "CODIGOVELHOCODIGOVEL", nomeMac: "Mac"))
+        var achado: (GerenteDoCabo, UInt16)?
+        for _ in 0..<50 {
+            let p = UInt16.random(in: 20000..<30000)
+            let t = GerenteDoCabo(porta: p, prazoDoPedido: 10, segredo: { cofre.ler()?.codigoAcesso })
+            if t.iniciar() == nil { achado = (t, p); break }
+        }
+        let (cabo, porta) = try XCTUnwrap(achado)
+        addTeardownBlock { cabo.parar() }
+        let c = Casca(pareador: PareadorCabo(cabo), cofre: cofre, vibrar: {}, permanenciaNoCabo: 0, cabo: cabo, bluetooth: nil)
+        var recarregou = false
+        c.recarregarPagina = { recarregou = true }
+        c.iniciar()
+        for _ in 0..<2 {
+            _ = try MacFalso(porta: porta, segredo: "OUTROCODIGOOUTROCODI")
+            try await Task.sleep(nanoseconds: 300_000_000)
+        }
+        await esperar({ cofre.ler() == nil }, segundos: 5)
+        XCTAssertNil(cofre.ler(), "o pareamento acabou")
+        XCTAssertTrue(recarregou, "a página volta à tela de parear")
+    }
+
     // MARK: Pareamento pelo cabo
 
     static let naoConfere = "Esse código não confere com o do Mac, ou já venceu. Confira os dígitos ou gere um novo no Mac."
