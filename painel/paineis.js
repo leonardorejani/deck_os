@@ -213,7 +213,9 @@ function abrirCal() {
   const agora = new Date(V.ref); ag.mes = new Date(agora.getFullYear(), agora.getMonth(), 1); ag.dia = new Date(agora); ag.aberto = null; ag.mesEv = null; ag.lista = null; ag.erro = ''; vistoAg.mes = vistoAg.lista = '';
   pintarCal(); abrirFolha('#f-cal'); lerAgenda(true, true);
 }
-/* o mês pede agenda(1º do mês, dias do mês) e a lista pede agenda(dia tocado, 30). Sem permissão, nenhum dos dois é pedido */
+/* o mês pede agenda(1º do mês, dias do mês) e a lista pede agenda(dia tocado, dias que faltam até o fim do mês). A lista nunca
+   passa para o mês seguinte: trocar de mês recarrega os dois. Sem permissão, nenhum dos dois é pedido */
+const diasAteFimDoMes = d => new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate() - d.getDate() + 1;
 async function lerAgenda(mes, lista, silencio) {
   if (semPermissao()) { ag.mesEv = []; ag.lista = []; ag.erro = ''; pintarCal(); return }
   const trabalhos = [];
@@ -223,7 +225,7 @@ async function lerAgenda(mes, lista, silencio) {
   }
   if (lista) {
     const n = ++ag.seqLista, de = ag.dia;
-    trabalhos.push(canal.agenda(dataIso(de), 30).then(l => { if (n === ag.seqLista && de === ag.dia) return mudou('lista', ag.lista = Array.isArray(l) ? l : []) }));
+    trabalhos.push(canal.agenda(dataIso(de), diasAteFimDoMes(de)).then(l => { if (n === ag.seqLista && de === ag.dia) return mudou('lista', ag.lista = Array.isArray(l) ? l : []) }));
   }
   const falhou = !!ag.erro;
   try { const r = await Promise.all(trabalhos); ag.erro = ''; if (falhou || r.some(Boolean)) pintarCal() }
@@ -232,11 +234,22 @@ async function lerAgenda(mes, lista, silencio) {
     ag.erro = msgErro(e); if (silencio && ag.lista) { if (!falhou) avisar(ag.erro, { erro: true }) } else pintarCal();
   }
 }
+/* O trecho de dias que o evento cobre. Sem fim (Mac antigo) é um dia só. O fim que cai à meia-noite pertence ao dia anterior */
+const diaDe = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+function trechoDoEvento(e) {
+  const i = new Date(e.inicio); if (isNaN(i)) return null;
+  let f = e.fim ? new Date(e.fim) : i; if (isNaN(f) || f < i) f = i; if (f > i) f = new Date(f - 1000);
+  return { i, a: diaDe(i), z: diaDe(f) };
+}
 function pintarCal() {
   const hoje = new Date(V.ref), m = ag.mes;
   $('#ca-titulo').textContent = m.toLocaleDateString('pt-BR', { month: 'long' }) + (m.getFullYear() !== hoje.getFullYear() ? ' ' + m.getFullYear() : '');
   const dias = new Date(m.getFullYear(), m.getMonth() + 1, 0).getDate(), temEv = new Map();
-  for (const e of ag.mesEv || []) { const d = new Date(e.inicio); if (!isNaN(d)) temEv.set(d.getDate(), (temEv.get(d.getDate()) || 0) + 1) }
+  const m1 = new Date(m.getFullYear(), m.getMonth(), 1), m2 = new Date(m.getFullYear(), m.getMonth(), dias);
+  for (const e of ag.mesEv || []) { // o evento de vários dias pinta cada dia do mês que ele cobre
+    const t = trechoDoEvento(e); if (!t) continue;
+    for (let d = new Date(Math.max(t.a, m1)); d <= Math.min(t.z, m2); d.setDate(d.getDate() + 1)) temEv.set(d.getDate(), (temEv.get(d.getDate()) || 0) + 1);
+  }
   let h = '<span></span>'.repeat(new Date(m.getFullYear(), m.getMonth(), 1).getDay());
   for (let n = 1; n <= dias; n++) {
     const d = new Date(m.getFullYear(), m.getMonth(), n), dow = d.getDay(), tem = temEv.get(n) || 0;
@@ -251,10 +264,14 @@ function pintarListaCal() {
   if (!ag.lista) { el.setAttribute('aria-busy', String(!ag.erro)); if (ag.erro) el.innerHTML = erroLista(ag.erro, 0); else if (!el.querySelector('.esq-lista')) el.innerHTML = esqueletoCal(); return }
   el.setAttribute('aria-busy', 'false');
   const agora = new Date(V.ref), grupos = new Map();
+  const m1 = new Date(ag.mes.getFullYear(), ag.mes.getMonth(), 1), m2 = new Date(ag.mes.getFullYear(), ag.mes.getMonth() + 1, 0), dia0 = diaDe(ag.dia);
   for (const e of ag.lista) {
-    const d = new Date(e.inicio); if (isNaN(d)) continue;
-    if (mesmoDia(d, agora) && !e.diaTodo && d < agora) continue; // o que já passou hoje não entra
-    const k = dataIso(d); if (!grupos.has(k)) grupos.set(k, { d, ev: [] }); grupos.get(k).ev.push({ ...e, d });
+    const t = trechoDoEvento(e); if (!t) continue;
+    // aparece no primeiro dia visível: o do início, ou o dia tocado/1º do mês quando o evento já vinha de antes. Nunca fora do mês na tela
+    const primeiro = new Date(Math.max(t.a, dia0, m1)); if (primeiro > Math.min(t.z, m2)) continue;
+    const continua = primeiro > t.a;
+    if (!continua && mesmoDia(t.i, agora) && !e.diaTodo && t.i < agora) continue; // o que já passou hoje não entra
+    const k = dataIso(primeiro); if (!grupos.has(k)) grupos.set(k, { d: primeiro, ev: [] }); grupos.get(k).ev.push({ ...e, d: t.i, continua });
   }
   let h = '';
   for (const [k, g] of [...grupos].sort((a, b) => a[0] < b[0] ? -1 : 1)) {
@@ -262,11 +279,11 @@ function pintarListaCal() {
     h += `<section class="grupo-data"><h3>${nomeDia(g.d)}</h3>` + g.ev.map((e, j) => {
       const id = k + '#' + j, aberto = ag.aberto === id, cor = /^#[0-9a-f]{6}$/i.test(e.cor || '') ? e.cor : 'var(--texto-3)';
       const reuniao = reuniaoDe(e), local = reuniao && e.local && e.local.includes(reuniao.url) ? reuniao.nome : e.local; // o endereço da sala não vira o "local" da linha
-      return `<button class="ev-linha" data-ev="${esc(id)}" aria-expanded="${aberto}"><time>${e.diaTodo ? 'dia todo' : hhmm(e.d)}</time><i style="background:${cor}"></i><span class="tx"><b>${esc(e.titulo)}</b><span>${esc(e.calendario || '')}${local ? ', ' + esc(local) : ''}</span></span></button>`
+      return `<button class="ev-linha" data-ev="${esc(id)}" aria-expanded="${aberto}"><time>${e.diaTodo ? 'dia todo' : e.continua ? 'continua' : hhmm(e.d)}</time><i style="background:${cor}"></i><span class="tx"><b>${esc(e.titulo)}</b><span>${esc(e.calendario || '')}${local ? ', ' + esc(local) : ''}</span></span></button>`
         + (aberto ? `<div class="ev-detalhe">${reuniao ? `<button class="btn primario" data-ev-reuniao="${esc(reuniao.url)}" aria-label="Entrar na reunião (${esc(reuniao.nome)}), abre no Mac">Entrar na reunião</button>` : ''}<button class="btn secundario pequeno" data-ev-mac>Abrir no Calendário do Mac</button></div>` : '');
     }).join('') + '</section>';
   }
-  manterRolagem(el, h || '<div class="vazio-bloco"><strong>Nada nos próximos 30 dias</strong><span>Os eventos do Calendário do Mac aparecem aqui.</span></div>');
+  manterRolagem(el, h || '<div class="vazio-bloco"><strong>Nada neste mês a partir deste dia</strong><span>Os eventos do Calendário do Mac aparecem aqui.</span></div>');
 }
 /* Troca o mês: o atual sai para um lado, o novo entra pelo outro. Vindo de um arrasto, parte de onde o dedo soltou */
 function trocarMes(passo) {
@@ -275,7 +292,10 @@ function trocarMes(passo) {
   g.style.translate = ''; g.style.opacity = ''; // sai dali: de onde o dedo soltou, ou da posição normal
   g.classList.add(passo > 0 ? 'saindo-esq' : 'saindo-dir');
   setTimeout(() => {
-    ag.mes = new Date(ag.mes.getFullYear(), ag.mes.getMonth() + passo, 1); ag.mesEv = null; vistoAg.mes = ''; pintarCal(); lerAgenda(true, false);
+    ag.mes = new Date(ag.mes.getFullYear(), ag.mes.getMonth() + passo, 1); ag.mesEv = null; vistoAg.mes = '';
+    // o dia escolhido acompanha o mês: hoje, se o mês novo é o de hoje, senão o dia 1. A lista recarrega com o mês
+    const hoje = new Date(V.ref); ag.dia = ag.mes.getFullYear() === hoje.getFullYear() && ag.mes.getMonth() === hoje.getMonth() ? hoje : new Date(ag.mes);
+    ag.lista = null; vistoAg.lista = ''; ag.aberto = null; pintarCal(); lerAgenda(true, true);
     g.style.transition = 'none'; g.classList.remove('saindo-esq', 'saindo-dir'); g.style.translate = `${passo * 24}px 0`; g.style.opacity = 0;
     g.getBoundingClientRect(); // fixa o ponto de partida, sem animar o salto para o lado de onde o mês novo entra
     g.style.transition = '';

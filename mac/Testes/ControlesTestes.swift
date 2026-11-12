@@ -22,6 +22,18 @@ final class BrilhoFalso: BrilhoDoMac, @unchecked Sendable {
     }
 }
 
+final class TecladoSuprimidoTestes: XCTestCase {
+    /// Luz marcada como suprimida (auto-brilho ligado) continua sendo controle que funciona: a barra tem que aparecer.
+    func testeSuprimidaNaoEscondeOTeclado() {
+        XCTAssertTrue(Controles.tecladoServe(interno: true, suprimida: true))
+        XCTAssertTrue(Controles.tecladoServe(interno: true, suprimida: false))
+    }
+    func testeSemTecladoInternoNaoOferece() {
+        XCTAssertFalse(Controles.tecladoServe(interno: false, suprimida: false))
+        XCTAssertFalse(Controles.tecladoServe(interno: false, suprimida: true))
+    }
+}
+
 /// Controles falsos para as rotas.
 final class ControlesFalsos: ControlesDoMac, @unchecked Sendable {
     let registro: Registro

@@ -12,7 +12,7 @@ final class FontesAgendaTestes: XCTestCase {
     func testConverteEventoComCorEmHexELocalVazioViraNil() {
         let e = Agenda.converter(evento("Ensaio", inicio: 0, local: "  "), fuso: utc)
         XCTAssertEqual(e, Evento(titulo: "Ensaio", inicio: "2026-11-11T12:26:40Z", diaTodo: false,
-                                 calendario: "Trabalho", cor: "#ff8000", local: nil))
+                                 calendario: "Trabalho", cor: "#ff8000", local: nil, fim: "2026-11-11T13:26:40Z"))
         XCTAssertEqual(Agenda.converter(evento("Culto", inicio: 0, local: " Igreja "), fuso: utc).local, "Igreja")
     }
 

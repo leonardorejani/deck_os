@@ -82,4 +82,21 @@ enum FonteUso {
         }
         return Leitura(valor: uso, aviso: avisos.isEmpty ? nil : Aviso(fonte: "uso", texto: avisos.joined(separator: " ")))
     }
+
+    /// Soma ao uso lido dos arquivos o que o Mac mediu por token (contas adicionadas pelo Deck, ou perfis sem
+    /// medição do autoswitch). Sem isso o iPhone mostrava só o nome da conta, porque o estado lia apenas
+    /// o `measure.json`. Só troca a conta que veio sem número: medição de arquivo boa não é sobrescrita.
+    /// Se todas as contas ficaram com número, o aviso de "sem medição" não tem mais motivo.
+    static func mesclar(_ base: Leitura<[UsoConta]>, medidos: [String: UsoConta]) -> Leitura<[UsoConta]> {
+        guard !medidos.isEmpty else { return base }
+        let uso = base.valor.map { u -> UsoConta in
+            guard u.semana == nil, let m = medidos[u.id], m.semana != nil else { return u }
+            var novo = u
+            novo.semana = m.semana
+            novo.renova = m.renova
+            return novo
+        }
+        let tudoMedido = uso.allSatisfy { $0.semana != nil }
+        return Leitura(valor: uso, aviso: tudoMedido ? nil : base.aviso)
+    }
 }

@@ -134,7 +134,11 @@ private struct Navegacao: View {
                 ForEach(grupo) { secao in
                     ItemDaNavegacao(secao: secao, atual: modelo.secao == secao,
                                     selo: secao == .permissoes ? modelo.acessosRecusados.count : secao == .iphone && modelo.renovacaoApertando ? 1 : 0,
-                                    descricaoDoSelo: secao == .iphone ? "aviso" : "faltando") { modelo.secao = secao }
+                                    descricaoDoSelo: secao == .iphone ? "aviso" : "faltando") {
+                        // O selo de Conexões é o da renovação: vindo de outra seção, abre no método onde o cartão aparece.
+                        if secao == .iphone, modelo.secao != .iphone, modelo.renovacaoApertando { modelo.metodoDeConexao = AvisoDeConexao.renovacao.metodo }
+                        modelo.secao = secao
+                    }
                 }
             }
         }
@@ -197,17 +201,24 @@ private struct Conteudo: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: Tema.Espaco.icone) {
-                Text(modelo.secao.nome)
-                    .font(.system(size: Tema.Texto.lg, weight: .bold))
-                    .tracking(Tema.Texto.trackingTitulo(Tema.Texto.lg))
-                    .foregroundColor(Tema.Cor.texto)
-                    .frame(height: Tema.Texto.lg * Tema.Texto.alturaTitulo)
+                // O Sobre abre direto no conteúdo: o nome do app já está no cartão de cima.
+                if modelo.secao != .sobre {
+                    Text(modelo.secao.nome)
+                        .font(.system(size: Tema.Texto.lg, weight: .bold))
+                        .tracking(Tema.Texto.trackingTitulo(Tema.Texto.lg))
+                        .foregroundColor(Tema.Cor.texto)
+                        .frame(height: Tema.Texto.lg * Tema.Texto.alturaTitulo)
+                }
                 Spacer(minLength: 0)
-                HStack(spacing: Tema.Espaco.item) {
-                    Ponto(ligado: modelo.iphoneAtivo != nil)
-                    Text(TextosDoMenu.sincronia(modelo.iphoneAtivo, salvoAgora: modelo.salvoAgora))
-                        .tatile(Tema.Texto.xs, .regular, modelo.salvoAgora ? Tema.Cor.led : Tema.Cor.texto2)
-                        .animation(Tema.Mov.move, value: modelo.salvoAgora)
+                // O relógio da tela: "fora de alcance" aparece sozinho quando o iPhone para de falar.
+                TimelineView(.periodic(from: .now, by: 5)) { contexto in
+                    let agora = modelo.relogio?() ?? contexto.date
+                    HStack(spacing: Tema.Espaco.item) {
+                        Ponto(ligado: modelo.iphoneAtivo?.aoVivo(agora: agora) ?? false)
+                        Text(TextosDoMenu.sincronia(modelo.iphoneAtivo, salvoAgora: modelo.salvoAgora, agora: agora))
+                            .tatile(Tema.Texto.xs, .regular, modelo.salvoAgora ? Tema.Cor.led : Tema.Cor.texto2)
+                            .animation(Tema.Mov.move, value: modelo.salvoAgora)
+                    }
                 }
             }
             .padding(.init(top: Tema.Espaco.pad, leading: Tema.Espaco.margem, bottom: Tema.Espaco.icone, trailing: Tema.Espaco.margem))

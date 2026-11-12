@@ -102,8 +102,8 @@ enum Tema {
         static let chaveAlt: CGFloat = 22
         static let iconeBotao: CGFloat = 15
         static let iconeNav: CGFloat = 15
-        /// Largura do campo "Nome deste Mac" (o `input` do protótipo, no tamanho padrão do navegador).
-        static let campoNome: CGFloat = 170
+        /// Largura do campo "Nome deste Mac": cabe um nome comprido ("MacBook Pro de Leonardo") sem cortar.
+        static let campoNome: CGFloat = 280
         /// Largura do campo da chave do app do Spotify (32 letras e números).
         static let campoChave: CGFloat = 280
         /// Margem do quadro branco do QR (o `.qr` do protótipo tem padding de `item`, o desenho já traz a dele).

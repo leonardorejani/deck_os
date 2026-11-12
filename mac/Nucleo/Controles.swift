@@ -14,7 +14,7 @@ struct EstadoControles: Codable, Equatable, Sendable {
     var mudo: Bool? = nil
     /// Brilho da tela interna, de 0 a 100. nil sem tela interna (Mac fechado numa tela externa, Mac mini...).
     var brilho: Int? = nil
-    /// Brilho da luz do teclado, de 0 a 100. nil sem teclado iluminado, ou com a luz suprimida (tampa fechada).
+    /// Brilho da luz do teclado, de 0 a 100. nil sem teclado iluminado, ou sem teclado interno.
     var teclado: Int? = nil
 }
 
@@ -59,6 +59,9 @@ enum Controles {
     }
 
     static func limitar(_ v: Int) -> Int { max(0, min(100, v)) }
+
+    /// Teclado que dá para controlar. "Suprimida" é só o auto-brilho de luz ambiente: a escrita funciona (provado com a tampa aberta).
+    static func tecladoServe(interno: Bool, suprimida _: Bool) -> Bool { interno }
 }
 
 final class ControlesReais: ControlesDoMac, @unchecked Sendable {
@@ -152,7 +155,7 @@ struct BrilhoReal: BrilhoDoMac {
               let lista = c.perform(listar)?.takeRetainedValue() as? [NSNumber] else { return nil }
         for n in lista {
             let id = n.uint64Value
-            guard booleano(c, "isKeyboardBuiltIn:", id), !booleano(c, "isBacklightSuppressedOnKeyboard:", id) else { continue }
+            guard Controles.tecladoServe(interno: booleano(c, "isKeyboardBuiltIn:", id), suprimida: booleano(c, "isBacklightSuppressedOnKeyboard:", id)) else { continue }
             return (c, id)
         }
         return nil

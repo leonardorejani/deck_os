@@ -13,7 +13,7 @@ O app nativo é instalado com a conta grátis da Apple, e a Apple faz esse tipo 
 3. **Passos.** Confere se o Xcode está pronto, procura o iPhone, empacota a página do painel, gera o projeto, apaga o perfil velho do app (é isso que faz o prazo andar de verdade), compila e instala no iPhone. No fim lê o vencimento do perfil novo e guarda a data.
 4. **Cabo ou Wi-Fi.** Vale o iPhone no cabo ou no mesmo Wi-Fi do Mac, desde que o Xcode enxergue o aparelho pela rede (em Xcode > Window > Devices and Simulators ele aparece com o ícone de rede). Se houver iPad, relógio ou outro aparelho ao alcance, o Deck ignora e usa só o iPhone.
 5. **Se não der.** O motivo fica guardado em português, e o Deck olha o iPhone a cada 5 minutos (uma consulta curta, sem compilar). Quando o iPhone aparece ou é desbloqueado, tenta de novo. Quando o problema não é o iPhone (conta da Apple, Xcode, compilação), só repete depois de 1 hora, para não compilar à toa.
-6. **Quando avisa.** Só quando o prazo aperta: 12 horas depois da hora de renovar sem ter dado certo. Aí aparecem o cartão amarelo em Ajustes > Conectar iPhone, uma linha no menu da barra e o selo "1" na barra lateral. Renovou sozinho, ou falhou com folga: nenhum aviso.
+6. **Quando avisa.** Só quando o prazo aperta: 12 horas depois da hora de renovar sem ter dado certo. Aí aparecem o cartão amarelo em Ajustes > Conexões, uma linha no menu da barra e o selo "1" na barra lateral. Renovou sozinho, ou falhou com folga: nenhum aviso.
 
 ## Condições para renovar sozinho
 
@@ -26,7 +26,7 @@ O app nativo é instalado com a conta grátis da Apple, e a Apple faz esse tipo 
 
 ## Como ver o que está acontecendo
 
-- Em Ajustes > Conectar iPhone, grupo do app nativo: a linha "Renovação automática" mostra a próxima data (ou "Tenta de novo sozinha"), e embaixo uma explicação curta destas condições. "Renovar agora" é a ação manual.
+- Em Ajustes > Conexões, grupo do app nativo: a linha "Renovação automática" mostra a próxima data (ou "Tenta de novo sozinha"), e embaixo uma explicação curta destas condições. "Renovar agora" é a ação manual.
 - O histórico fica em `~/Library/Logs/Deck/deck.log`, linhas que começam com `renovacao:`. Ali aparece também por onde o iPhone foi achado ("pelo Wi-Fi" ou "pelo cabo").
 
 ## O que o Deck nunca faz

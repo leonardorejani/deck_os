@@ -49,6 +49,13 @@ struct ConteudoDaInicial: View {
             if let aviso = assistente.aviso { AvisoDaInicial(texto: aviso).padding(.bottom, Tema.Espaco.pad).transition(.opacity) }
         }
         .animation(Tema.Mov.entra, value: assistente.aviso)
+        // Mesmo relógio de 5 s do cabeçalho: o iPhone que para de falar volta a "Esperando o iPhone...".
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                assistente.tique()
+            }
+        }
     }
 }
 

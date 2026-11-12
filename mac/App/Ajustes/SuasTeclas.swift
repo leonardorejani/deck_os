@@ -11,7 +11,7 @@ struct SuasTeclas: View {
     /// `catalogo`, `acesas` e `preparar` só as fotos usam: lista de apps fixa, tecla acesa e o estado de partida.
     init(modelo: ModeloApp, catalogo: CatalogoDeApps? = nil, acesas: Set<String> = [], preparar: ((ModeloTeclas) -> Void)? = nil) {
         self.modelo = modelo
-        let m = ModeloTeclas(modelo: modelo, catalogo: catalogo, acesas: acesas)
+        let m = ModeloTeclas(modelo: modelo, catalogo: catalogo ?? .compartilhado, acesas: acesas)
         preparar?(m)
         _tela = StateObject(wrappedValue: m)
     }
