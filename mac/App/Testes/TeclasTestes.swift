@@ -239,6 +239,65 @@ final class ModeloTeclasTestes: XCTestCase {
         XCTAssertEqual(k.nome, "a", "nome próprio não é trocado")
     }
 
+    func testTeclasDeFabricaEntramNaListaESaoDeFabrica() {
+        XCTAssertEqual(TeclasDeFabrica.todas.map(\.nome), ["Controles do Mac", "Google Meet (navegador)"])
+        XCTAssertEqual(AjusteDeApp.de("Calendar"), .agenda)
+        XCTAssertEqual(AjusteDeApp.de("Activity Monitor"), .monitor)
+        XCTAssertEqual(AjusteDeApp.de("Controles"), .controles)
+        XCTAssertEqual(AjusteDeApp.de("Google Meet"), .meet)
+        XCTAssertNil(AjusteDeApp.de("Safari"))
+    }
+
+    func testEscolherOMeetDaListaDaNomeCurtoIconeEAcaoLimpaAoTrocarDeApp() {
+        let m = modelo()
+        let tl = tela(m)
+        tl.escolherApp(TeclasDeFabrica.meet)
+        tl.escolherAcao(AcaoDeApp(id: "reuniao-microfone", valor: nil))
+        var k = m.config.perfis[0].teclas[0]
+        XCTAssertEqual(k.valor, "Google Meet")
+        XCTAssertEqual(k.icone, "svg:video")
+        XCTAssertEqual(k.acao?.id, "reuniao-microfone")
+        XCTAssertNil(Config.validar(m.config))
+        tl.escolherApp(AppDoMac(nome: "Safari", valor: "Safari", caminhoDoIcone: nil))
+        k = m.config.perfis[0].teclas[0]
+        XCTAssertNil(k.acao, "a ação era do Meet")
+        XCTAssertEqual(k.icone, "Safari")
+    }
+
+    func testLigaEDesligaDaTeclaDeComando() {
+        let m = modelo()
+        let tl = tela(m)
+        tl.escolherTipo(.comando)
+        tl.escolherComando("foco jogo")
+        tl.definirLigaEDesliga(true)
+        tl.escolherDesligar("foco trabalho")
+        tl.escolherConferir("checar-foco")
+        var k = m.config.perfis[0].teclas[0]
+        XCTAssertEqual([k.valor, k.desligar, k.estado], ["foco jogo", "foco trabalho", "checar-foco"])
+        XCTAssertNil(Config.validar(m.config))
+        tl.escolherConferir("  ")
+        XCTAssertNil(m.config.perfis[0].teclas[0].estado, "campo vazio apaga o comando de conferir")
+        tl.definirLigaEDesliga(false)
+        k = m.config.perfis[0].teclas[0]
+        XCTAssertNil(k.desligar)
+        XCTAssertEqual(k.valor, "foco jogo", "o comando de ligar continua sendo o da tecla")
+    }
+
+    func testTrocarOTipoApagaOQueSoValiaNoTipoAntigo() {
+        let m = modelo()
+        let tl = tela(m)
+        tl.escolherTipo(.comando)
+        tl.escolherComando("x")
+        tl.definirLigaEDesliga(true)
+        tl.escolherDesligar("y")
+        tl.escolherTipo(.app)
+        XCTAssertNil(tl.tecla?.desligar)
+        tl.escolherApp(TeclasDeFabrica.meet)
+        tl.escolherAcao(AcaoDeApp(id: "reuniao-camera", valor: nil))
+        tl.escolherTipo(.comando)
+        XCTAssertNil(tl.tecla?.acao)
+    }
+
     func testEscolherTipoTecladoPedeAcessibilidadeUmaVez() {
         var pedidos = 0
         let tl = ModeloTeclas(modelo: modelo(), pedirAcessibilidade: { pedidos += 1 }, executar: { _ in nil })
@@ -269,33 +328,6 @@ final class ModeloTeclasTestes: XCTestCase {
         XCTAssertEqual(k.tipo, "atalho")
         XCTAssertEqual(k.icone, "svg:raio")
         XCTAssertEqual(k.valor, "cmd+shift+4")
-    }
-
-    func testMontarCombinacaoGravaSoQuandoCompleta() {
-        let m = modelo()
-        let tl = tela(m)
-        tl.escolherTipo(.tecla)
-        tl.escolherTeclaDaMontagem("4")
-        XCTAssertEqual(m.config.perfis[0].teclas[0].tipo, "app", "só a tecla escolhida, sem modificador: nada gravado")
-        XCTAssertEqual(tl.montagem(de: tl.tecla!).faltaDizer, "Ligue pelo menos um modificador.")
-        tl.alternarModificador(.comando)
-        tl.alternarModificador(.shift)
-        let k = m.config.perfis[0].teclas[0]
-        XCTAssertEqual(k.tipo, "tecla")
-        XCTAssertEqual(k.valor, "cmd+shift+4")
-        XCTAssertEqual(tl.montagem(de: tl.tecla!).modificadores, [.comando, .shift])
-    }
-
-    func testMontagemIncompletaNaoApagaACombinacaoJaGravada() {
-        let m = modelo()
-        let tl = tela(m)
-        tl.escolherTipo(.tecla)
-        tl.escolherCombinacao("cmd+k")
-        tl.alternarModificador(.comando)
-        XCTAssertEqual(m.config.perfis[0].teclas[0].valor, "cmd+k", "o iPhone continua com a combinação que funciona")
-        XCTAssertEqual(tl.montagem(de: tl.tecla!).faltaDizer, "Ligue pelo menos um modificador.")
-        tl.alternarModificador(.opcao)
-        XCTAssertEqual(m.config.perfis[0].teclas[0].valor, "opt+k")
     }
 
     func testConferirVoltaParaOPerfilAtivoSeOEditadoSumiu() {

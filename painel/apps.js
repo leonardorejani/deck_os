@@ -25,8 +25,10 @@ async function carregarApps(forcar) {
   }
   if (V) atualizar(); // e as teclas de app sem ícone próprio ganham o do Mac
 }
-const appDoMac = valor => valor === NAVEGADOR_PADRAO.valor ? NAVEGADOR_PADRAO : valor === CONTROLES_DO_MAC.valor ? CONTROLES_DO_MAC : appsMac.lista?.find(a => a.valor === valor);
-const iconeDoApp = a => a.controles ? `<span class="svg">${SVG.controles}</span>` : a.bundle === NAVEGADOR_PADRAO.bundle ? `<span class="svg">${SVG.globo}</span>` : `<img src="${esc(canal.appIconeUrl(a.bundle))}" loading="lazy" alt="">`;
+/* os que não são app instalado: aparecem na frente da lista e valem em qualquer Mac */
+const ESPECIAIS = [CONTROLES_DO_MAC, MEET_NAVEGADOR, NAVEGADOR_PADRAO];
+const appDoMac = valor => ESPECIAIS.find(a => a.valor === valor) || appsMac.lista?.find(a => a.valor === valor);
+const iconeDoApp = a => a.controles ? `<span class="svg">${SVG.controles}</span>` : a.meet ? `<span class="svg">${SVG.video}</span>` : a.bundle === NAVEGADOR_PADRAO.bundle ? `<span class="svg">${SVG.globo}</span>` : `<img src="${esc(canal.appIconeUrl(a.bundle))}" loading="lazy" alt="">`;
 
 /* O ícone de uma tecla de app: o do app, se a página já o tem; senão o que o Mac tem. Sem nenhum dos dois, o raio de sempre */
 function iconeDaTecla(t) {
@@ -76,12 +78,12 @@ function appEditorHTML() {
     const a = appDoMac(rasc.valor);
     return `<span class="rotulo">App</span><div class="app-escolhido"><span class="ic-app">${a ? iconeDoApp(a) : ''}</span><b>${esc(a?.nome || rasc.valor)}</b><button class="btn secundario pequeno" data-app-trocar>Trocar</button></div><div id="ed-acoes">${acoesHTML()}</div>`;
   }
-  return `<span class="rotulo">Qual app</span><input id="ed-busca" type="search" placeholder="Buscar app" value="${esc(edApp.busca)}" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Buscar app"><div class="lista-apps real" id="ed-lista-apps" role="listbox" aria-label="Apps do Mac">${listaAppsHTML()}</div><button class="btn secundario pequeno" data-app-controles style="justify-self:start">${SVG.controles}Controles do Mac</button>`;
+  return `<span class="rotulo">Qual app</span><input id="ed-busca" type="search" placeholder="Buscar app" value="${esc(edApp.busca)}" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Buscar app"><div class="lista-apps real" id="ed-lista-apps" role="listbox" aria-label="Apps do Mac">${listaAppsHTML()}</div>`;
 }
 function listaAppsHTML() {
   if (!appsMac.lista) return `<div class="esq-lista" aria-hidden="true">${'<span class="esq-app"><i class="barra"></i><i class="barra"></i></span>'.repeat(8)}</div>`;
   const q = semAcento(edApp.busca.trim());
-  const itens = [NAVEGADOR_PADRAO, ...appsMac.lista].filter(a => !q || semAcento(a.nome).includes(q));
+  const itens = [...ESPECIAIS, ...appsMac.lista].filter(a => !q || semAcento(a.nome).includes(q));
   if (!itens.length) return '<span class="ajuda vazio-busca">Nenhum app com esse nome.</span>';
   return itens.map(a => `<button role="option" data-app-bundle="${esc(a.bundle)}" aria-selected="${a.valor === rasc.valor}" aria-pressed="${a.valor === rasc.valor}">${iconeDoApp(a)}<span>${esc(a.nome)}</span></button>`).join('');
 }
@@ -119,13 +121,13 @@ function sugerirNome() {
   if (!edApp.nomeAuto) return;
   const app = appDoMac(rasc.valor), acao = edApp.acoes?.find(a => a.id === rasc.acao?.id);
   const op = acao?.entrada === 'lista' ? acao.opcoes?.find(o => o.valor === rasc.acao.valor) : null;
-  const nome = [app?.nome || rasc.valor, op?.nome].filter(Boolean).join(' ');
+  const nome = [app?.nomeTecla || app?.nome || rasc.valor, op?.nome].filter(Boolean).join(' ');
   $('#ed-nome').value = edApp.sugestao = nome;
 }
 $('#ed-nome').addEventListener('input', () => { if ($('#ed-nome').value !== edApp.sugestao) edApp.nomeAuto = false });
 
 function escolherApp(a) {
-  rasc.valor = a.valor; rasc.icone = a.controles ? 'svg:controles' : a.valor; delete rasc.acao;
+  rasc.valor = a.valor; rasc.icone = a.controles ? 'svg:controles' : a.meet ? 'svg:video' : a.valor; delete rasc.acao;
   edApp.passo = 'acao'; sugerirNome(); pintarTipo(); lerAcoes();
 }
 /* o que falta preencher na ação antes de gravar, ou nada */
@@ -141,9 +143,8 @@ $('#ed-acao').addEventListener('input', ev => {
   if (ev.target.id === 'ed-acao-texto' && rasc.acao) rasc.acao.valor = ev.target.value;
 });
 $('#ed-acao').addEventListener('click', ev => {
-  if (ev.target.closest('[data-app-controles]')) return escolherApp(CONTROLES_DO_MAC);
   const b = ev.target.closest('[data-app-bundle]');
-  if (b) { const a = appDoMac(b.dataset.appBundle === NAVEGADOR_PADRAO.bundle ? NAVEGADOR_PADRAO.valor : appsMac.lista?.find(x => x.bundle === b.dataset.appBundle)?.valor); if (a) escolherApp(a); return }
+  if (b) { const a = [...ESPECIAIS, ...(appsMac.lista || [])].find(x => x.bundle === b.dataset.appBundle); if (a) escolherApp(a); return }
   if (ev.target.closest('[data-app-trocar]')) { edApp.passo = 'escolher'; edApp.busca = ''; edApp.seq++; return pintarTipo() }
   if (ev.target.closest('[data-apps-tentar]')) { appsMac.estado = 'nada'; carregarApps(true); return }
   if (ev.target.closest('[data-acoes-tentar]')) return lerAcoes();

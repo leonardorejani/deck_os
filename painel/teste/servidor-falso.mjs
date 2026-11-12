@@ -60,6 +60,7 @@ const padrao = () => ({
   apps: 'antigo',            // antigo (Mac sem as rotas de apps: 404, o editor usa a lista curta) | normal | erro (a lista falha com 500) | muitos (140 apps)
   acoesAtraso: 0,            // ms de espera antes de o Mac responder o que um app oferece (ler as contas do Mail demora)
   mailAviso: '',             // a lista de contas do Mail não pôde ser lida: o motivo vem no aviso da ação
+  comFoco: false,            // o perfil ganha uma tecla de comando com liga e desliga (sem comando de conferir: o Mac guarda o estado)
   comControles: false,       // o perfil ganha a tecla Controles (abre a tela dos controles do Mac no iPhone)
   controles: 'tudo',         // tudo | sem-brilho (Mac sem tela interna nem luz no teclado) | nada (não oferece nada) | antigo (Mac sem a rota: 404) | erro (500) | recusa (os pedidos de escrita falham com 422)
   comMonitorApp: false,      // o perfil ganha a tecla do app Monitor de Atividade (abre a tela dos processos no iPhone)
@@ -101,6 +102,7 @@ function perfisConfig() {
     T('apagar', 'Apagar tela', 'comando', 'pmset displaysleepnow', { icone: 'svg:tela' }),
   ];
   if (c.comMonitorApp) trabalho.push(T('monitor', 'Monitor', 'app', 'Activity Monitor', { icone: 'Activity Monitor' }));
+  if (c.comFoco) trabalho.push(T('foco', 'Mudar foco', 'comando', 'foco jogo', { icone: 'svg:tela', desligar: 'foco trabalho' }));
   if (c.comControles) trabalho.push(T('controles', 'Controles', 'app', 'Controles', { icone: 'svg:controles' }));
   if (c.comAcao) trabalho.push(T('cal-dia', 'Natal', 'app', 'Calendar', { icone: 'Calendar', acao: { id: 'calendario-dia', valor: '2026-12-25' } }));
   if (c.teclas === 'muitas') for (const n of ['Safari', 'Notes', 'Terminal', 'Finder', 'Spotify', 'Vorssaint', 'WhatsApp', 'Calendar']) trabalho.push(T('x' + n, n === 'Notes' ? 'Notas' : n, 'app', n, { icone: n }));
@@ -179,6 +181,7 @@ const ACAO_LINK = { id: 'link', nome: 'Abrir um endereço', entrada: 'texto', ro
 const ACAO_GMAIL = { id: 'gmail', nome: 'Abrir o Gmail de uma conta', entrada: 'texto', rotulo: 'Conta (número ou e-mail)', exemplo: '1 ou nome@gmail.com' };
 function acoesDoApp(bundle) {
   if (bundle === 'navegador-padrao') return [ACAO_LINK, ACAO_GMAIL];
+  if (bundle === 'deck-meet-navegador') return [{ id: 'reuniao-microfone', nome: 'Mutar ou desmutar o microfone da reunião', entrada: 'nenhuma' }, { id: 'reuniao-camera', nome: 'Ligar ou desligar a câmera da reunião', entrada: 'nenhuma' }];
   const a = APPS_MAC().find(x => x.bundle === bundle); if (!a) return null;
   const lista = bundle === 'com.apple.mail' ? [c.mailAviso
       ? { id: 'mail-caixa', nome: 'Abrir a caixa de entrada de uma conta', entrada: 'lista', rotulo: 'Conta', opcoes: [], aviso: c.mailAviso }
@@ -295,6 +298,7 @@ async function api(req, res, url) {
     if (c.falha) return json(res, 500, { erro: 'O Mac não deixou: ligue a Acessibilidade para o Deck nos Ajustes do Sistema.' });
     cont.botoes.push(id);
     if (id === 'acordado') c.acesas = c.acesas.includes(id) ? [] : [id];
+    if (tecla.desligar) c.acesas = c.acesas.includes(id) ? c.acesas.filter(x => x !== id) : [...c.acesas, id]; // o Mac guarda o estado da tecla liga e desliga
     return json(res, 200, { ok: true });
   }
   const semLogin = () => c.spotifyExtras !== 'login' && (json(res, 409, { erro: 'O Spotify não está conectado. Conecte nos Ajustes do Mac.' }), true); // responde 409 e devolve true

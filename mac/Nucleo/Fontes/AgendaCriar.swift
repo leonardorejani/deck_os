@@ -16,6 +16,12 @@ struct DestinoAgenda: Codable, Equatable, Hashable, Sendable {
     var id: String
 
     static let tipos = ["calendario", "lembretes"]
+
+    /// "O calendário padrão do Mac": o id é este texto em vez de um calendário. Vira o calendário de verdade na hora de
+    /// salvar, então acompanha o que a pessoa escolher no app Calendário.
+    static let idDoPadraoDoMac = "padrao-do-mac"
+    static let padraoDoMac = DestinoAgenda(tipo: "calendario", id: idDoPadraoDoMac)
+    var ehPadraoDoMac: Bool { tipo == "calendario" && id == Self.idDoPadraoDoMac }
 }
 
 struct OpcaoDeDestino: Codable, Equatable, Sendable {
@@ -182,6 +188,12 @@ protocol CriadorDeAgenda: Sendable {
     /// perguntado, abre a janela do macOS no Mac (o iPhone só pede quando a pessoa escolhe Lembretes).
     func destinos(pedirPermissao: Bool) -> DestinosDaAgenda
     func criar(_ novo: NovoCompromisso) -> Result<Void, ErroAgenda>
+    /// O id do calendário padrão do Mac (o que o app Calendário usa para evento novo). Nil sem acesso ou sem calendário.
+    func idDoCalendarioPadrao() -> String?
+}
+
+extension CriadorDeAgenda {
+    func idDoCalendarioPadrao() -> String? { nil }
 }
 
 #if canImport(EventKit) && canImport(CoreGraphics)
@@ -233,6 +245,11 @@ struct CriadorEventKit: CriadorDeAgenda {
         return DestinosDaAgenda(calendarios: cal == "liberado" ? Self.gravaveis(loja, .event) : [],
                                 listas: lem == "liberado" ? Self.gravaveis(loja, .reminder) : [],
                                 permissaoCalendario: cal, permissaoLembretes: lem, padrao: nil)
+    }
+
+    func idDoCalendarioPadrao() -> String? {
+        guard Self.permissao(.event) == "liberado" else { return nil }
+        return EKEventStore().defaultCalendarForNewEvents?.calendarIdentifier
     }
 
     func criar(_ novo: NovoCompromisso) -> Result<Void, ErroAgenda> {

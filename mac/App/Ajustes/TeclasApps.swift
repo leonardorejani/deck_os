@@ -12,6 +12,12 @@ struct AppDoMac: Equatable, Identifiable {
     var valor: String
     /// O .app (ícone tirado do sistema) ou um .png (só nas fotos).
     var caminhoDoIcone: String?
+    /// Só nas teclas "de fábrica" do Deck (não são apps instalados): o desenho no lugar do ícone do app.
+    var svg: String? = nil
+    /// O ícone que a tecla guarda ("svg:controles"). Nil: o próprio app.
+    var icone: String? = nil
+    /// O nome que a tecla ganha quando o da lista é comprido demais.
+    var nomeDaTecla: String? = nil
 
     var id: String { valor }
 }
@@ -27,6 +33,16 @@ enum IconesDeApps {
         cache[caminho] = img
         return img
     }
+}
+
+/// As teclas de fábrica que não são app instalado: aparecem na lista de apps do editor, na frente, e valem em qualquer Mac.
+enum TeclasDeFabrica {
+    static let controles = AppDoMac(nome: "Controles do Mac", valor: "Controles", caminhoDoIcone: nil, svg: Icone.controles, icone: "svg:controles")
+    static let meet = AppDoMac(nome: "Google Meet (navegador)", valor: ControleDeReuniao.valorDoMeet, caminhoDoIcone: nil,
+                               svg: Icone.video, icone: "svg:video", nomeDaTecla: "Google Meet")
+    static let todas = [controles, meet]
+
+    static func de(valor: String) -> AppDoMac? { todas.first { $0.valor == valor } }
 }
 
 enum LeitorDeApps {
