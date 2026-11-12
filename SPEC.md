@@ -886,6 +886,18 @@ Ajustes de UX (11/11/2026, teste do Leonardo no iPhone):
       nativo, só o que existe no código: sem cabo e Bluetooth (item 9), sem dados quando o iPhone sai do Wi-Fi e tela
       acesa só pelo Wake Lock do Safari, que pode falhar (no app nativo é a casca que segura a tela).
 
+31. Tecla de comando roda no shell de login do usuário (12/11/2026). Palavras dele: "coloquei um comando na tecla (mudar
+    tela/teclado, jogo, trabalho) e ele deu o aviso erro zsh:1 'mudar' comandos criados ele não entende. Libera pra ele
+    entender. Esses aí eu dou no terminal e corre tudo bem."
+    - Causa: o Deck rodava `/bin/zsh -c <linha>` sem login e sem interativo, então o .zshrc e o .zprofile não eram lidos e
+      alias, função e PATH do usuário não existiam (`zsh:1: command not found: mudar`).
+    - Agora: a tecla de comando roda no shell de login do usuário (getpwuid, não a variável SHELL, caindo em /bin/zsh) com
+      `-l -i -c` em zsh, bash e fish (só `-l` em sh e outros), lendo o perfil como o Terminal. A linha segue como argumento
+      do `-c`, nunca colada em string de outro shell. O limite de 10 s, o vigia e o stdin em /dev/null continuam (sem tty
+      para travar), e a saída do perfil (banner) só aparece se o comando falhar, pela última linha como antes.
+    - Comando que não existe de verdade (status 127) avisa "Comando não encontrado: <nome>". Só a tecla de comando muda:
+      os comandos internos do Deck (osascript, open, shortcuts) seguem no zsh puro, de propósito.
+
 Nada em aberto que trave a fase 1. Falta só confirmar, na construção, o link que abre uma sessão
 específica no app do Claude do iPhone (se não existir, cai no "mostra a pergunta").
 

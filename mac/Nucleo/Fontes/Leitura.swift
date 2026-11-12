@@ -69,6 +69,32 @@ extension Shell {
     static func limitado(_ linha: String, segundos: Int) -> String {
         "perl -e \(aspas(vigia)) \(segundos) /bin/zsh -c \(aspas(linha))"
     }
+
+    /// Igual ao `limitado`, mas no shell de login do usuário, lendo o perfil como o Terminal faz
+    /// (aliases, funções e PATH do .zshrc/.zprofile). A linha segue como argumento do `-c`, nunca
+    /// colada dentro de outra string de shell. O vigia deixa o stdin em /dev/null, então o shell
+    /// interativo não espera tty.
+    static func limitadoNoPerfil(_ linha: String, segundos: Int, shell: String) -> String {
+        "perl -e \(aspas(vigia)) \(segundos) \(aspas(shell)) \(opcoesDePerfil(shell)) -c \(aspas(linha))"
+    }
+
+    /// zsh, bash e fish: `-l -i` (login e interativo, que é onde moram os aliases). Outro shell (sh, dash): só `-l`.
+    static func opcoesDePerfil(_ shell: String) -> String {
+        switch (shell as NSString).lastPathComponent {
+        case "zsh", "bash", "fish": return "-l -i"
+        default: return "-l"
+        }
+    }
+
+    /// Shell de login do usuário pelo cadastro do sistema (getpwuid), não pela variável SHELL, que um
+    /// processo pai pode ter trocado. Cai em /bin/zsh se não vier ou não for executável.
+    static func doUsuario() -> String {
+        if let pw = getpwuid(getuid()), let c = pw.pointee.pw_shell {
+            let caminho = String(cString: c)
+            if caminho.hasPrefix("/"), FileManager.default.isExecutableFile(atPath: caminho) { return caminho }
+        }
+        return "/bin/zsh"
+    }
 }
 
 enum Numero {
