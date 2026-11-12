@@ -113,7 +113,7 @@ struct ValorDeAjuste: View {
 
 // MARK: - Botão
 
-enum EstiloDeBotao { case primario, secundario, link, perigo }
+enum EstiloDeBotao { case primario, secundario, link, perigo, estrela }
 
 private struct AperteDoBotao: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
@@ -128,13 +128,18 @@ struct BotaoDeAjuste: View {
     var texto: String
     var estilo: EstiloDeBotao = .secundario
     var desligado = false
+    /// Ícone SF Symbol antes do texto (só o botão da estrela usa).
+    var icone: String? = nil
     /// O botão herda a fonte do campo onde está (o endereço, em monoespaçada).
     var monoespaco = false
     var acao: () -> Void
 
     var body: some View {
         Button(action: acao) {
-            Text(texto).font(.system(size: Tema.Texto.sm, weight: .semibold, design: monoespaco ? .monospaced : .default))
+            HStack(spacing: Tema.Espaco.item) {
+                if let icone { Image(systemName: icone).font(.system(size: Tema.Medida.iconeBotao, weight: .semibold)) }
+                Text(texto).font(.system(size: Tema.Texto.sm, weight: .semibold, design: monoespaco ? .monospaced : .default))
+            }
                 .foregroundColor(cor).lineLimit(1).frame(height: Tema.Texto.sm * Tema.Texto.altura)
                 .padding(.horizontal, estilo == .perigo ? Tema.Espaco.item : Tema.Espaco.icone)
                 .frame(minHeight: Tema.Espaco.alvoSm)
@@ -150,6 +155,7 @@ struct BotaoDeAjuste: View {
     private var cor: Color {
         switch estilo {
         case .primario: return Tema.Cor.destaqueTexto
+        case .estrela: return Tema.Cor.estrelaTexto
         case .secundario: return Tema.Cor.texto
         case .link: return Tema.Cor.texto2
         case .perigo: return Tema.Cor.perigo
@@ -159,6 +165,7 @@ struct BotaoDeAjuste: View {
     private var fundo: Color {
         switch estilo {
         case .primario: return Tema.Cor.destaque
+        case .estrela: return Tema.Cor.estrela
         case .secundario: return Tema.Cor.superficie2
         case .link, .perigo: return .clear
         }

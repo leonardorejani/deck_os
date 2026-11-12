@@ -2,8 +2,8 @@ import SwiftUI
 import AppKit
 
 /// Seção "Este Mac" dos Ajustes, igual ao protótipo (prototipo/mac.js, TELAS.geral): nome do Mac, abrir
-/// junto com o Mac, procurar atualizações e refazer a configuração inicial, e o grupo Avançado com o
-/// config.json. Sem porta e sem composição: a porta é escolhida sozinha (SPEC 14.4) e a composição fica
+/// junto com o Mac, procurar atualizações e refazer a configuração inicial, e os grupos WhatsApp e Spotify.
+/// Sem porta e sem composição: a porta é escolhida sozinha (SPEC 14.4) e a composição fica
 /// no menu da barra.
 struct EsteMac: View {
     @ObservedObject var modelo: ModeloApp
@@ -58,13 +58,6 @@ struct EsteMac: View {
                 }
             }
             GrupoSpotify(spotify: modelo.spotify)
-            GrupoDeAjuste(titulo: "Avançado", nota: nil) {
-                LinhasDeAjuste {
-                    LinhaDeAjuste(titulo: "Configuração", apoio: "~/Library/Application Support/Deck/config.json") {
-                        BotaoDeAjuste(texto: "Mostrar no Finder", estilo: .secundario) { mostrarNoFinder() }
-                    }
-                }
-            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .onAppear { abrirComMac.atualizar() }
@@ -91,15 +84,6 @@ struct EsteMac: View {
         modelo.marcarConfiguracaoInicialFeita(false)
         NSApp.activate(ignoringOtherApps: true)
         abrirJanela(id: "inicial")
-    }
-
-    private func mostrarNoFinder() {
-        let url = ArmazemConfig.urlPadrao
-        if FileManager.default.fileExists(atPath: url.path) {
-            NSWorkspace.shared.activateFileViewerSelecting([url])
-        } else {
-            NSWorkspace.shared.open(url.deletingLastPathComponent())
-        }
     }
 }
 

@@ -28,6 +28,9 @@ enum Tema {
         static let perigoSuave = Color(claro: 0xFDECEA, escuro: 0x3A1D1B)
         static let sucesso = Color(claro: 0x1F7A4D, escuro: 0x5FD49B)
         static let sucessoSuave = Color(claro: 0xE6F4EC, escuro: 0x16291F)
+        /// Botão da estrela do GitHub: amarelo cheio nos dois temas, com texto escuro (contraste alto no claro e no escuro).
+        static let estrela = Color(claro: 0xF5B800, escuro: 0xF5C518)
+        static let estrelaTexto = Color(hex: 0x1A1400)
         static let aviso = Color(claro: 0xA15C00, escuro: 0xE8B95B)
 
         // Identidade do Deck (iguais a deck.css): o fundo quase preto é do produto, nos dois temas.
