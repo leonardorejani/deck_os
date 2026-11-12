@@ -40,6 +40,8 @@ extension Config {
         if json["whatsapp"] == nil { completa.whatsapp = atual.whatsapp }
         // Mesmo caso do monitor (12/11/2026): painel velho não conhece a chave, e o padrão não apaga a escolha.
         if json["monitor"] == nil { completa.monitor = atual.monitor }
+        // Idem para o lugar padrão da agenda: painel velho não manda a chave e não pode apagar a escolha.
+        if json["agendaPadrao"] == nil { completa.agendaPadrao = atual.agendaPadrao }
         return aplicar(recebida: completa, sobre: atual)
     }
 

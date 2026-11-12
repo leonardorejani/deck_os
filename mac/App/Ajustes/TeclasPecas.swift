@@ -114,7 +114,8 @@ enum IconesDeTecla {
 /// O ícone da tecla: o do app de verdade, o desenho do painel ou a inicial.
 struct IconeDaTecla: View {
     var tecla: Tecla
-    var catalogo: CatalogoDeApps
+    /// Observado: a lista de apps chega depois de a tela abrir, e o ícone tem que aparecer quando ela chegar (não só ao trocar de perfil).
+    @ObservedObject var catalogo: CatalogoDeApps
     var lado: CGFloat = Tema.Medida.teclaIcone
 
     var body: some View {
@@ -140,10 +141,12 @@ struct IconeDaTecla: View {
 
     struct DoApp: View {
         var nome: String
-        var catalogo: CatalogoDeApps
+        @ObservedObject var catalogo: CatalogoDeApps
         var lado: CGFloat
         var body: some View {
-            if let c = catalogo.app(nome)?.caminhoDoIcone {
+            // Sem esperar a lista: o .app sai direto das pastas de Aplicativos.
+            if let c = IconeDeApp.caminho(valor: nome, doCatalogo: catalogo.app(nome)?.caminhoDoIcone,
+                                          pastas: LeitorDeApps.pastas + LeitorDeApps.pastasDoSistema, existe: { FileManager.default.fileExists(atPath: $0) }) {
                 Image(nsImage: IconesDeApps.imagem(c)).resizable().interpolation(.high)
                     .frame(width: lado, height: lado)
                     .clipShape(RoundedRectangle(cornerRadius: Tema.Raio.icone, style: .continuous))

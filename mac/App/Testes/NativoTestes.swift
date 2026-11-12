@@ -71,6 +71,8 @@ final class TextosDoNativoTestes: XCTestCase {
         let visto = data(2026, 11, 10, 9, 12)
         let n = AppNativo(nome: "iPhone Exemplo", canal: .bluetooth, desde: visto, visto: visto)
         XCTAssertEqual(TextosDoNativo.ultimoCanal(n, agora: visto.addingTimeInterval(20)), "Bluetooth, agora")
+        XCTAssertEqual(TextosDoNativo.ultimoCanal(n, agora: visto.addingTimeInterval(30)), "Bluetooth, agora")
+        XCTAssertEqual(TextosDoNativo.ultimoCanal(n, agora: visto.addingTimeInterval(45)), "Bluetooth, há 1 min", "passou de 30 s: o cabeçalho já diz fora de alcance")
         XCTAssertEqual(TextosDoNativo.ultimoCanal(n, agora: visto.addingTimeInterval(300)), "Bluetooth, há 5 min")
         XCTAssertEqual(TextosDoNativo.ultimoCanal(n, agora: visto.addingTimeInterval(7200)), "Bluetooth, às 09:12")
         var cabo = n; cabo.canal = .cabo

@@ -109,7 +109,8 @@ extension Config {
             // Config antiga sem data: o código que ela tem vira o atual, criado agora.
             codigoCriadoEm: try c.decodeIfPresent(Int.self, forKey: chave("codigoCriadoEm")) ?? Int(Date().timeIntervalSince1970),
             codigoAnterior: try c.decodeIfPresent(String.self, forKey: chave("codigoAnterior")),
-            anteriorValeAte: try c.decodeIfPresent(Int.self, forKey: chave("anteriorValeAte"))
+            anteriorValeAte: try c.decodeIfPresent(Int.self, forKey: chave("anteriorValeAte")),
+            agendaPadrao: (try? c.decodeIfPresent(DestinoAgenda.self, forKey: chave("agendaPadrao"))) ?? nil
         )
     }
 
@@ -173,6 +174,9 @@ extension Config {
         if !ConfigWhatsApp.origens.contains(c.whatsapp.origem) { return "A origem do WhatsApp deve ser automática, app ou web." }
         if let n = c.whatsapp.navegador, !NavegadorWeb.todos.contains(where: { $0.nome == n }) {
             return "O navegador do WhatsApp Web não é válido."
+        }
+        if let d = c.agendaPadrao, !DestinoAgenda.tipos.contains(d.tipo) || vazio(d.id) || d.id.count > 200 {
+            return "O lugar padrão da agenda não é válido."
         }
         if !["a", "b", "c"].contains(c.comp) { return "A composição da tela deve ser A, B ou C." }
         if !(1024...65535).contains(c.porta) { return "A porta deve estar entre 1024 e 65535." }

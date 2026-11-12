@@ -102,6 +102,9 @@ struct Config: Codable, Equatable, Sendable {
     var codigoAnterior: String?
     /// Fim da folga do codigoAnterior, em segundos desde 1970.
     var anteriorValeAte: Int?
+    /// Onde "Novo compromisso" da agenda salva quando a pessoa não escolhe (um calendário ou uma lista dos Lembretes).
+    /// Nil: pergunta toda vez.
+    var agendaPadrao: DestinoAgenda? = nil
 }
 
 // MARK: - Estado (GET /api/estado, pedido pelo painel a cada 1 s)
