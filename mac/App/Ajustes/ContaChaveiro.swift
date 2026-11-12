@@ -19,6 +19,7 @@ struct Chaveiro: CofreDeToken {
     }
 
     func guardar(_ token: String, conta: String) throws {
+        guard AmbienteDeTeste.chaveiroPermitido(servico: servico) else { throw ErroChaveiro(codigo: errSecInteractionNotAllowed) }
         apagar(conta: conta)
         var item = consulta(conta)
         item[kSecValueData as String] = Data(token.utf8)
@@ -29,6 +30,7 @@ struct Chaveiro: CofreDeToken {
     }
 
     func ler(conta: String) -> String? {
+        guard AmbienteDeTeste.chaveiroPermitido(servico: servico) else { return nil }
         var q = consulta(conta)
         q[kSecReturnData as String] = true
         q[kSecMatchLimit as String] = kSecMatchLimitOne
@@ -37,5 +39,17 @@ struct Chaveiro: CofreDeToken {
         return String(data: d, encoding: .utf8)
     }
 
-    func apagar(conta: String) { SecItemDelete(consulta(conta) as CFDictionary) }
+    func apagar(conta: String) {
+        guard AmbienteDeTeste.chaveiroPermitido(servico: servico) else { return }
+        SecItemDelete(consulta(conta) as CFDictionary)
+    }
+}
+
+/// Cofre na memória: o hospedeiro de teste usa este, nunca o Chaveiro do dono.
+final class CofreEmMemoria: CofreDeToken, @unchecked Sendable {
+    private let trava = NSLock()
+    private var itens: [String: String] = [:]
+    func guardar(_ token: String, conta: String) throws { trava.lock(); itens[conta] = token; trava.unlock() }
+    func ler(conta: String) -> String? { trava.lock(); defer { trava.unlock() }; return itens[conta] }
+    func apagar(conta: String) { trava.lock(); itens[conta] = nil; trava.unlock() }
 }

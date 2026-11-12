@@ -76,7 +76,7 @@ final class PainelUso: ObservableObject {
     private var tarefaLogin: Task<Void, Never>?
 
     init(agora: @escaping () -> Date = Date.init, casa: URL = FileManager.default.homeDirectoryForCurrentUser,
-         cofre: CofreDeToken = Chaveiro(), leitorToken: LeitorDeUsoPorToken = LeitorComCache()) {
+         cofre: CofreDeToken = AmbienteDeTeste.ativo ? CofreEmMemoria() : Chaveiro(), leitorToken: LeitorDeUsoPorToken = LeitorComCache()) {
         self.agora = agora
         self.casa = casa
         self.cofre = cofre
