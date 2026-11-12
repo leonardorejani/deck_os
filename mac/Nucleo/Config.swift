@@ -32,7 +32,8 @@ extension ConfigMonitor {
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: ChavesConfig.self)
         func ler(_ nome: String) -> Bool { ((try? c.decodeIfPresent(Bool.self, forKey: ChavesConfig(nome))) ?? nil) ?? true }
-        self.init(cpu: ler("cpu"), memoria: ler("memoria"), bateria: ler("bateria"), rede: ler("rede"))
+        self.init(cpu: ler("cpu"), memoria: ler("memoria"), bateria: ler("bateria"), rede: ler("rede"), gpu: ler("gpu"), disco: ler("disco"),
+                  energia: ler("energia"), ventoinhas: ler("ventoinhas"), dispositivos: ler("dispositivos"))
     }
 }
 

@@ -1,10 +1,11 @@
 import Foundation
 #if os(macOS)
 import Darwin
+import IOKit
 import IOKit.ps
 #endif
 
-// Monitor do Mac: processador, memória, bateria e rede. Só lê o que a pessoa deixou ligado nos Ajustes do Mac
+// Monitor do Mac: processador, GPU, memória, bateria, rede, disco, energia, ventoinhas e dispositivos USB. Só lê o que a pessoa deixou ligado nos Ajustes do Mac
 // (ConfigMonitor), então item escondido nem chega a ser medido. Taxa (processador e rede) precisa de duas medidas:
 // a primeira leitura devolve nil nesses itens e a seguinte já traz o valor.
 
@@ -19,6 +20,25 @@ protocol SondaDoMac: Sendable {
     func bateria() -> (nivel: Int, naTomada: Bool)?
     /// Contadores de bytes das interfaces de rede (Wi-Fi, cabo). Contam 32 bits e voltam a zero.
     func rede() -> (entrada: UInt64, saida: UInt64)?
+    /// Uso da GPU, 0 a 100. nil quando o Mac não informa.
+    func gpu() -> Int?
+    /// Espaço livre (com o que o sistema libera sozinho) e total do disco do usuário, em bytes.
+    func disco() -> (livre: UInt64, total: UInt64)?
+    /// Consumo do Mac em watts e se a bateria está carregando. nil em Mac sem a medida.
+    func energia() -> (watts: Double, carregando: Bool)?
+    /// Rotação de cada ventoinha e a máxima, em RPM. nil quando não há ventoinha ou o Mac não deixa ler.
+    func ventoinhas() -> (rpm: [Int], maximo: Int)?
+    /// Quantos dispositivos USB estão conectados. nil quando não deu para contar.
+    func dispositivosUsb() -> Int?
+}
+
+/// As medidas novas têm resposta padrão "não sei": sonda antiga (e a do Linux do CI) continua valendo.
+extension SondaDoMac {
+    func gpu() -> Int? { nil }
+    func disco() -> (livre: UInt64, total: UInt64)? { nil }
+    func energia() -> (watts: Double, carregando: Bool)? { nil }
+    func ventoinhas() -> (rpm: [Int], maximo: Int)? { nil }
+    func dispositivosUsb() -> Int? { nil }
 }
 
 final class FonteMonitor: @unchecked Sendable {
@@ -46,6 +66,12 @@ final class FonteMonitor: @unchecked Sendable {
             let r = lerRede(agora)
             e.baixa = r?.baixa; e.sobe = r?.sobe
         } else { redeAntes = nil; ultimaRede = nil }
+        // As medidas abaixo vêm de uma leitura só (sem taxa) e somem sozinhas quando o Mac não sabe dizer.
+        if c.gpu, let g = sonda.gpu() { e.gpu = max(0, min(100, g)) }
+        if c.disco, let d = sonda.disco(), d.total > 0 { e.discoTotal = Int(clamping: d.total); e.discoLivre = Int(clamping: min(d.livre, d.total)) }
+        if c.energia, let p = sonda.energia(), p.watts.isFinite { e.watts = (max(0, p.watts) * 10).rounded() / 10; e.carregando = p.carregando }
+        if c.ventoinhas, let v = sonda.ventoinhas(), !v.rpm.isEmpty { e.ventoinhas = v.rpm.map { max(0, $0) }; e.ventoinhaMax = v.maximo > 0 ? v.maximo : nil }
+        if c.dispositivos, let n = sonda.dispositivosUsb() { e.dispositivos = max(0, n) }
         return e
     }
 
@@ -133,6 +159,60 @@ struct SondaReal: SondaDoMac {
             entrada += UInt64(d.ifi_ibytes); saida += UInt64(d.ifi_obytes)
         }
         return (entrada, saida)
+    }
+
+    func gpu() -> Int? {
+        var melhor: Int?
+        for d in Self.propriedades(de: "IOAccelerator") {
+            guard let est = d["PerformanceStatistics"] as? [String: Any],
+                  let v = (est["Device Utilization %"] as? NSNumber) ?? (est["GPU Activity(%)"] as? NSNumber) else { continue }
+            melhor = max(melhor ?? 0, v.intValue)
+        }
+        return melhor
+    }
+
+    func disco() -> (livre: UInt64, total: UInt64)? {
+        let url = URL(fileURLWithPath: NSHomeDirectory())
+        guard let v = try? url.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey, .volumeTotalCapacityKey]),
+              let livre = v.volumeAvailableCapacityForImportantUsage, let total = v.volumeTotalCapacity, total > 0 else { return nil }
+        return (UInt64(max(0, livre)), UInt64(total))
+    }
+
+    /// A carga total do sistema (PowerTelemetryData.SystemLoad, em mW). Sem ela, o fluxo da bateria (corrente vezes tensão).
+    func energia() -> (watts: Double, carregando: Bool)? {
+        guard let b = Self.propriedades(de: "AppleSmartBattery").first else { return nil }
+        let corrente = (b["Amperage"] as? NSNumber).map { Int64(bitPattern: $0.uint64Value) } ?? 0 // mA, negativo ao descarregar (o IORegistry guarda sem sinal)
+        let carregando = corrente > 0 || (b["IsCharging"] as? Bool) == true
+        if let t = b["PowerTelemetryData"] as? [String: Any], let carga = t["SystemLoad"] as? NSNumber, carga.int64Value > 0 {
+            return (Double(carga.int64Value) / 1000, carregando)
+        }
+        guard let tensao = (b["Voltage"] as? NSNumber)?.doubleValue, tensao > 0 else { return nil }
+        return (Double(abs(corrente)) * tensao / 1_000_000, carregando)
+    }
+
+    func ventoinhas() -> (rpm: [Int], maximo: Int)? { LeitorSMC.ventoinhas() }
+
+    /// Dispositivos USB de verdade (os hubs raiz do próprio Mac não têm nome de produto).
+    func dispositivosUsb() -> Int? {
+        let n = Self.propriedades(de: "IOUSBHostDevice").filter { ($0["USB Product Name"] as? String)?.isEmpty == false }.count
+        return n
+    }
+
+    /// As propriedades de cada serviço do IORegistry de uma classe.
+    private static func propriedades(de classe: String) -> [[String: Any]] {
+        guard let casar = IOServiceMatching(classe) else { return [] }
+        var it: io_iterator_t = 0
+        guard IOServiceGetMatchingServices(kIOMainPortDefault, casar, &it) == KERN_SUCCESS else { return [] }
+        defer { IOObjectRelease(it) }
+        var lista: [[String: Any]] = []
+        while true {
+            let s = IOIteratorNext(it)
+            if s == 0 { break }
+            defer { IOObjectRelease(s) }
+            var props: Unmanaged<CFMutableDictionary>?
+            if IORegistryEntryCreateCFProperties(s, &props, kCFAllocatorDefault, 0) == KERN_SUCCESS, let d = props?.takeRetainedValue() as? [String: Any] { lista.append(d) }
+        }
+        return lista
     }
     #else
     func cpu() -> (ocupado: UInt64, total: UInt64)? { nil }
