@@ -67,6 +67,42 @@ final class AcoesTestes: XCTestCase {
         XCTAssertEqual(real.executar(tecla("comando", "echo ops >&2; exit 4")), "O comando falhou: ops")
     }
 
+    /// Defeito de 12/11/2026: tecla "mudar" dava "command not found" porque o comando rodava sem o perfil.
+    /// Perfil de teste com HOME temporário: a função só existe no .zshrc.
+    func testComandoEnxergaFuncaoDoPerfilDoUsuario() throws {
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent("deck-home-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: home) }
+        try "mudar() { echo \"mudou $1\" > \"\(home.path)/saida\"; }\nalias trabalho='mudar trabalho'\necho banner-do-perfil\n"
+            .write(to: home.appendingPathComponent(".zshrc"), atomically: true, encoding: .utf8)
+        let antigo = ProcessInfo.processInfo.environment["HOME"]
+        setenv("HOME", home.path, 1)
+        defer { if let a = antigo { setenv("HOME", a, 1) } else { unsetenv("HOME") } }
+        let real = ExecutorAcoes(shell: ExecutorShell(), temAcessibilidade: { false }, enviarTecla: { _ in },
+                                 limiteSegundos: 10, shellDoUsuario: { "/bin/zsh" })
+        XCTAssertNil(real.executar(tecla("comando", "mudar jogo")))
+        XCTAssertEqual(try String(contentsOf: home.appendingPathComponent("saida"), encoding: .utf8), "mudou jogo\n")
+        XCTAssertNil(real.executar(tecla("comando", "trabalho")))
+        XCTAssertEqual(try String(contentsOf: home.appendingPathComponent("saida"), encoding: .utf8), "mudou trabalho\n")
+        XCTAssertEqual(real.executar(tecla("comando", "comando_que_nao_existe_xyz")), "Comando não encontrado: comando_que_nao_existe_xyz")
+    }
+
+    func testShellDoUsuarioEExecutavel() {
+        XCTAssertTrue(FileManager.default.isExecutableFile(atPath: Shell.doUsuario()))
+    }
+
+    func testErroDeComandoInexistenteEmCadaShell() {
+        XCTAssertEqual(ExecutorAcoes.erroComandoInexistente("zsh:1: command not found: mudar"), "Comando não encontrado: mudar")
+        XCTAssertEqual(ExecutorAcoes.erroComandoInexistente("bash: mudar: command not found"), "Comando não encontrado: mudar")
+        XCTAssertEqual(ExecutorAcoes.erroComandoInexistente(""), "O comando falhou")
+    }
+
+    func testOpcoesDePerfilPorShell() {
+        XCTAssertEqual(Shell.opcoesDePerfil("/bin/zsh"), "-l -i")
+        XCTAssertEqual(Shell.opcoesDePerfil("/opt/homebrew/bin/fish"), "-l -i")
+        XCTAssertEqual(Shell.opcoesDePerfil("/bin/sh"), "-l")
+    }
+
     /// Filho em segundo plano não pode segurar a tecla: o comando volta assim que o shell termina.
     func testFilhoEmSegundoPlanoNaoTravaATecla() {
         let real = ExecutorAcoes(shell: ExecutorShell(), temAcessibilidade: { false }, enviarTecla: { _ in }, limiteSegundos: 5)
