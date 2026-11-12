@@ -153,6 +153,37 @@ final class LigacaoTestes: XCTestCase {
         XCTAssertEqual(a.ler().comp, "b")
     }
 
+    // iphone-bugs (12/11/2026): é a ligação usoMedido de Ligacao.roteador que leva o uso por token ao /api/estado.
+    // Sem o argumento, a conta por token volta a ir sem número ao iPhone.
+    func testRoteadorLevaOUsoMedidoPorTokenAoEstado() throws {
+        let (a, _) = try armazem()
+        var c = a.ler()
+        c.contas = [ContaIA(id: "claude-token-1", nome: "Claude", conta: "nova")]
+        XCTAssertNil(a.aplicar(c))
+        let fontes = Fontes(
+            sessoes: { Leitura(valor: [], aviso: nil) },
+            uso: { contas, _ in Leitura(valor: contas.map { UsoConta(id: $0.id, nome: $0.nome, conta: $0.conta, semana: nil, renova: nil) }, aviso: nil) },
+            whatsapp: { Leitura(valor: nil, aviso: nil) }, seloWhatsApp: { nil },
+            spotify: { _ in Leitura(valor: nil, aviso: nil) }, capa: { nil },
+            agenda: { _ in Leitura(valor: ResumoAgenda(permissao: true, proximo: nil), aviso: nil) }, acesas: { _ in [] })
+        func estado(_ medido: (@Sendable ([ContaIA], Date) -> [String: UsoConta])?) throws -> [[String: Any]] {
+            let r = Ligacao.roteador(armazem: a, pareamento: Pareamento(), pagina: ArquivosPagina(raiz: try pastaTemporaria()),
+                                     executor: ExecutorFalso([]), fontes: fontes, usoMedido: medido)
+            let resp = r.responder(HttpRequisicao(metodo: "GET", caminho: "/api/estado", query: [:],
+                                                   cabecalhos: ["x-deck-codigo": c.codigoAcesso], corpo: Data()))
+            XCTAssertEqual(resp.status, 200)
+            let obj = try XCTUnwrap(resp.json as? [String: Any])
+            return try XCTUnwrap(obj["uso"] as? [[String: Any]])
+        }
+        XCTAssertNil(try estado(nil).first?["semana"], "sem a ligação, a conta por token vai sem número")
+        let medido: @Sendable ([ContaIA], Date) -> [String: UsoConta] = { _, _ in
+            ["claude-token-1": UsoConta(id: "claude-token-1", nome: "Claude", conta: "nova", semana: 61, renova: "2026-11-18T10:00:00Z")]
+        }
+        let uso = try estado(medido)
+        XCTAssertEqual(uso.first?["semana"] as? Int, 61)
+        XCTAssertEqual(uso.first?["renova"] as? String, "2026-11-18T10:00:00Z")
+    }
+
     // MARK: Spotify: volume e API
 
     func testVolumeDoSpotifyEPeloAppleScriptEComNumeroFormatado() {

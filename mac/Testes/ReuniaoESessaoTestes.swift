@@ -125,6 +125,15 @@ final class ReuniaoTestes: XCTestCase {
         XCTAssertEqual(try JSONDecoder().decode(Evento.self, from: dados), e)
     }
 
+    // iphone-bugs (12/11/2026): sem o fim, o painel não sabe que o evento de vários dias continua no mês seguinte.
+    func testConverterLevaOFimParaEventoDeVariosDias() throws {
+        let b = EventoBruto(titulo: "Viagem", inicio: Date(timeIntervalSince1970: 1_794_400_000), fim: Date(timeIntervalSince1970: 1_794_400_000 + 4 * 86_400),
+                            diaTodo: true, calendario: "T", cor: (r: 0, g: 0, b: 0), local: nil)
+        let e = Agenda.converter(b, fuso: utc)
+        XCTAssertEqual(e.fim, Datas.iso(b.fim, fuso: utc))
+        XCTAssertTrue(String(decoding: try JSONEncoder().encode(e), as: UTF8.self).contains("\"fim\""))
+    }
+
     func testConverterLevaOLinkDoEventoBruto() {
         var b = EventoBruto(titulo: "x", inicio: Date(timeIntervalSince1970: 1_794_400_000), fim: Date(timeIntervalSince1970: 1_794_403_600),
                             diaTodo: false, calendario: "T", cor: (r: 0, g: 0, b: 0), local: "Google Meet")

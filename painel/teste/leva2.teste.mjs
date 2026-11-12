@@ -54,7 +54,8 @@ export default async function (h) {
   /* ---------- Agenda: Entrar na reunião (Meet, Zoom, Teams) ---------- */
   await h.reset(); await h.cenario({ reunioes: true });
   p = await h.pagina(); await pronta(h, p);
-  await p.click('.tecla[data-id="calendario"]');
+  await p.click('.tecla[data-id="calendario"]'); await h.espera(p, () => document.querySelectorAll('#ca-grade .sb-dia').length > 27);
+  await p.click('#ca-prox'); await h.dormir(500);
   await h.espera(p, () => document.querySelectorAll('#ca-lista .ev-linha').length > 3);
   const abrirEvento = async titulo => { await p.locator(`#ca-lista .ev-linha:has(b:text-is("${titulo}"))`).first().click(); await h.dormir(250) };
   const botao = '#ca-lista [data-ev-reuniao]';
@@ -86,7 +87,7 @@ export default async function (h) {
   /* o Mac recusa: o aviso traz o motivo */
   await h.reset(); await h.cenario({ reunioes: true, reuniaoRecusa: 'O Mac não conseguiu abrir o link da reunião.' });
   p = await h.pagina(); await pronta(h, p);
-  await p.click('.tecla[data-id="calendario"]'); await h.espera(p, () => document.querySelectorAll('#ca-lista .ev-linha').length > 3);
+  await p.click('.tecla[data-id="calendario"]'); await h.espera(p, () => document.querySelectorAll('#ca-grade .sb-dia').length > 27); await p.click('#ca-prox'); await h.dormir(500); await h.espera(p, () => document.querySelectorAll('#ca-lista .ev-linha').length > 3);
   await p.locator('#ca-lista .ev-linha:has(b:text-is("Reunião de produto"))').first().click(); await h.dormir(250);
   await p.click(botao); await h.dormir(400);
   let a = await aviso(p);
@@ -96,7 +97,7 @@ export default async function (h) {
   /* Mac antigo (sem link no evento) e link que não é de reunião: nada de botão */
   await h.reset();
   p = await h.pagina(); await pronta(h, p);
-  await p.click('.tecla[data-id="calendario"]'); await h.espera(p, () => document.querySelectorAll('#ca-lista .ev-linha').length > 3);
+  await p.click('.tecla[data-id="calendario"]'); await h.espera(p, () => document.querySelectorAll('#ca-grade .sb-dia').length > 27); await p.click('#ca-prox'); await h.dormir(500); await h.espera(p, () => document.querySelectorAll('#ca-lista .ev-linha').length > 3);
   await p.locator('#ca-lista .ev-linha:has(b:text-is("Reunião de produto"))').first().click(); await h.dormir(250);
   h.ok(await p.locator(botao).count() === 0, 'Mac que ainda não manda o link: o evento abre sem o botão e sem erro');
   const falso = await p.evaluate(() => ['https://golpe.com/meet.google.com/x', 'http://meet.google.com/abc', 'javascript:alert(1)', 'https://meet.google.com.golpe.com/abc', ''].map(l => reuniaoDe({ link: l })));

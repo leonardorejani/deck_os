@@ -266,6 +266,24 @@ final class ModeloApp: ObservableObject {
         }
     }
 
+    /// O uso por token que a seção Uso das IAs já sabe medir, entregue ao estado do iPhone. A leitura roda no
+    /// fio de fundo do agregador (cache de 15 s), por isso espera a resposta aqui. O leitor guarda o resultado.
+    nonisolated static func usoMedidoPorToken() -> @Sendable ([ContaIA], Date) -> [String: UsoConta] {
+        let cofre: CofreDeToken = AmbienteDeTeste.ativo ? CofreEmMemoria() : Chaveiro()
+        let leitor = LeitorComCache()
+        let casa = FileManager.default.homeDirectoryForCurrentUser
+        return { contas, agora in
+            let pronto = DispatchSemaphore(value: 0)
+            let caixa = CaixaDeUso()
+            Task.detached {
+                caixa.valor = await PainelUso.lerUso(contas: contas, casa: casa, cofre: cofre, leitor: leitor, agora: agora)
+                pronto.signal()
+            }
+            _ = pronto.wait(timeout: .now() + 25)
+            return caixa.valor
+        }
+    }
+
     private func subirServidor(_ armazem: ArmazemEmDisco) {
         guard let pasta = PastaDaPagina.daInstalacao() else {
             servidor = .falhou("Não achei a página do iPhone dentro do app.")
@@ -273,7 +291,8 @@ final class ModeloApp: ObservableObject {
             return
         }
         let roteador = Ligacao.roteador(armazem: armazem, pareamento: pareamento, pagina: ArquivosPagina(raiz: pasta),
-                                        rodizio: rodizio, certificadoCA: GeradorCertificado().arquivos.ca, contaSpotify: spotify.conta)
+                                        rodizio: rodizio, certificadoCA: GeradorCertificado().arquivos.ca, contaSpotify: spotify.conta,
+                                        usoMedido: ModeloApp.usoMedidoPorToken())
         // A bancada não tem iPhone: nada de cabo nem Bluetooth.
         if Variante.atual.ligaIphone { ligarNativo(roteador: roteador) }
         let portaInicial = Variante.atual.portaFixa ?? config.porta
@@ -371,5 +390,15 @@ enum IphoneLembrado {
 
     static func esquecer(_ defaults: UserDefaults) {
         for c in [chaveNome, chaveDesde, chaveCodigo] { defaults.removeObject(forKey: c) }
+    }
+}
+
+/// Leva o resultado da leitura assíncrona de volta ao fio que esperou por ele.
+private final class CaixaDeUso: @unchecked Sendable {
+    private let trava = NSLock()
+    private var guardado: [String: UsoConta] = [:]
+    var valor: [String: UsoConta] {
+        get { trava.lock(); defer { trava.unlock() }; return guardado }
+        set { trava.lock(); guardado = newValue; trava.unlock() }
     }
 }
