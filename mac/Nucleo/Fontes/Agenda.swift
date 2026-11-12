@@ -26,6 +26,23 @@ struct EventoBruto: Equatable, Sendable {
 enum Agenda {
     static let diasAdiante = 30
 
+    /// Lembrete do app Lembretes como item da agenda: entra no dia do prazo, com a hora quando tem. Sem prazo não entra.
+    static func lembrete(titulo: String, prazo: DateComponents, lista: String,
+                         cor: (r: Double, g: Double, b: Double), calendario: Calendar = .current) -> EventoBruto? {
+        guard prazo.year != nil, prazo.month != nil, prazo.day != nil else { return nil }
+        var c = prazo; c.calendar = calendario; c.timeZone = calendario.timeZone
+        let diaTodo = prazo.hour == nil
+        if diaTodo { c.hour = 0; c.minute = 0 } else if c.minute == nil { c.minute = 0 }
+        guard let inicio = calendario.date(from: c) else { return nil }
+        let fim = diaTodo ? inicio.addingTimeInterval(24 * 3600 - 1) : inicio
+        return EventoBruto(titulo: titulo, inicio: inicio, fim: fim, diaTodo: diaTodo, calendario: lista, cor: cor, local: nil)
+    }
+
+    /// Eventos do Calendário e lembretes numa lista só, na ordem do início.
+    static func juntar(_ eventos: [EventoBruto], _ lembretes: [EventoBruto]) -> [EventoBruto] {
+        (eventos + lembretes).sorted { $0.inicio < $1.inicio }
+    }
+
     static func converter(_ e: EventoBruto, fuso: TimeZone = .current) -> Evento {
         let local = e.local?.trimmingCharacters(in: .whitespacesAndNewlines)
         return Evento(titulo: e.titulo, inicio: Datas.iso(e.inicio, fuso: fuso), diaTodo: e.diaTodo,
@@ -61,8 +78,10 @@ struct FonteAgenda: Sendable {
                 return Leitura(valor: Agenda.resumo(permissao: true, eventos: brutos, agora: agora), aviso: nil)
             },
             eventos: { de, dias in
-                guard temPermissao() else { return [] }
-                return buscar(EKEventStore(), de: de, dias: dias).sorted { $0.inicio < $1.inicio }.map { Agenda.converter($0) }
+                let loja = EKEventStore()
+                let eventos = temPermissao() ? buscar(loja, de: de, dias: dias) : []
+                let lembretes = temPermissaoLembretes() ? buscarLembretes(loja, de: de, dias: dias) : []
+                return Agenda.juntar(eventos, lembretes).map { Agenda.converter($0) }
             }
         )
         #else
@@ -77,6 +96,35 @@ struct FonteAgenda: Sendable {
     /// 3 é "autorizado" (acesso total no macOS 14 em diante). Pelo número para valer nos dois nomes.
     static func temPermissao() -> Bool {
         EKEventStore.authorizationStatus(for: .event).rawValue == 3
+    }
+
+    static func temPermissaoLembretes() -> Bool {
+        EKEventStore.authorizationStatus(for: .reminder).rawValue == 3
+    }
+
+    /// Lembretes ainda não feitos com prazo no intervalo. A leitura do EventKit é assíncrona: espera até 5 s.
+    static func buscarLembretes(_ loja: EKEventStore, de: Date, dias: Int) -> [EventoBruto] {
+        let fim = Calendar.current.date(byAdding: .day, value: dias, to: de) ?? de
+        let filtro = loja.predicateForIncompleteReminders(withDueDateStarting: de, ending: fim, calendars: nil)
+        let achados = CaixaDeLembretes()
+        let fila = DispatchSemaphore(value: 0)
+        loja.fetchReminders(matching: filtro) { lista in
+            achados.guardar(lista?.compactMap(brutoDeLembrete) ?? [])
+            fila.signal()
+        }
+        guard fila.wait(timeout: .now() + 5) == .success else { return [] }
+        return achados.todos()
+    }
+
+    static func brutoDeLembrete(_ r: EKReminder) -> EventoBruto? {
+        var rgb: (r: Double, g: Double, b: Double) = (0.5, 0.5, 0.5)
+        if let sRGB = CGColorSpace(name: CGColorSpace.sRGB),
+           let c = r.calendar?.cgColor.converted(to: sRGB, intent: .defaultIntent, options: nil),
+           let k = c.components, k.count >= 3 {
+            rgb = (Double(k[0]), Double(k[1]), Double(k[2]))
+        }
+        guard let prazo = r.dueDateComponents else { return nil }
+        return Agenda.lembrete(titulo: r.title ?? "", prazo: prazo, lista: r.calendar?.title ?? "Lembretes", cor: rgb)
     }
 
     static func buscar(_ loja: EKEventStore, de: Date, dias: Int) -> [EventoBruto] {
@@ -98,3 +146,13 @@ struct FonteAgenda: Sendable {
     }
     #endif
 }
+
+#if canImport(EventKit) && canImport(CoreGraphics)
+/// Guarda o que o EventKit devolveu em outra fila, com trava.
+private final class CaixaDeLembretes: @unchecked Sendable {
+    private let trava = NSLock()
+    private var lista: [EventoBruto] = []
+    func guardar(_ l: [EventoBruto]) { trava.lock(); lista = l; trava.unlock() }
+    func todos() -> [EventoBruto] { trava.lock(); defer { trava.unlock() }; return lista }
+}
+#endif
