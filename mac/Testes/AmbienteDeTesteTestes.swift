@@ -1,6 +1,9 @@
 import XCTest
 @testable import Nucleo
 
+// Só no Mac: é lá que existe Chaveiro, e o Linux do CI não expõe o XCTestCase por nome.
+#if os(macOS)
+
 final class AmbienteDeTesteTestes: XCTestCase {
     func testSobXCTestEstaAtivoEBloqueiaServicoReal() {
         var bloqueados: [String] = []
@@ -13,3 +16,4 @@ final class AmbienteDeTesteTestes: XCTestCase {
         XCTAssertEqual(bloqueados, ["com.leonardorejani.deck.spotify"])
     }
 }
+#endif
