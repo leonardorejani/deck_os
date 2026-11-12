@@ -191,6 +191,8 @@ final class AppsDoMac: ProvedorDeApps, @unchecked Sendable {
 
     func acoes(bundle: String) -> [AcaoDisponivel]? {
         if bundle == CatalogoDeAcoes.navegadorPadrao { return catalogo.acoes(para: nil) }
+        // Google Meet no navegador: não é app instalado, só tem as duas ações da reunião.
+        if bundle == ControleDeReuniao.idDoMeet { return [CatalogoDeAcoes.reuniaoMicrofone, CatalogoDeAcoes.reuniaoCamera] }
         return achado(bundle).map { catalogo.acoes(para: $0) }
     }
 }

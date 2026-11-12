@@ -85,15 +85,22 @@ struct AbridorDeReuniao: ProvedorDeReuniao {
 enum ControleDeReuniao {
     enum Item: Sendable { case microfone, camera }
 
+    /// A tecla "Google Meet (navegador)": não é um app instalado, é a sala aberta em qualquer navegador.
+    static let valorDoMeet = "Google Meet"
+    static let idDoMeet = "deck-meet-navegador"
+
     enum Alvo: Equatable, Sendable {
         /// Meet no navegador: o atalho só vale na aba do Meet, então ela vem para a frente antes.
         case meet(NavegadorWeb)
+        /// Meet no navegador sem dizer qual: o Deck procura a sala aberta em qualquer navegador que ele sabe consultar.
+        case meetNoNavegador
         case zoom
         case teams
     }
 
     /// Qual serviço a tecla controla, pelo nome do app dela: um navegador que o Deck sabe consultar, o Zoom ou o Teams.
     static func alvo(app nome: String) -> Alvo? {
+        if nome == valorDoMeet { return .meetNoNavegador }
         if let n = NavegadorWeb.chamado(nome) { return .meet(n) }
         let baixo = nome.lowercased()
         if baixo.contains("zoom") { return .zoom }
@@ -105,8 +112,8 @@ enum ControleDeReuniao {
     /// e Teams (Cmd+Shift+M e Cmd+Shift+O). Valem com a janela da reunião na frente.
     static func atalho(_ alvo: Alvo, _ item: Item) -> String {
         switch (alvo, item) {
-        case (.meet, .microfone): return "cmd+d"
-        case (.meet, .camera): return "cmd+e"
+        case (.meet, .microfone), (.meetNoNavegador, .microfone): return "cmd+d"
+        case (.meet, .camera), (.meetNoNavegador, .camera): return "cmd+e"
         case (.zoom, .microfone): return "cmd+shift+a"
         case (.zoom, .camera): return "cmd+shift+v"
         case (.teams, .microfone): return "cmd+shift+m"
@@ -144,7 +151,7 @@ enum ControleDeReuniao {
     /// O app está aberto neste Mac? (O Zoom e o Teams só têm atalho com a reunião rolando, então fechado já é erro.)
     static func comandoAberto(_ alvo: Alvo) -> String? {
         switch alvo {
-        case .meet: return nil
+        case .meet, .meetNoNavegador: return nil
         case .zoom: return "pgrep -x 'zoom.us' >/dev/null"
         case .teams: return "pgrep -x 'MSTeams' >/dev/null || pgrep -x 'Microsoft Teams' >/dev/null"
         }
@@ -152,6 +159,24 @@ enum ControleDeReuniao {
 }
 
 extension ExecutorAcoes {
+    /// Acha a aba da sala do Meet em qualquer navegador aberto e a põe na frente. Devolve o erro, ou nil se deu certo.
+    func trazerSalaDoMeet() -> String? {
+        var semPermissao: NavegadorWeb?
+        for navegador in NavegadorWeb.todos {
+            let r = shell.rodar(ControleDeReuniao.comandoBusca(navegador))
+            if r.status == Self.statusTempoEsgotado { return CatalogoDeAcoes.motivo(r, app: navegador.nome) }
+            switch WhatsAppWeb.interpretar(status: r.status, saida: r.saida, navegador: navegador) {
+            case .semPermissao: semPermissao = semPermissao ?? navegador
+            case .fechado, .falhou: continue
+            case .abas(let abas):
+                guard let sala = abas.first(where: { ControleDeReuniao.ehSalaDoMeet($0.titulo) }) else { continue }
+                return shell.rodar(WhatsAppWeb.comandoTrazer(sala)).status == 0 ? nil : "Não consegui trazer a aba do Meet para a frente"
+            }
+        }
+        if let n = semPermissao { return CatalogoDeAcoes.motivo(SaidaShell(status: 1, saida: "-1743"), app: n.nome) }
+        return "Não achei uma reunião do Meet aberta no navegador. Entre na sala e tente de novo"
+    }
+
     /// Folga entre trazer o app para a frente e apertar o atalho: sem ela a tecla cai no app que estava na frente.
     static let esperaDoFoco = "sleep 0.4"
 
@@ -175,6 +200,8 @@ extension ExecutorAcoes {
                 }
                 guard shell.rodar(WhatsAppWeb.comandoTrazer(sala)).status == 0 else { return "Não consegui trazer a aba do Meet para a frente" }
             }
+        case .meetNoNavegador:
+            if let erro = trazerSalaDoMeet() { return erro }
         case .zoom, .teams:
             let nome = alvo == .zoom ? "Zoom" : "Teams"
             if let aberto = ControleDeReuniao.comandoAberto(alvo), shell.rodar(aberto).status != 0 {
