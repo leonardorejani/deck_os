@@ -61,7 +61,7 @@ function pintarControles() {
   const lista = oferecidos(), forma = JSON.stringify([lista.map(c => c.id), typeof ct.dados.mudo === 'boolean']);
   if (forma !== ct.forma) { // o que o Mac oferece mudou: refaz as linhas (senão só mexe nos valores, sem soltar o dedo da barra)
     ct.forma = forma;
-    corpo.innerHTML = lista.length ? lista.map(linhaCtl).join('') : '<div class="vazio-bloco" style="min-height:160px"><strong>Nada para controlar</strong><span>Este Mac não oferece volume, brilho nem luz de teclado agora.</span></div>';
+    corpo.innerHTML = lista.length ? lista.map(linhaCtl).join('') : '<div class="vazio-bloco" style="min-height:160px"><strong>Nada para controlar</strong><span>Este Mac não oferece volume, brilho nem luz de teclado, ou as barras estão desligadas na tecla Controles do Mac, nos Ajustes do Deck.</span></div>';
   }
   for (const c of lista) {
     if (arrCtl?.id === c.id) continue; // o dedo manda na barra que ele está segurando

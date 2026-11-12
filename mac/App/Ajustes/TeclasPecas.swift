@@ -104,6 +104,8 @@ enum IconesDeTecla {
         case "terminal": return Icone.terminal
         case "raio": return Icone.raio
         case "microfone": return Icone.microfone
+        case "controles": return Icone.controles
+        case "video": return Icone.video
         default: return nil
         }
     }
@@ -119,7 +121,9 @@ struct IconeDaTecla: View {
     var lado: CGFloat = Tema.Medida.teclaIcone
 
     var body: some View {
-        if tecla.tipo == "app", !tecla.valor.isEmpty {
+        if tecla.tipo == "app", let f = TeclasDeFabrica.de(valor: tecla.valor), let s = f.svg {
+            Caixa(lado: lado) { Svg(s, lado: lado / 2).foregroundColor(Tema.Cor.texto) }
+        } else if tecla.tipo == "app", !tecla.valor.isEmpty {
             DoApp(nome: tecla.valor, catalogo: catalogo, lado: lado)
         } else if let ic = tecla.icone, ic.hasPrefix("svg:"), let s = IconesDeTecla.svg(String(ic.dropFirst(4))) {
             Caixa(lado: lado) { Svg(s, lado: lado / 2).foregroundColor(Tema.Cor.texto) }
