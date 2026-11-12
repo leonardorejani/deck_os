@@ -1,4 +1,5 @@
 import Foundation
+import Nucleo
 
 /// Os 7 passos, na ordem do protótipo (mac.js, passosIni).
 enum PassoInicial: Int, CaseIterable {
@@ -97,5 +98,11 @@ enum EstadoDoAcesso: Equatable {
 enum OrdemDosAcessos {
     static let todos: [AcessoMac] = [.calendarios, .automacao, .discoTotal, .acessibilidade]
     /// A seção Acessos do Mac lista tudo o que o Deck usa, na ordem em que a pessoa mais pergunta.
-    static let painel: [AcessoMac] = [.calendarios, .automacao, .navegadores, .acessibilidade, .discoTotal, .bluetooth, .redeLocal]
+    static let painel: [AcessoMac] = painel(para: Variante.atual)
+
+    /// A bancada não tem iPhone: sem Bluetooth e sem Rede local na lista (o macOS não pode perguntar por eles).
+    static func painel(para variante: Variante) -> [AcessoMac] {
+        let base: [AcessoMac] = [.calendarios, .automacao, .navegadores, .acessibilidade, .discoTotal, .bluetooth, .redeLocal]
+        return variante.pedeBluetoothERedeLocal ? base : base.filter { $0 != .bluetooth && $0 != .redeLocal }
+    }
 }

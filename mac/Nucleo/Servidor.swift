@@ -13,13 +13,22 @@ final class ServidorHttps: @unchecked Sendable {
     private let roteador: Roteador
     private let identidade: SecIdentity
     let porta: UInt16
+    /// Só no loopback (a bancada): o servidor não aparece para outros aparelhos da rede.
+    let somenteLocal: Bool
     private var listener: NWListener?
     private let fila = DispatchQueue(label: "deck.servidor")
 
-    init(roteador: Roteador, identidade: SecIdentity, porta: UInt16) {
+    init(roteador: Roteador, identidade: SecIdentity, porta: UInt16, somenteLocal: Bool = false) {
+        self.somenteLocal = somenteLocal
         self.roteador = roteador
         self.identidade = identidade
         self.porta = porta
+    }
+
+    static func parametros(tls: NWProtocolTLS.Options, somenteLocal: Bool) -> NWParameters {
+        let params = NWParameters(tls: tls, tcp: NWProtocolTCP.Options())
+        if somenteLocal { params.requiredInterfaceType = .loopback }
+        return params
     }
 
     /// Começa a escutar em todas as interfaces e só volta quando a porta está aberta ou falhou.
@@ -30,7 +39,7 @@ final class ServidorHttps: @unchecked Sendable {
         }
         sec_protocol_options_set_local_identity(tls.securityProtocolOptions, id)
         sec_protocol_options_set_min_tls_protocol_version(tls.securityProtocolOptions, .TLSv12)
-        let params = NWParameters(tls: tls, tcp: NWProtocolTCP.Options())
+        let params = Self.parametros(tls: tls, somenteLocal: somenteLocal)
         guard let p = NWEndpoint.Port(rawValue: porta) else {
             throw ErroServidor(description: "Porta inválida: \(porta).")
         }

@@ -78,7 +78,7 @@ private struct Topo: View {
         HStack(spacing: Tema.Espaco.icone) {
             Logo()
             VStack(alignment: .leading, spacing: 0) {
-                Text("Deck").tatile(Tema.Texto.base, .bold)
+                Text(Variante.atual.nomeDaPasta).tatile(Tema.Texto.base, .bold)
                 HStack(spacing: Tema.Espaco.item) {
                     Ponto(ligado: iphone != nil)
                     Text(TextosDoMenu.estadoIphone(iphone)).tatile(Tema.Texto.xs, .regular, Tema.Cor.texto2)

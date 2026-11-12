@@ -10,6 +10,8 @@ for v in scripts/validators/*.ts; do bun run "$v" >/dev/null; done
 bash scripts/teste/abrir-deck.test.sh | tail -1
 # o requisito de assinatura do Deck é o mesmo em builds diferentes (as permissões do macOS sobrevivem a um build novo)
 bash scripts/teste/assinatura.test.sh | tail -1
+# a bancada tem dados, porta e Chaveiro próprios e nunca encosta nos do Deck de verdade
+bash scripts/teste/bancada.test.sh | tail -1
 # auditores da tatile (design system do autor): só rodam onde a skill está instalada
 if [ -d ~/.claude/skills/tatile ]; then
   node ~/.claude/skills/tatile/auditor/auditar.mjs prototipo | tail -1
