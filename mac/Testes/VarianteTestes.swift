@@ -29,6 +29,11 @@ final class VarianteTestes: XCTestCase {
         XCTAssertEqual(Variante.deck.pastaDeLog(casa: casa).path, "/tmp/casa/Library/Logs/Deck")
     }
 
+    func testTituloDoMenuDizTesteSoNaBancada() {
+        XCTAssertEqual(Variante.deck.tituloDoMenu, "Deck")
+        XCTAssertEqual(Variante.bancada.tituloDoMenu, "Deck Bancada (teste)")
+    }
+
     func testBancadaNaoTemIphoneENaoApareceNaRede() {
         XCTAssertFalse(Variante.bancada.ligaIphone)
         XCTAssertTrue(Variante.bancada.somenteLocal)

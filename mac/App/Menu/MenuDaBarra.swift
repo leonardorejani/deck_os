@@ -79,7 +79,7 @@ private struct Topo: View {
         HStack(spacing: Tema.Espaco.icone) {
             Logo()
             VStack(alignment: .leading, spacing: 0) {
-                Text(Variante.atual.nomeDaPasta).tatile(Tema.Texto.base, .bold)
+                Text(Variante.atual.tituloDoMenu).tatile(Tema.Texto.base, .bold)
                 TimelineView(.periodic(from: .now, by: 5)) { contexto in
                     let hora = self.agora ?? contexto.date
                     HStack(spacing: Tema.Espaco.item) {

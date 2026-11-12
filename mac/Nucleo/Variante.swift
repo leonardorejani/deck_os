@@ -16,6 +16,9 @@ enum Variante: Equatable, Sendable {
     /// Nome da pasta em Application Support e em Logs.
     var nomeDaPasta: String { self == .bancada ? "Deck Bancada" : "Deck" }
 
+    /// Título do topo do menu da barra. A bancada se declara teste para não ser confundida com o Deck de verdade.
+    var tituloDoMenu: String { self == .bancada ? "Deck Bancada (teste)" : "Deck" }
+
     /// Porta que a variante exige. O Deck de verdade usa a da config (4790 por padrão).
     var portaFixa: Int? { self == .bancada ? Self.portaDaBancada : nil }
 
