@@ -280,7 +280,7 @@ contas que o dono adicionar em User Management (até 25): quem não estiver na l
 | Spotify fechado | o player sai e as sessões ocupam o espaço (animado, item 3) |
 | Spotify pausado | capa a meia luz, botão de tocar |
 | Agenda sem permissão | selo "!" na tecla, e a folha explica onde liberar no Mac |
-| Agenda vazia | "Nada nos próximos 30 dias" |
+| Agenda vazia | "Nada neste mês a partir deste dia" |
 | Nenhuma sessão esperando | ícone do Claude, "Tudo respondido" e "Nenhuma sessão do Claude esperando você" |
 | Spotify fechado e nenhuma sessão | as sessões ocupam o espaço mostrando "Tudo respondido" |
 | Uso sem medição recente | barra cinza com "-" |
@@ -1008,6 +1008,23 @@ ficam sem medição". Decisão: o Deck mede o uso pelo token de `claude setup-to
 o escopo `user:profile` e o token de setup-token só tem `user:inference` (403). Conta da troca de contas sem
 medição do autoswitch passa a ser medida pelo token do perfil (type oauth_token). A leitura fica em cache de 5 min.
 
+Teste do Deck 1.0 (12/11/2026, frente iphone-bugs), dito pelo Leonardo:
+- "Mesmo com conta de IA configurada no Mac, no app não aparece nenhum dado. Uso e renovação não aparecem." Causa: o
+  Mac mede por token só na tela Uso das IAs, e o estado que vai ao iPhone lia apenas o `measure.json` do autoswitch.
+  Decisão: o estado soma o uso medido por token ao que vem dos arquivos (só preenche conta sem número, medição boa de
+  arquivo não é trocada).
+- "Clico dia 26/nov e ele mostra sexta 25 de dezembro (Natal) na direita. Só pode mostrar os daquele mês, mudou de mês
+  mudou todos os feriados/compromissos." Decisão: a lista da Agenda vai do dia tocado até o fim do mês na tela e nunca
+  passa disso. Trocar de mês (seta ou arrasto) recarrega grade e lista, e o dia escolhido vira hoje (no mês de hoje) ou o dia 1.
+- "Quando arrasto e seguro pra mudar de mês ele buga": o mês arrastado fica recortado na coluna dele, sem passar por
+  cima da lista.
+- "Às vezes quando arrasto as cenas de teclas ele buga e aparece o risco acima": a linha roxa NÃO foi reproduzida (o painel
+  não tem elemento roxo, e o indicador de páginas e o LED ficam no lugar durante e depois do arrasto, coberto por teste).
+  O que se achou e corrigiu: soltar o dedo fora da tela deixava o fantasma da tecla e a tecla apagada, e o arrasto agora
+  termina em qualquer lugar onde o dedo solte. Pendente: um print do risco, para achar a causa se ele continuar.
+- Telas abertas (player, relógio, agenda, WhatsApp, sessões, editor): além do X, arrastar de cima para baixo fecha. A tela
+  acompanha o dedo e volta se soltar cedo. Lista que ainda rola para cima, barra de tempo, volume e campo de texto
+  ficam com o gesto deles.
 31. Sessões com o contexto do que esperam (12/11/2026). Palavras dele: "quando clico no card da sessão ele não mostra nada de
     contexto que eu tenho que aprovar, se for assim não muda nada eu abrir isso no celular." E: "muda o visual, deixa mais
     bonito aí sla, intuitivo e fácil de ler". Decisão: a sessão aberta mostra o pedido inteiro, o contexto e Abrir no Mac, e o

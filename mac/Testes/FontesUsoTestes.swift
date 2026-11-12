@@ -116,4 +116,33 @@ final class FontesUsoTestes: XCTestCase {
         XCTAssertEqual(r.valor.map(\.id), ["claude-leo", "outra"])
         XCTAssertEqual(r.valor.map(\.semana), [61, nil])
     }
+
+    // iphone-bugs (12/11/2026): conta do Claude adicionada por token não tem perfil no measure.json, então o estado
+    // do iPhone levava só o nome dela. O uso medido por token tem que chegar ao estado.
+    func testUsoMedidoPorTokenChegaAoEstadoDoIphone() {
+        let contas = [ContaIA(id: "claude-token-1", nome: "Claude", conta: "nova"), ContaIA(id: "perfil", nome: "Claude", conta: "leo", perfil: "leo")]
+        let arquivo = Leitura(valor: [UsoConta(id: "claude-token-1", nome: "Claude", conta: "nova", semana: nil, renova: nil),
+                                      UsoConta(id: "perfil", nome: "Claude", conta: "leo", semana: 40, renova: "2026-11-20T00:00:00Z")],
+                              aviso: Aviso(fonte: "uso", texto: "A medição do Claude está desatualizada."))
+        let medidos = ["claude-token-1": UsoConta(id: "claude-token-1", nome: "Claude", conta: "nova", semana: 61, renova: "2026-11-18T10:00:00Z"),
+                       "perfil": UsoConta(id: "perfil", nome: "Claude", conta: "leo", semana: 99, renova: "2026-11-30T00:00:00Z")]
+        let r = FonteUso.mesclar(arquivo, medidos: medidos)
+        XCTAssertEqual(r.valor[0].semana, 61)
+        XCTAssertEqual(r.valor[0].renova, "2026-11-18T10:00:00Z")
+        XCTAssertEqual(r.valor[1].semana, 40, "medição boa do arquivo não é sobrescrita")
+        XCTAssertNil(r.aviso, "com todas as contas medidas o aviso de desatualizada some")
+        // e pelo caminho real do estado
+        var f = Fontes.vivas(casa: NSTemporaryDirectory() + "deck-sem-casa-" + UUID().uuidString)
+        f.uso = { _, _ in FonteUso.mesclar(arquivo, medidos: medidos) }
+        var cfg = Config.padrao(nomeMac: "Mac")
+        cfg.contas = contas
+        let e = Agregador(fontes: f).estado(config: cfg)
+        XCTAssertEqual(e.uso.first?.semana, 61)
+    }
+
+    func testUsoSemMedicaoNenhumaMantemOAvisoEOVazio() {
+        let arquivo = Leitura(valor: [UsoConta(id: "a", nome: "Claude", conta: "x", semana: nil, renova: nil)], aviso: Aviso(fonte: "uso", texto: "sem"))
+        XCTAssertEqual(FonteUso.mesclar(arquivo, medidos: [:]).valor, arquivo.valor)
+        XCTAssertNotNil(FonteUso.mesclar(arquivo, medidos: ["a": UsoConta(id: "a", nome: "Claude", conta: "x", semana: nil, renova: nil)]).aviso)
+    }
 }
