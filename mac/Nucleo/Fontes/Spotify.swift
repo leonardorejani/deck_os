@@ -1,7 +1,13 @@
 import Foundation
+#if canImport(AppKit)
+import AppKit
+#endif
 
 /// Spotify por AppleScript (via Executor, `osascript`). Spotify fechado devolve nil sem aviso: o
-/// player só some do painel (SPEC seção 6).
+/// player só some do painel (SPEC seção 6). Quem diz se o app está aberto é o sistema (bundle id), antes
+/// de qualquer AppleScript: com ele fechado o `osascript` nem roda. E o `osascript` roda dentro do vigia
+/// com tempo limite, porque um Spotify que acabou de abrir (ou está fechando) pode não atender o
+/// evento por minutos, e uma leitura pendurada segurava o cache e o player não voltava.
 final class FonteSpotify: @unchecked Sendable {
     struct Faixa: Equatable {
         var tocando: Bool
@@ -90,7 +96,24 @@ final class FonteSpotify: @unchecked Sendable {
         return String(h, radix: 16)
     }
 
+    /// Bundle id do app do Spotify no Mac.
+    static let bundleId = "com.spotify.client"
+    /// Tempo máximo de uma leitura por AppleScript. O estado espera 2 s, então 4 s já é folga de sobra.
+    static let limiteDaLeitura = 4
+
+    /// O Spotify está aberto? Consulta o sistema (NSRunningApplication) e nunca abre o app, ao contrário
+    /// de falar com ele por AppleScript. Fora do macOS (CI no Linux) devolve true e vale a checagem do próprio script. O `init` não
+    /// consulta o sistema sozinho: o teste com executor falso não pode depender de o Spotify estar aberto neste Mac.
+    @Sendable static func spotifyAberto() -> Bool {
+        #if canImport(AppKit)
+        return !NSRunningApplication.runningApplications(withBundleIdentifier: bundleId).isEmpty
+        #else
+        return true
+        #endif
+    }
+
     private let executor: any Executor
+    private let aberto: @Sendable () -> Bool
     private let baixar: @Sendable (String) -> Data?
     private let pixels: @Sendable (Data) -> [Pixel]?
     private let trava = NSLock()
@@ -104,9 +127,11 @@ final class FonteSpotify: @unchecked Sendable {
 
     /// `baixar` e `pixels` entram de fora para o teste não precisar de rede nem de ImageIO.
     init(executor: any Executor,
+         aberto: @escaping @Sendable () -> Bool = { true },
          baixar: @escaping @Sendable (String) -> Data? = FonteSpotify.baixarDoSpotify,
          pixels: @escaping @Sendable (Data) -> [Pixel]? = FonteSpotify.pixelsDaImagem) {
         self.executor = executor
+        self.aberto = aberto
         self.baixar = baixar
         self.pixels = pixels
     }
@@ -124,7 +149,17 @@ final class FonteSpotify: @unchecked Sendable {
     }
 
     func ler(agora: Date = Date()) -> Leitura<EstadoSpotify?> {
-        let r = executor.rodar(Self.comando)
+        // Fechado: nada de AppleScript. Some o player e, quando ele abrir de novo, a próxima leitura já o traz.
+        guard aberto() else {
+            trava.lock(); uriDaFaixa = nil; trava.unlock()
+            return Leitura(valor: nil, aviso: nil)
+        }
+        let r = executor.rodar(Shell.limitado(Self.comando, segundos: Self.limiteDaLeitura))
+        // Estourou o tempo (142 do vigia): o Spotify ainda não atende. Sem aviso, e a próxima leitura tenta de novo.
+        if r.status == 142 {
+            trava.lock(); uriDaFaixa = nil; trava.unlock()
+            return Leitura(valor: nil, aviso: nil)
+        }
         let saida = r.saida.trimmingCharacters(in: .whitespacesAndNewlines)
         if r.status == 0, saida == "fechado" || saida == "parado" {
             trava.lock(); uriDaFaixa = nil; trava.unlock()

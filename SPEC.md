@@ -898,6 +898,16 @@ Ajustes de UX (11/11/2026, teste do Leonardo no iPhone):
     - Comando que não existe de verdade (status 127) avisa "Comando não encontrado: <nome>". Só a tecla de comando muda:
       os comandos internos do Deck (osascript, open, shortcuts) seguem no zsh puro, de propósito.
 
+32. Spotify fechou e abriu de novo, o player volta (12/11/2026). Palavras dele: "Quando o spotify fechou no pc ele sumiu do
+    app, mas quando foi reaberto nao apareceu de volta. mesmo dando play".
+    - Causa: a leitura do Spotify rodava o `osascript` sem tempo limite. Um Spotify que acabou de abrir (ou está fechando)
+      pode não atender o evento por minutos, e essa leitura pendurada segurava o cache do estado: todo pedido seguinte
+      recebia o último valor (sem player) e a leitura boa nunca entrava.
+    - Agora: quem diz se o Spotify está aberto é o sistema (`NSRunningApplication`, bundle `com.spotify.client`), antes de
+      qualquer AppleScript, então fechado o `osascript` nem roda (falar com o app por AppleScript pode abri-lo). A leitura
+      roda no vigia com limite de 4 s: estourou, o player fica de fora, sem aviso, e a próxima leitura tenta de novo.
+      O ciclo fechado, abrindo, tocando tem teste (`FontesSpotifyTestes`).
+
 Nada em aberto que trave a fase 1. Falta só confirmar, na construção, o link que abre uma sessão
 específica no app do Claude do iPhone (se não existir, cai no "mostra a pergunta").
 

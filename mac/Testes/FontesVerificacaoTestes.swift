@@ -74,8 +74,11 @@ final class ContadorDeChamadas: @unchecked Sendable {
     var valor: Int { t.lock(); defer { t.unlock() }; return n }
 }
 final class ExecutorMutavel: Executor, @unchecked Sendable {
-    private let t = NSLock(); private var _s: String
+    private let t = NSLock(); private var _s: String; private var _st: Int32 = 0; private var _n = 0
     init(_ s: String) { _s = s }
     var saida: String { get { t.lock(); defer { t.unlock() }; return _s } set { t.lock(); _s = newValue; t.unlock() } }
-    func rodar(_ comando: String) -> SaidaShell { SaidaShell(status: 0, saida: saida) }
+    var status: Int32 { get { t.lock(); defer { t.unlock() }; return _st } set { t.lock(); _st = newValue; t.unlock() } }
+    /// Quantas vezes algum comando foi rodado.
+    var chamadas: Int { t.lock(); defer { t.unlock() }; return _n }
+    func rodar(_ comando: String) -> SaidaShell { t.lock(); _n += 1; t.unlock(); return SaidaShell(status: status, saida: saida) }
 }

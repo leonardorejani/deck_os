@@ -202,6 +202,83 @@ final class FontesSpotifyTestes: XCTestCase {
         XCTAssertNil(CoresCapa.pixels(de: Data([0, 1, 2])))
     }
     #endif
+
+    // MARK: - Spotify fecha e abre de novo (12/11/2026: "reaberto não apareceu de volta, mesmo dando play")
+
+    private final class Chave: @unchecked Sendable {
+        private let trava = NSLock()
+        private var _aberto = false
+        var aberto: Bool { get { trava.lock(); defer { trava.unlock() }; return _aberto } set { trava.lock(); _aberto = newValue; trava.unlock() } }
+    }
+
+    func testSpotifyFechadoNoSistemaNaoRodaAppleScriptNenhum() {
+        // Falar com o Spotify por AppleScript pode abrir o app. Fechado, o osascript nem roda.
+        let ex = ExecutorFalso([("osascript", SaidaShell(status: 0, saida: "playing\tA\tB\t1\t100\t"))])
+        let r = FonteSpotify(executor: ex, aberto: { false }).ler()
+        XCTAssertNil(r.valor)
+        XCTAssertNil(r.aviso)
+        XCTAssertEqual(ex.comandos, [], "com o app fechado nenhum comando pode ser rodado")
+    }
+
+    func testLeituraQueEstouraOTempoNaoViraAvisoENaoTravaAProxima() throws {
+        // 142 é o status do vigia (Shell.limitado) quando o Spotify não atende a tempo.
+        let ex = ExecutorMutavel("")
+        ex.status = 142
+        let f = FonteSpotify(executor: ex, aberto: { true })
+        let r = f.ler()
+        XCTAssertNil(r.valor)
+        XCTAssertNil(r.aviso, "Spotify ainda abrindo não é erro para mostrar")
+        ex.status = 0
+        ex.saida = "playing\tFaixa\tArtista\t3\t200000\t"
+        XCTAssertEqual(f.ler().valor?.faixa, "Faixa")
+    }
+
+    func testLeituraVaiDentroDoVigiaComTempoLimite() {
+        let ex = ExecutorFalso([("osascript", SaidaShell(status: 0, saida: "paused\tA\tB\t1\t100\t"))])
+        _ = FonteSpotify(executor: ex, aberto: { true }).ler()
+        XCTAssertEqual(ex.comandos.count, 1)
+        XCTAssertTrue(ex.comandos[0].hasPrefix("perl -e "), "sem tempo limite um osascript pendurado segura a leitura para sempre")
+    }
+
+    func testVigiaDeVerdadeMataOSpotifyQueNaoAtende() {
+        let t0 = Date()
+        let r = ExecutorShell().rodar(Shell.limitado("sleep 30", segundos: 1))
+        XCTAssertEqual(r.status, 142)
+        XCTAssertLessThan(Date().timeIntervalSince(t0), 5)
+    }
+
+    func testCicloFechadoAbertoTocandoVoltaNoEstado() throws {
+        // O ciclo do defeito: tocando, o app fecha (sai do painel), abre de novo (ainda sem faixa) e toca (volta).
+        let chave = Chave()
+        let ex = ExecutorMutavel("playing\tQuero Ser Feliz\tCoral\t10\t200000\t")
+        var fontes = Fontes.vivas(executor: ex, casa: "/nonexistent", spotifyAberto: { chave.aberto })
+        fontes.sessoes = { Leitura(valor: [], aviso: nil) }
+        let agregador = Agregador(fontes: fontes)
+        let cfg = config(perfil: [])
+        let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+
+        chave.aberto = true
+        XCTAssertEqual(agregador.estado(config: cfg, agora: t0).spotify?.faixa, "Quero Ser Feliz")
+
+        chave.aberto = false
+        let antes = ex.chamadas
+        XCTAssertNil(agregador.estado(config: cfg, agora: t0.addingTimeInterval(1)).spotify, "fechou: o player sai")
+        XCTAssertEqual(ex.chamadas, antes, "fechado, nenhum AppleScript (abriria o app sozinho)")
+
+        chave.aberto = true
+        ex.saida = "parado"
+        XCTAssertNil(agregador.estado(config: cfg, agora: t0.addingTimeInterval(2)).spotify, "abriu mas sem faixa: ainda sem player")
+
+        ex.status = 142
+        XCTAssertNil(agregador.estado(config: cfg, agora: t0.addingTimeInterval(3)).spotify, "Spotify abrindo e sem atender: sem player e sem travar")
+
+        ex.status = 0
+        ex.saida = "playing\tQuero Ser Feliz\tCoral\t0\t200000\t"
+        let volta = agregador.estado(config: cfg, agora: t0.addingTimeInterval(4))
+        XCTAssertEqual(volta.spotify?.faixa, "Quero Ser Feliz", "deu play: o player volta")
+        XCTAssertEqual(volta.spotify?.tocando, true)
+        XCTAssertTrue(volta.avisos.isEmpty)
+    }
 }
 
 final class Contador: @unchecked Sendable {
