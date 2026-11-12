@@ -23,7 +23,7 @@ const padrao = () => ({
   sessoes: 5,                // 0 a 12
   sessaoMuda: false,         // a primeira sessão chega com outra pergunta (ela mudou)
   whatsapp: 'normal',        // normal | vazio | muitas (30 conversas) | erro (a rota falha)
-  whatsappOrigem: 'app',     // app | web (só o total, pelo título da aba) | web-fechado (sem aba aberta)
+  whatsappOrigem: 'app',     // app | web (só o total, pelo título da aba) | web-fechado (sem aba aberta) | qr (aparelho conectado, com lista) | qr-caido
   uso: 'normal',             // normal | sem-medicao
   relogioMs: 0,              // adianta o relógio do Mac (o "há X min" das sessões anda)
   atrasoListas: 0,           // ms de espera nas listas de WhatsApp e Agenda
@@ -188,6 +188,8 @@ function estado() {
     ],
     sessoes: SESSOES().slice(0, c.sessoes).map(({ contexto, ...leve }) => leve), // o Mac de verdade só manda o contexto em /api/sessoes
     whatsapp: c.whatsappOrigem === 'web' ? { total: 23, conversas: 0, origem: 'web', navegador: 'Google Chrome', aberto: true }
+      : c.whatsappOrigem === 'qr' ? { total: 23, conversas: 5, origem: 'qr', aberto: true }
+      : c.whatsappOrigem === 'qr-caido' ? { total: 0, conversas: 0, origem: 'qr', aberto: false }
       : c.whatsappOrigem === 'web-fechado' ? { total: 0, conversas: 0, origem: 'web', navegador: 'Arc', aberto: false }
       : { total: 23, conversas: 5, origem: 'app' },
     agenda: c.agenda === 'sem' ? { permissao: false, proximo: null }
@@ -333,7 +335,7 @@ async function api(req, res, url) {
   if ((rota === '/api/whatsapp' || rota === '/api/agenda') && c.atrasoListas) await new Promise(r => setTimeout(r, c.atrasoListas));
   if (rota === '/api/whatsapp') {
     cont.whatsapp++;
-    if (c.whatsappOrigem !== 'app') return json(res, 200, []); // pelo navegador o Mac não tem lista por conversa
+    if (c.whatsappOrigem === 'qr-caido' || c.whatsappOrigem.startsWith('web')) return json(res, 200, []); // pelo navegador o Mac não tem lista por conversa
     if (c.whatsapp === 'erro') return json(res, 500, { erro: 'O WhatsApp não respondeu no Mac.' });
     return json(res, 200, WHATSAPP());
   }

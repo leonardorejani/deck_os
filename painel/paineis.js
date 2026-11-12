@@ -59,9 +59,17 @@ function pintarWhatsWeb() {
   $('#wa-lista').setAttribute('aria-busy', 'false');
   manterRolagem($('#wa-lista'), `<div class="vazio-bloco"><strong>${aberto ? (n ? `${n} ${n === 1 ? 'não lida' : 'não lidas'}` : 'Nada novo') : 'WhatsApp Web fechado'}</strong>${aviso}<span>Pelo WhatsApp Web o Deck vê só o total. Para ver cada conversa, use o app do WhatsApp no Mac.</span></div>`);
 }
+/* Pelo QR (aparelho conectado) a conversa vem inteira, igual ao app. Com a conexão caída o 0 não é medição: a folha diz o que fazer */
+function pintarWhatsQrCaido() {
+  $('#wa-titulo').textContent = 'WhatsApp';
+  $('#wa-lista').setAttribute('aria-busy', 'false');
+  manterRolagem($('#wa-lista'), '<div class="vazio-bloco"><strong>WhatsApp por QR sem conexão</strong><span>Abra os Ajustes do Deck no Mac para ler o QR de novo.</span></div>');
+}
 function pintarWhats() {
-  $('#wa-filtro').hidden = V?.whatsapp?.origem === 'web';
-  if (V?.whatsapp?.origem === 'web') return pintarWhatsWeb();
+  const w = V?.whatsapp;
+  $('#wa-filtro').hidden = w?.origem === 'web' || (w?.origem === 'qr' && w.aberto === false);
+  if (w?.origem === 'web') return pintarWhatsWeb();
+  if (w?.origem === 'qr' && w.aberto === false) return pintarWhatsQrCaido();
   const todas = wa.lista || [], total = todas.reduce((s, c) => s + (c.naoLidas || 0), 0);
   const lista = todas.filter(c => wa.filtro === 'todas' || (wa.filtro === 'grupos') === !!c.grupo);
   $('#wa-titulo').innerHTML = wa.lista ? `WhatsApp <small>${total} não lidas em ${todas.length} ${todas.length === 1 ? 'conversa' : 'conversas'}</small>` : 'WhatsApp';

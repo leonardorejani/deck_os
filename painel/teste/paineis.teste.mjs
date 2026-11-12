@@ -79,6 +79,21 @@ export default async function (h) {
   const fechadoTxt = await texto(p, '#wa-lista .vazio-bloco');
   h.ok(fechadoTxt.startsWith('WhatsApp Web fechadoO WhatsApp Web não está aberto no navegador (Arc). Abra web.whatsapp.com') && await texto(p, '#wa-titulo') === 'WhatsApp', `sem aba, diz que o WhatsApp Web está fechado e não "0 não lidas" (${fechadoTxt})`);
   await p.context().close();
+  // aparelho conectado por QR: lista por conversa igual ao app, com a origem "qr"
+  await h.cenario({ whatsappOrigem: 'qr' });
+  p = await h.pagina(); await pronta(h, p);
+  await p.click('.tecla[data-id="whatsapp"]');
+  h.ok(await h.espera(p, () => document.querySelectorAll('#wa-lista .conversa').length === 5), 'WhatsApp por QR conectado: a lista por conversa aparece, como no app');
+  h.ok(await p.evaluate(() => !document.querySelector('#wa-filtro').hidden), 'WhatsApp por QR conectado: o filtro de grupos fica');
+  await p.context().close();
+  // QR caído: o 0 não é medição, a folha manda abrir os Ajustes no Mac
+  await h.cenario({ whatsappOrigem: 'qr-caido' });
+  p = await h.pagina(); await pronta(h, p);
+  await p.click('.tecla[data-id="whatsapp"]');
+  h.ok(await h.espera(p, () => !!document.querySelector('#wa-lista .vazio-bloco')), 'WhatsApp por QR caído: a folha abre');
+  const qrTxt = await texto(p, '#wa-lista .vazio-bloco');
+  h.ok(qrTxt.startsWith('WhatsApp por QR sem conexão') && qrTxt.includes('Ajustes do Deck no Mac') && await texto(p, '#wa-titulo') === 'WhatsApp', `QR caído diz que está sem conexão e não "0 não lidas" (${qrTxt})`);
+  await p.context().close();
   await h.cenario({ whatsappOrigem: 'app' });
 
   /* lista maior que a folha rola sem barra, e a leitura de 4 s não puxa para o topo */
