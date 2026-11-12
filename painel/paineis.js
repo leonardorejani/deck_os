@@ -1,4 +1,4 @@
-/* Painéis de tela inteira (SPEC, seção 5): WhatsApp, Agenda e Sessões. Mesmas folhas do protótipo,
+/* Painéis de tela inteira (SPEC, seção 5): WhatsApp, Agenda, Sessões e Mail. Mesmas folhas do protótipo,
    com a lista vindo do Mac pelo canal. Usa as peças de deck.js (V, canal, avisar, abrirFolha...). */
 
 const iniciais = n => String(n).split(' ').filter(Boolean).slice(0, 2).map(p => p[0]).join('').toUpperCase();
@@ -9,11 +9,11 @@ const dataIso = d => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getD
 const mesmoDia = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 const reduzido = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-/* A tecla do app que abriu o painel manda o Mac abrir o app (WhatsApp, Calendário). Se ela sumiu, procura outra igual */
+/* A tecla do app que abriu o painel manda o Mac abrir o app (WhatsApp, Calendário, Mail). Se ela sumiu, procura outra igual */
 const teclaDoPainel = {};
 function abrirPainel(qual, idTecla) {
   if (idTecla) teclaDoPainel[qual] = idTecla;
-  if (qual === 'whatsapp') abrirWhats(); else if (qual === 'calendario') abrirCal(); else if (qual === 'sessoes') abrirSessoes();
+  if (qual === 'whatsapp') abrirWhats(); else if (qual === 'calendario') abrirCal(); else if (qual === 'sessoes') abrirSessoes(); else if (qual === 'mail') abrirMail(); else if (qual === 'controles') abrirControles();
 }
 async function abrirNoMac(qual, texto) {
   const id = V.teclas.some(t => t.id === teclaDoPainel[qual]) ? teclaDoPainel[qual] : V.teclas.find(t => painelDe(t) === qual)?.id;
@@ -192,6 +192,73 @@ $('#se-rodape').addEventListener('click', e => {
   V = vistaReal(); atualizar(); // o bloco da tela principal também deixa de mostrar
   avisar('Dispensada até ela mudar de novo');
 });
+
+/* ---------- Mail ---------- */
+/* As últimas mensagens da caixa de entrada de uma conta do Mail do Mac, lidas e não lidas. Só leitura: o Deck não marca
+   como lida nem apaga. Tocar numa mensagem abre ela no Mail do Mac. A conta escolhida fica guardada no aparelho. */
+const CHAVE_CONTA_MAIL = 'deck-mail-conta-v1';
+const ma = { dados: null, json: '', conta: '', erro: '', seq: 0, abrindo: false, contas: [], lendo: null };
+const dadosMailVazios = { estado: 'ok', contas: [], conta: '', mensagens: [] };
+function horaMail(iso) { return horaConversa(iso) } // hoje HH:MM, "ontem", dia da semana ou dd/mm, como no WhatsApp
+function abrirMail() { ma.dados = null; ma.json = ''; ma.erro = ''; ma.conta = lerGuardado(CHAVE_CONTA_MAIL) || ''; pintarMail(); abrirFolha('#f-mail'); lerMail() }
+async function lerMail() {
+  if (ma.lendo === ma.conta) return; // o relógio de 4 s não empilha leitura: se a desta conta ainda não voltou, espera ela
+  const quem = ma.conta; ma.lendo = quem;
+  const n = ++ma.seq;
+  try {
+    const d = await canal.mail(ma.conta); if (n !== ma.seq) return;
+    const dados = d && typeof d === 'object' ? { ...dadosMailVazios, ...d } : dadosMailVazios, j = JSON.stringify(dados);
+    if (dados.conta && dados.conta !== ma.conta) { ma.conta = dados.conta; guardar(CHAVE_CONTA_MAIL, ma.conta) } // a conta guardada sumiu do Mail: o Mac devolveu a primeira
+    if (j !== ma.json || ma.erro) { ma.json = j; ma.dados = dados; ma.erro = ''; pintarMail() }
+  } catch (e) {
+    if (n !== ma.seq) return;
+    if (e.status === 401) return tratarErro(e);
+    const era = ma.erro;
+    // Mac antigo, sem a rota do Mail, diz isso em vez de "não deu para ler"
+    ma.erro = e.status === 404 ? 'Esta versão do Deck no Mac ainda não lê o Mail. Atualize o Deck no Mac.' : msgErro(e);
+    if (!ma.dados) pintarMail(); else if (!era) avisar(ma.erro, { erro: true });
+  } finally { if (ma.lendo === quem) ma.lendo = null }
+}
+const esqueletoMail = () => '<div class="esq-lista" aria-hidden="true">' + '<div class="conversa esq"><span class="avatar"></span><span><i class="barra" style="width:40%"></i><i class="barra" style="width:70%"></i><i class="barra" style="width:90%"></i></span><i class="barra" style="width:32px"></i></div>'.repeat(5) + '</div>';
+const linhaMail = m => `<button class="conversa mail${m.lida ? '' : ' nao-lida'}" data-mail="${esc(m.id)}" aria-label="${m.lida ? '' : 'Não lida. '}${esc(m.remetente)}, ${esc(m.assunto)}">
+  <span class="avatar">${esc(iniciais(m.remetente))}</span>
+  <span style="min-width:0"><div class="nome-c">${esc(m.remetente)}</div><div class="assunto-m">${esc(m.assunto)}</div><div class="previa">${esc(m.previa)}</div></span>
+  <span class="lado"><span>${esc(horaMail(m.data))}</span><span class="ponto-nl" ${m.lida ? 'hidden' : ''}></span></span></button>`;
+function pintarMail() {
+  const d = ma.dados, caixa = $('#ma-lista');
+  if (d?.contas?.length) ma.contas = d.contas;
+  const contas = ma.contas, atual = d ? d.conta : ma.conta; // com a leitura falha o seletor fica: é por ele que se volta para uma conta que funciona
+  $('#ma-lista').setAttribute('aria-busy', String(!d && !ma.erro));
+  // troca de conta no topo (só com mais de uma)
+  const seletor = $('#ma-contas'); seletor.hidden = contas.length < 2;
+  const htmlContas = contas.map(c => `<button data-conta="${esc(c.id)}" aria-pressed="${c.id === atual}" title="${esc(c.email || '')}">${esc(c.nome)}</button>`).join('');
+  if (seletor.dataset.html !== htmlContas) { seletor.dataset.html = htmlContas; seletor.innerHTML = htmlContas }
+  if (!d) { $('#ma-titulo').textContent = 'Mail'; if (ma.erro) caixa.innerHTML = erroLista(ma.erro); else if (!caixa.querySelector('.esq-lista')) caixa.innerHTML = esqueletoMail(); return }
+  const msgs = d.mensagens || [], nl = msgs.filter(m => !m.lida).length, conta = contas.find(c => c.id === d.conta);
+  $('#ma-titulo').innerHTML = d.estado === 'ok' && msgs.length ? `Mail <small>${nl ? `${nl} ${nl === 1 ? 'não lida' : 'não lidas'} nas últimas ${msgs.length}` : `${msgs.length} ${msgs.length === 1 ? 'mensagem' : 'mensagens'}, todas lidas`}${conta && contas.length < 2 ? `, ${esc(conta.nome)}` : ''}</small>` : 'Mail';
+  if (d.estado !== 'ok') {
+    const fechado = d.estado === 'fechado';
+    return manterRolagem(caixa, `<div class="vazio-bloco"><strong>${fechado ? 'Mail fechado' : d.estado === 'sem-permissao' ? 'Mail sem permissão' : 'Não deu para ler o Mail'}</strong><span>${esc(d.aviso || (fechado ? 'Abra o Mail no Mac para ver as mensagens aqui.' : 'Tente de novo em instantes.'))}</span>${fechado ? '<button class="btn secundario pequeno" data-ma-mac style="justify-self:start">Abrir o Mail no Mac</button>' : ''}</div>`);
+  }
+  if (!msgs.length) return manterRolagem(caixa, `<div class="vazio-bloco"><strong>${contas.length ? 'Caixa de entrada vazia' : 'Nenhuma conta no Mail'}</strong><span>${esc(d.aviso || 'Quando chegar uma mensagem, ela aparece aqui.')}</span></div>`);
+  manterRolagem(caixa, msgs.map(linhaMail).join(''));
+}
+$('#ma-contas').addEventListener('click', e => {
+  const b = e.target.closest('[data-conta]'); if (!b || b.dataset.conta === ma.dados?.conta) return;
+  ma.conta = b.dataset.conta; guardar(CHAVE_CONTA_MAIL, ma.conta);
+  ma.dados = null; ma.json = ''; ma.erro = ''; $('#ma-lista').scrollTop = 0; pintarMail(); lerMail(); // a lista da outra conta ainda não chegou: esqueleto, não a de antes
+});
+$('#ma-lista').addEventListener('click', e => {
+  if (e.target.closest('[data-tentar]')) { ma.erro = ''; pintarMail(); return lerMail() }
+  if (e.target.closest('[data-ma-mac]')) return abrirNoMac('mail', 'Abrindo o Mail no Mac');
+  const m = e.target.closest('[data-mail]'); if (m) abrirMensagemNoMac(m.dataset.mail);
+});
+$('#ma-abrir').onclick = () => abrirNoMac('mail', 'Abrindo o Mail no Mac');
+async function abrirMensagemNoMac(id) {
+  if (ma.abrindo) return; ma.abrindo = true;
+  avisar('Abrindo a mensagem no Mail do Mac');
+  try { await canal.abrirMensagem(id) } catch (e) { tratarErro(e) } finally { ma.abrindo = false }
+}
 
 /* ---------- Agenda ---------- */
 const ag = { mes: new Date(), dia: new Date(), mesEv: null, lista: null, aberto: null, erro: '', seqMes: 0, seqLista: 0 };
@@ -478,5 +545,5 @@ $('#nc-destino').addEventListener('change', e => {
 setInterval(() => {
   if (document.hidden || !V || V.carregando || semAcesso || offline) return;
   const id = folhaAberta?.id;
-  if (id === 'f-whats') lerWhats(); else if (id === 'f-sessoes') lerSessoes(); else if (id === 'f-cal') lerAgenda(true, true, true);
+  if (id === 'f-whats') lerWhats(); else if (id === 'f-sessoes') lerSessoes(); else if (id === 'f-cal') lerAgenda(true, true, true); else if (id === 'f-mail') lerMail();
 }, 4000);

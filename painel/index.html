@@ -68,10 +68,22 @@
         <div class="corpo" id="wa-lista"></div>
       </section>
 
+      <section class="folha cheia" id="f-mail" role="dialog" aria-modal="true" aria-labelledby="ma-titulo">
+        <header><h2 id="ma-titulo"></h2>
+          <div class="segmentos contas-mail" id="ma-contas" role="group" aria-label="Conta do Mail" hidden></div>
+          <button class="btn secundario pequeno" id="ma-abrir">Abrir no Mac</button><button class="fechar" data-fechar aria-label="Fechar"></button></header>
+        <div class="corpo" id="ma-lista"></div>
+      </section>
+
       <section class="folha cheia" id="f-sessoes" role="dialog" aria-modal="true" aria-labelledby="se-titulo">
         <header><h2 id="se-titulo"></h2><button class="fechar" data-fechar aria-label="Fechar"></button></header>
         <div class="corpo" id="se-lista"></div>
         <footer id="se-rodape" hidden><button class="btn secundario" data-dispensar>Dispensar</button><span class="espaco"></span><button class="btn primario" data-voltar>Voltar</button></footer>
+      </section>
+
+      <section class="folha cheia" id="f-controles" role="dialog" aria-modal="true" aria-labelledby="ct-titulo">
+        <header><h2 id="ct-titulo">Controles do Mac</h2><button class="fechar" data-fechar aria-label="Fechar"></button></header>
+        <div class="corpo" id="ct-corpo" aria-live="polite"></div>
       </section>
 
       <section class="folha cheia player-cheio" id="f-player" role="dialog" aria-modal="true" aria-label="Tocando agora">
@@ -118,6 +130,7 @@
 <script src="canal.js"></script>
 <script src="paineis.js"></script>
 <script src="player.js"></script>
+<script src="controles.js"></script>
 <script src="apps.js"></script>
 <script src="deck.js"></script>
 <script src="pwa.js"></script>

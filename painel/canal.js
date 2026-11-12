@@ -5,6 +5,8 @@
      estado()                  -> Estado
      botao(id)                 -> {ok: true}
      spotify(acao, valor?)     -> {ok: true}     acao: tocar, pausar, anterior, proxima, posicao (segundos), repetir e aleatorio (true liga, false desliga)
+     controles()               -> {volume?, mudo?, brilho?, teclado?}  o que o Mac oferece (0 a 100), campo que falta = não oferece
+     controle(item, v)         -> {ok: true}     item: volume, mudo (v 0 ou 1), brilho ou teclado
      spotifyVolume(v, alvo)    -> {ok: true}     v de 0 a 100, alvo: spotify, mac ou aparelho
      aparelhos()               -> [Aparelho]     só com o Spotify conectado (senão 409)
      transferir(id)            -> {ok: true}     passa a música para o aparelho (só conectado)
@@ -15,6 +17,8 @@
      gravarConfig(config)      -> Config
      whatsapp()                -> [ConversaWhatsApp]
      agenda(de, dias)          -> [Evento]
+     mail(conta?)              -> {estado, aviso?, contas, conta, mensagens}  as últimas da caixa de entrada (só leitura, 404 em Mac antigo)
+     abrirMensagem(id)         -> {ok: true}       abre a mensagem no Mail do Mac
      sessoes()                 -> [Sessao]
      abrirSessao(id)           -> {ok, como, app}  traz o terminal da sessão para a frente no Mac (como: "terminal" ou "pasta")
      entrarNaReuniao(link)     -> {ok: true}       abre no Mac o link de reunião do evento (Meet, Zoom ou Teams)
@@ -90,9 +94,13 @@ function criarCanalHttps() {
     gravarConfig: config => pedir('PUT', '/api/config', config),
     whatsapp: () => pedir('GET', '/api/whatsapp'),
     agenda: (de, dias) => pedir('GET', `/api/agenda?de=${encodeURIComponent(de)}&dias=${encodeURIComponent(dias)}`),
+    mail: conta => pedir('GET', '/api/mail' + (conta ? '?conta=' + encodeURIComponent(conta) : ''), undefined, 15000), // o Mac lê o Mail por AppleScript, até uns 10 s
+    abrirMensagem: id => pedir('POST', '/api/mail/abrir', { id }),
     sessoes: () => pedir('GET', '/api/sessoes'),
     abrirSessao: id => pedir('POST', '/api/sessoes/' + encodeURIComponent(id) + '/abrir'),
     entrarNaReuniao: link => pedir('POST', '/api/reuniao/entrar', { link }),
+    controles: () => pedir('GET', '/api/controles'),
+    controle: (item, v) => pedir('POST', `/api/controles/${encodeURIComponent(item)}?v=${encodeURIComponent(v)}`),
     agendaDestinos: pedirAcesso => pedir('GET', '/api/agenda/destinos' + (pedirAcesso ? '?pedir=1' : '')),
     criarCompromisso: dados => pedir('POST', '/api/agenda/criar', dados, 15000), // o Mac grava pelo EventKit, que pode demorar com a conta na nuvem
     apps: () => pedir('GET', '/api/apps'),
