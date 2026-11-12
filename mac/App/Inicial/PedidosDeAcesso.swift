@@ -4,7 +4,6 @@ import ApplicationServices
 import EventKit
 import CoreBluetooth
 import Network
-import Nucleo
 
 /// Os pedidos de acesso ao macOS do passo "Libere os acessos". Atrás de um protocolo para os testes
 /// e as fotos não abrirem janela do sistema.

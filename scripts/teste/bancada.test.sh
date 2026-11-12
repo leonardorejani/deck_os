@@ -15,6 +15,7 @@ confere "a porta da bancada é 4791" 'grep -q "portaDaBancada = 4791" "$raiz/mac
 fora() { grep -rnE 'Application Support/Deck|Logs/Deck/|"com\.leonardorejani\.deck\.(spotify|token-claude)"' "$raiz/mac/Nucleo" "$raiz/mac/App" --include='*.swift' \
   | grep -v "Variante.swift" | grep -vE '^[^:]+:[0-9]+:[[:space:]]*(///|//)' | grep -vE '/Testes?/|/Fotos/'; }
 confere "nenhum caminho ou serviço do Deck real fica fixo no código" '[ -z "$(fora)" ]'
+confere "a lista de acessos e o pedido escondem Bluetooth e Rede local na bancada" 'grep -q "pedeBluetoothERedeLocal" "$raiz/mac/App/Inicial/DadosDaInicial.swift" && grep -q "pedeBluetoothERedeLocal" "$raiz/mac/App/Inicial/PedidosDeAcesso.swift"'
 confere "o script da bancada não abre o app" '! grep -vE "^[[:space:]]*#|echo" "$raiz/scripts/bancada.sh" | grep -qE "(^|[;&|[:space:]])(/usr/bin/)?open[[:space:]]"'
 confere "o script da bancada instala fora de /Applications" '! grep -qE "(^|[\" ])/Applications/" "$raiz/scripts/bancada.sh" && grep -q "Applications/Deck Bancada.app" "$raiz/scripts/bancada.sh"'
 

@@ -1,5 +1,4 @@
 import Foundation
-import Nucleo
 
 /// Os 7 passos, na ordem do protótipo (mac.js, passosIni).
 enum PassoInicial: Int, CaseIterable {
