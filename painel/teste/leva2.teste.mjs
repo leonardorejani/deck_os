@@ -312,13 +312,13 @@ export default async function (h) {
   p = await h.pagina(); await pronta(h, p);
   await novaTecla(p);
   const lista = await p.evaluate(() => [...document.querySelectorAll('#ed-lista-apps [data-app-bundle]')].map(b => [b.querySelector('span:not(.svg)').textContent, b.dataset.appBundle, b.querySelector('img')?.getAttribute('src') || 'svg', b.querySelector('img')?.getAttribute('loading')]));
-  h.ok(lista.length === 11 && lista[0][0] === 'Navegador padrão' && lista[0][2] === 'svg' && lista.slice(1).map(a => a[0]).join() === 'Calculadora,Calendário,Finder,Google Chrome,Mail,Notas,Safari,Spotify,Terminal,WhatsApp', `a lista vem do Mac, de A a Z, com o Navegador padrão no começo (${lista.map(a => a[0]).join(', ')})`);
-  h.ok(lista.slice(1).every(a => /^\/api\/apps\/[A-Za-z0-9.]+\/icone\?codigo=/.test(a[2]) && a[3] === 'lazy'), 'cada app mostra o ícone que o Mac entrega (carregado só quando aparece)');
+  h.ok(lista.length === 13 && lista.slice(0, 3).map(a => a[0]).join() === 'Controles do Mac,Google Meet (navegador),Navegador padrão' && lista.slice(0, 3).every(a => a[2] === 'svg') && lista.slice(3).map(a => a[0]).join() === 'Calculadora,Calendário,Finder,Google Chrome,Mail,Notas,Safari,Spotify,Terminal,WhatsApp', `a lista vem do Mac, de A a Z, com os especiais (Controles, Meet, Navegador padrão) no começo (${lista.map(a => a[0]).join(', ')})`);
+  h.ok(lista.slice(3).every(a => /^\/api\/apps\/[A-Za-z0-9.]+\/icone\?codigo=/.test(a[2]) && a[3] === 'lazy'), 'cada app mostra o ícone que o Mac entrega (carregado só quando aparece)');
   await h.foto(p, 'editor-apps');
   await p.fill('#ed-busca', 'CALEND'); await h.dormir(150);
   h.ok(await p.evaluate(() => [...document.querySelectorAll('#ed-lista-apps [data-app-bundle] span')].map(x => x.textContent).join()) === 'Calendário', 'a busca acha sem ligar para caixa nem acento ("CALEND" acha Calendário)');
   await p.fill('#ed-busca', 'navega'); await h.dormir(150);
-  h.ok(await p.evaluate(() => document.querySelectorAll('#ed-lista-apps [data-app-bundle]').length) === 1, 'a busca também acha o Navegador padrão');
+  h.ok(await p.evaluate(() => document.querySelectorAll('#ed-lista-apps [data-app-bundle]').length) === 2, 'a busca também acha os especiais ("navega" acha Google Meet (navegador) e Navegador padrão)');
   await p.fill('#ed-busca', 'xyzxyz'); await h.dormir(150);
   h.ok((await texto(p, '#ed-lista-apps')) === 'Nenhum app com esse nome.', 'sem resultado: "Nenhum app com esse nome."');
   await p.fill('#ed-busca', ''); await h.dormir(150);
@@ -409,7 +409,7 @@ export default async function (h) {
   await tocar(p, '.tecla.menu'); await h.dormir(700);
   h.ok((await texto(p, '#ed-acao')).includes('Não deu para ler os apps do Mac') && await p.locator('#ed-acao [data-app]').count() === 8 && await p.locator('[data-apps-tentar]').count() === 1, 'a lista do Mac falhando: aviso, a lista curta e "Tentar de novo"');
   await h.cenario({ apps: 'normal' }); await p.click('[data-apps-tentar]'); await h.dormir(700);
-  h.ok(await p.evaluate(() => document.querySelectorAll('#ed-lista-apps [data-app-bundle]').length) === 11, '"Tentar de novo" traz a lista do Mac');
+  h.ok(await p.evaluate(() => document.querySelectorAll('#ed-lista-apps [data-app-bundle]').length) === 13, '"Tentar de novo" traz a lista do Mac');
   await p.context().close();
 
   /* muitos apps: a lista rola sem barra, e o editor cabe nas duas posições */
@@ -418,7 +418,7 @@ export default async function (h) {
     p = await h.pagina({ w, h: alt }); await pronta(h, p);
     await novaTecla(p); await h.dormir(700); // a folha termina de subir
     const rol = await p.evaluate(() => { const e = document.querySelector('#ed-lista-apps'), f = document.querySelector('#f-editor').getBoundingClientRect(); return { passa: e.scrollHeight > e.clientHeight + 20, semBarra: getComputedStyle(e).scrollbarWidth === 'none', dentro: f.left >= 0 && f.right <= innerWidth + 1 && f.top >= 0 && f.bottom <= innerHeight + 1 && e.getBoundingClientRect().bottom <= innerHeight, n: e.querySelectorAll('[data-app-bundle]').length }; });
-    h.ok(rol.n === 141 && rol.passa && rol.semBarra && rol.dentro, `${nome}: 140 apps, a lista rola sem barra e o editor cabe (${JSON.stringify(rol)})`);
+    h.ok(rol.n === 143 && rol.passa && rol.semBarra && rol.dentro, `${nome}: 140 apps mais 3 especiais, a lista rola sem barra e o editor cabe (${JSON.stringify(rol)})`);
     await h.foto(p, nome === 'deitado' ? 'editor-apps-muitos' : 'editor-apps-em-pe');
     await escolherApp('Mail').catch(() => {});
     await p.fill('#ed-busca', 'mail').catch(() => {});
