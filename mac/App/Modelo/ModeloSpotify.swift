@@ -9,6 +9,10 @@ final class ModeloSpotify: ObservableObject {
     let conta: ContaSpotify
     @Published private(set) var conectado: Bool
     @Published private(set) var conectando = false
+    /// O retorno do navegador já chegou e o Deck está confirmando o login com o Spotify.
+    @Published private(set) var confirmando = false
+    /// O nome da conta conectada, para a pessoa ver quem entrou.
+    @Published private(set) var nome: String?
     /// O texto do campo da chave.
     @Published var chave: String
     /// O motivo do último login que não deu certo, na linha da seção.
@@ -17,6 +21,8 @@ final class ModeloSpotify: ObservableObject {
     @Published var avancadoAberto = false
     /// Quem mostra o aviso curto na janela (ModeloApp.avisar).
     var avisar: (String, Bool) -> Void = { _, _ in }
+    /// Escreve no deck.log cada passo do login (nunca o código, o state nem os tokens).
+    var registrar: @Sendable (String) -> Void = { _ in }
     /// Abre a página de login do Spotify no navegador (nos testes, simula quem clica em Permitir).
     var abrirNavegador: @MainActor (URL) -> Void = { NSWorkspace.shared.open($0) }
     var portaDoRetorno: UInt16 = RetornoLocal.portaPadrao
@@ -28,6 +34,7 @@ final class ModeloSpotify: ObservableObject {
         self.conta = conta
         self.conectado = conta.conectado
         self.chave = conta.chavePropria ?? ""
+        self.nome = conta.nome
     }
 
     var chaveValida: Bool { ContaSpotify.chaveValida(chave.trimmingCharacters(in: .whitespacesAndNewlines)) }
@@ -47,8 +54,19 @@ final class ModeloSpotify: ObservableObject {
 
     func atualizar() {
         conectado = conta.conectado
+        nome = conta.nome
+        if conectado, nome == nil { buscarNome() }
         // O Spotify recusou esta conta na chave do Deck (numa chamada do player): mostra o passo a passo da chave própria.
         if conta.precisaChavePropria, !conectado { pedirChavePropria() }
+    }
+
+    private func buscarNome() {
+        let conta = self.conta
+        Task {
+            let n = await Task.detached { conta.atualizarNome() }.value
+            if let n, n != nome { nome = n }
+            resincronizar()
+        }
     }
 
     private func pedirChavePropria() {
@@ -70,7 +88,9 @@ final class ModeloSpotify: ObservableObject {
         let vazia = chave.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         if !(vazia && temChaveEmbutida), let falha = conta.definirClientId(chave) { return falhar(falha) }
         conectando = true
-        defer { conectando = false; espera = nil }
+        confirmando = false
+        registrar("spotify: login iniciado (\(vazia ? "chave do Deck" : "chave própria"))")
+        defer { conectando = false; confirmando = false; espera = nil }
 
         let espera = EsperaDoRetorno()
         self.espera = espera
@@ -80,24 +100,47 @@ final class ModeloSpotify: ObservableObject {
         let porta: UInt16
         switch aberta {
         case .success(let p): porta = p
-        case .failure(let e): return falhar((e as? ErroServidor)?.description ?? "Não consegui abrir o retorno do login do Spotify.")
+        case .failure(let e):
+            registrar("spotify: a porta do retorno não abriu")
+            return falhar((e as? ErroServidor)?.description ?? "Não consegui abrir o retorno do login do Spotify.")
         }
         let pendente: LoginPendente
         switch conta.prepararLogin(redirecionamento: RetornoLocal.endereco(porta: porta)) {
         case .success(let p): pendente = p
         case .failure(let e): return falhar(e.texto)
         }
+        let registrar = self.registrar
+        espera.avisoDeIgnorado = { registrar("spotify: chegou um pedido na porta do retorno que não é deste login, ignorado") }
         espera.esperar(estado: pendente.estado)
+        registrar("spotify: navegador aberto, esperando o retorno em \(RetornoLocal.endereco(porta: porta))")
         abrirNavegador(pendente.url)
         guard let retorno = await espera.aguardar(segundos: esperaMaxima) else {
-            return falhar(espera.cancelado ? "Login do Spotify cancelado." : "O login do Spotify demorou demais. Clique em Conectar para tentar de novo.")
+            if espera.cancelado { registrar("spotify: cancelado pela pessoa"); return falhar("Login do Spotify cancelado.") }
+            registrar("spotify: tempo esgotado, o navegador não voltou para o Deck")
+            return falhar(Self.textoDeTempoEsgotado)
         }
+        registrar("spotify: retorno recebido (\(retorno.erro.map { "erro \($0)" } ?? "com código"))")
+        confirmando = true
         let conta = self.conta
         let resultado = await Task.detached { conta.concluirLogin(pendente, retorno: retorno) }.value
-        if let falha = resultado { return falhar(falha) }
+        if let falha = resultado { registrar("spotify: login não concluiu (\(falha))"); return falhar(falha) }
         conectado = conta.conectado
+        registrar("spotify: conectado")
         avisar("Spotify conectado", false)
         NSApp.activate(ignoringOtherApps: true)
+        // Já conectou: a tela não volta ao "Esperando" enquanto o nome da conta não chega (o /me pode demorar).
+        conectando = false
+        confirmando = false
+        let nomeDaConta = await Task.detached { conta.atualizarNome() }.value
+        nome = nomeDaConta
+        resincronizar()
+    }
+
+    /// Relê a conta depois de uma chamada ao Spotify: se ela apagou o login (conta fora da lista), a tela acompanha.
+    private func resincronizar() {
+        conectado = conta.conectado
+        if !conectado { nome = nil }
+        if conta.precisaChavePropria, !conectado { pedirChavePropria() }
     }
 
     /// Clicar em Cancelar enquanto espera o navegador.
@@ -107,13 +150,17 @@ final class ModeloSpotify: ObservableObject {
     func usarChaveDoDeck() {
         conta.usarChaveDoDeck()
         chave = ""
+        nome = nil
         conectado = conta.conectado
         erro = nil
     }
 
+    static let textoDeTempoEsgotado = "O login do Spotify demorou demais e o navegador não voltou para o Deck. Clique em Conectar para tentar de novo. Se a página do Spotify mostrou um erro, use o Avançado com a sua chave."
+
     func desconectar() {
         conta.desconectar()
         conectado = false
+        nome = nil
         erro = nil
         avisar("Spotify desconectado", false)
     }
@@ -134,13 +181,15 @@ final class EsperaDoRetorno: @unchecked Sendable {
     private var terminou = false
     private(set) var cancelado = false
     private var estadoEsperado: String?
+    /// Chamado quando chega um retorno de outro login (state diferente) e a espera segue.
+    var avisoDeIgnorado: @Sendable () -> Void = {}
 
     /// Só o retorno com este state vale. Pedido de outra aba ou programa local é ignorado e a espera segue.
     func esperar(estado: String) { trava.lock(); estadoEsperado = estado; trava.unlock() }
 
     func entregar(_ r: RetornoLogin?) {
         trava.lock()
-        if let r, r.estado != estadoEsperado { trava.unlock(); return }
+        if let r, r.estado != estadoEsperado { trava.unlock(); avisoDeIgnorado(); return }
         if terminou { trava.unlock(); return }
         terminou = true
         if let c = continuacao { continuacao = nil; trava.unlock(); c.resume(returning: r) } else { guardado = r; trava.unlock() }
@@ -174,9 +223,10 @@ enum SpotifyLogica {
 
     static let apoioDoCampo = "Cole aqui a chave do app que você cria de graça no site do Spotify. Ela não é senha"
 
-    static func apoioDoLogin(_ s: SituacaoSpotify, erro: String?) -> String {
+    static func apoioDoLogin(_ s: SituacaoSpotify, erro: String?, confirmando: Bool = false) -> String {
         if let erro, s != .conectando, s != .conectado { return erro }
         switch s {
+        case .conectando where confirmando: return "O navegador voltou. Confirmando com o Spotify..."
         case .semChave: return "Falta colar a chave do app. O player do iPhone segue funcionando sem login"
         case .pronto: return "Abre o navegador para você permitir o acesso. Sem login o player segue funcionando"
         case .conectando: return "Esperando você permitir no navegador..."

@@ -117,10 +117,14 @@ final class ContaSpotify: @unchecked Sendable {
     // MARK: Estado
 
     /// A chave que a pessoa colou nos Ajustes, se houver.
+    /// A mesma chave do Deck guardada no Chaveiro (colada em versão antiga) não é "própria": vale como a do Deck.
     var chavePropria: String? {
         let c = (armazem.ler().clientId ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        return c.isEmpty ? nil : c
+        return c.isEmpty || c == embutida ? nil : c
     }
+
+    /// O nome da conta do Spotify conectada, guardado depois do login. nil até o Spotify responder.
+    var nome: String? { conectado ? armazem.ler().nome : nil }
 
     var temChaveEmbutida: Bool { embutida != nil }
 
@@ -135,8 +139,8 @@ final class ContaSpotify: @unchecked Sendable {
         guard Self.chaveValida(c) else { return "A chave do app tem 32 letras e números. Copie de novo no site do Spotify." }
         precisaChavePropria = false
         var d = armazem.ler()
-        if clientId != c { d.acesso = nil; d.renovacao = nil; d.expiraEm = nil }
-        d.clientId = c
+        if clientId != c { d.acesso = nil; d.renovacao = nil; d.expiraEm = nil; d.nome = nil }
+        d.clientId = c == embutida ? nil : c
         return armazem.gravar(d) ? nil : "Não consegui guardar a chave no Chaveiro do Mac."
     }
 
@@ -149,15 +153,29 @@ final class ContaSpotify: @unchecked Sendable {
         precisaChavePropria = false
         var d = armazem.ler()
         guard d.clientId != nil else { return }
-        d.clientId = nil; d.acesso = nil; d.renovacao = nil; d.expiraEm = nil
+        d.clientId = nil; d.acesso = nil; d.renovacao = nil; d.expiraEm = nil; d.nome = nil
         armazem.gravar(d)
     }
 
     /// Sai do Spotify neste Mac. A chave do app fica, para conectar de novo sem colar outra vez.
     func desconectar() {
         var d = armazem.ler()
-        d.acesso = nil; d.renovacao = nil; d.expiraEm = nil
+        d.acesso = nil; d.renovacao = nil; d.expiraEm = nil; d.nome = nil
         armazem.gravar(d)
+    }
+
+    /// Pergunta ao Spotify quem é a conta conectada e guarda o nome. nil se não conseguiu (a conta segue conectada).
+    @discardableResult
+    func atualizarNome() -> String? {
+        guard conectado else { return nil }
+        guard case .success(let r) = chamar("GET", "/me") else { return nome }
+        let obj = json(r) as? [String: Any]
+        let nome = ((obj?["display_name"] as? String) ?? (obj?["id"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !nome.isEmpty else { return self.nome }
+        var d = armazem.ler()
+        d.nome = nome
+        armazem.gravar(d)
+        return nome
     }
 
     // MARK: Login
@@ -196,7 +214,7 @@ final class ContaSpotify: @unchecked Sendable {
         case .success(let t):
             guard let renovacao = t.renovacao else { return "O Spotify não entregou o login completo. Tente de novo." }
             var d = armazem.ler()
-            d.acesso = t.acesso; d.renovacao = renovacao; d.expiraEm = agora().timeIntervalSince1970 + t.duracao
+            d.acesso = t.acesso; d.renovacao = renovacao; d.expiraEm = agora().timeIntervalSince1970 + t.duracao; d.nome = nil
             precisaChavePropria = false
             return armazem.gravar(d) ? nil : "Não consegui guardar o login no Chaveiro do Mac."
         }
@@ -233,7 +251,7 @@ final class ContaSpotify: @unchecked Sendable {
         if !forcar, let a = d.acesso, let e = d.expiraEm, e - agora().timeIntervalSince1970 > Self.folgaDoToken { return .success(a) }
         switch pedirToken([("grant_type", "refresh_token"), ("refresh_token", renovacao), ("client_id", cid)]) {
         case .failure(let e):
-            if e == .loginVenceu { d.acesso = nil; d.renovacao = nil; d.expiraEm = nil; armazem.gravar(d) }
+            if e == .loginVenceu { d.acesso = nil; d.renovacao = nil; d.expiraEm = nil; d.nome = nil; armazem.gravar(d) }
             return .failure(e)
         case .success(let t):
             d.acesso = t.acesso

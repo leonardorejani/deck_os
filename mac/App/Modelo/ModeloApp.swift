@@ -127,7 +127,10 @@ final class ModeloApp: ObservableObject {
         let armazemSpotify: ArmazemSpotify = testando ? ArmazemSpotifyMemoria() : ArmazemSpotifyChaveiro()
         self.spotify = ModeloSpotify(conta: ContaSpotify(armazem: armazemSpotify, transporte: TransporteUrlSession()))
         self.renovacao = RenovacaoDoApp.ler(defaults)
-        if !testando { self.registrar = { LogDoDeck.padrao.escrever($0) } }
+        if !testando {
+            self.registrar = { LogDoDeck.padrao.escrever($0) }
+            self.spotify.registrar = { LogDoDeck.padrao.escrever($0) }
+        }
         self.spotify.avisar = { [weak self] texto, falha in self?.avisar(texto, falha: falha) }
         ligarDecisao()
         // O núcleo só entrega o código: quem o recebeu é lembrado aqui, e vale enquanto o código for o mesmo.

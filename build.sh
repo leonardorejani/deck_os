@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Compila o Deck.app do Mac em Release (assinatura local "Sign to Run Locally", sem conta paga) e gera dist/Deck-1.0.dmg
+# Compila o Deck.app do Mac em Release (assinatura ad hoc com requisito estável, sem conta paga) e gera dist/Deck-1.0.dmg
 # com o app e um atalho para Aplicativos. Também grava onde está este repo para o Deck renovar o app do iPhone.
 # Uso: ./build.sh [--abrir]    (--abrir abre o app recém-compilado pelo Finder, nunca por "open": ver scripts/abrir-deck.sh)
 set -euo pipefail
@@ -27,6 +27,8 @@ xcodebuild -project Deck.xcodeproj -scheme Deck -configuration Release -derivedD
   | grep -E "error:|\*\* BUILD" | tail -5
 app="$raiz/mac/App/build/Build/Products/Release/Deck.app"
 [ -d "$app" ] || { echo "A compilação não gerou o Deck.app" >&2; exit 1; }
+# Requisito de assinatura estável: sem isso cada build é "outro app" para o macOS e perde Acessibilidade e Acesso Total ao Disco.
+bash "$raiz/scripts/assinar-deck.sh" "$app"
 
 echo "Montando o .dmg..."
 palco="$(mktemp -d)"

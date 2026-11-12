@@ -843,6 +843,21 @@ Ajustes de UX (11/11/2026, teste do Leonardo no iPhone):
       recusa já no login (o retorno traz um erro que não é o de Cancelar, e a troca do código pode trazer a mesma mensagem).
       Com chave própria o erro segue como antes. Tocar, pausar, pular, volume e capa seguem sem login.
     - O README explica como um fork configura a própria chave.
+30. Acessibilidade "Recusado" com o interruptor ligado, e o login do Spotify que não termina (11/11/2026). Palavras dele:
+    "nao consigo permitir a acessibilidade mesmo já liberado" e "nao tem como saber se conectou de fato".
+    - Acessos do Mac: a assinatura ad hoc pura tem como requisito o cdhash de cada compilação, e o macOS amarra a permissão a
+      esse requisito. Reinstalar por cima deixa o Deck ligado na lista, mas "outro app". O `build.sh` agora assina com o
+      requisito estável `identifier "<id do app>"` (`scripts/assinar-deck.sh`, ou um certificado de verdade em
+      `DECK_ASSINATURA`). A permissão dada a um build antigo (ad hoc) ainda precisa ser refeita uma vez.
+    - Acessibilidade e Acesso Total ao Disco em "Recusado" explicam na própria linha: "tire o Deck da lista com o botão menos
+      e adicione de novo". O botão "Abrir Ajustes do Sistema" já leva à página certa.
+    - Spotify: o login sai do "Esperando" sempre (conectado, recusado, cancelado ou tempo esgotado, com texto que diz o que
+      olhar). O Deck grava cada passo no deck.log, sem código nem token. Conectado mostra "Conectado como <nome>" e o botão
+      Desconectar. A chave do Deck guardada no Chaveiro não conta como "própria": com a chave embutida o campo vem vazio e o
+      Avançado recolhido.
+    - Spotify, correção da verificação (11/11/2026): conectado não volta ao "Esperando" enquanto o nome da conta carrega, e a
+      conta recusada só no /me (fora da lista) mostra o Avançado na hora. O texto de tempo esgotado não aponta mais o endereço
+      de retorno como causa. A causa do travamento real segue sem confirmação: o próximo teste manual lê o deck.log.
 30. iPhone desconectado pelo Mac volta a pedir pareamento (11/11/2026). Palavras dele: "Desconectei o iPhone e tá
     demorando muito pra conectar pelo Bluetooth ou cabo. Não tá conectando na real."
     - Causa: "Desconectar iPhone" no Mac muda o código de acesso. O app do iPhone só esquecia o Mac ao receber um 401 numa
