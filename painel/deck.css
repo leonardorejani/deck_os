@@ -493,7 +493,17 @@ button.cartao { font: inherit; color: inherit; text-align: left; border: 0; curs
 .lista-cal::-webkit-scrollbar { display: none }
 .folha.cheia .grupo-data h3 { background: var(--cal-fundo) }
 /* Novo compromisso: a parte da direita inteira vira o formulário (a lista fica escondida, o mês continua ali) */
-.lista-cal .btn-novo { width: 100%; justify-content: center; margin-bottom: var(--item) }
+/* puxador discreto na borda da lista: deslizar a lista para a esquerda (ou tocar nele) abre o formulário */
+.lista-cal { touch-action: pan-y }
+.puxa-novo { position: absolute; right: var(--seguro-dir); top: 50%; translate: 0 -50%; width: var(--alvo); height: calc(var(--alvo) * 2); border: 0; background: none; cursor: pointer; touch-action: pan-y; display: grid; place-items: center end; z-index: 1; padding: 0 var(--item) 0 0 }
+.puxa-novo[hidden] { display: none }
+.puxa-novo span { width: 4px; height: 36px; border-radius: var(--raio-pilula); background: var(--texto-3); opacity: .6 }
+.vertical .puxa-novo { top: auto; bottom: var(--seguro-baixo); translate: none; height: var(--alvo) }
+.entra-direita { animation: entra-direita var(--mov-padrao) var(--curva-entra) }
+.entra-esquerda { animation: entra-esquerda var(--mov-padrao) var(--curva-entra) }
+@keyframes entra-direita { from { opacity: 0; translate: var(--margem) 0 } }
+@keyframes entra-esquerda { from { opacity: 0; translate: calc(-1 * var(--margem)) 0 } }
+@media (prefers-reduced-motion: reduce) { .entra-direita, .entra-esquerda { animation: none } }
 .novo-comp { grid-column: 2; grid-row: 1; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: var(--item); min-height: 0; border-left: 1px solid var(--borda); padding: var(--item) var(--seguro-dir) 0 var(--pad); margin-right: calc(-1 * var(--seguro-dir)); color-scheme: dark }
 .novo-comp h3 { margin: 0; font-size: var(--texto-lg); font-weight: 700; line-height: var(--altura-titulo) }
 .nc-corpo { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: var(--item) var(--icone); align-content: start; overflow: auto; overscroll-behavior: contain; scrollbar-width: none }

@@ -323,6 +323,7 @@ function trechoDoEvento(e) {
 }
 function pintarCal() {
   const hoje = new Date(V.ref), m = ag.mes;
+  $('#ca-puxa').setAttribute('aria-label', 'Novo compromisso em ' + ag.dia.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' }));
   $('#ca-titulo').textContent = m.toLocaleDateString('pt-BR', { month: 'long' }) + (m.getFullYear() !== hoje.getFullYear() ? ' ' + m.getFullYear() : '');
   const dias = new Date(m.getFullYear(), m.getMonth() + 1, 0).getDate(), temEv = new Map();
   const m1 = new Date(m.getFullYear(), m.getMonth(), 1), m2 = new Date(m.getFullYear(), m.getMonth(), dias);
@@ -363,8 +364,7 @@ function pintarListaCal() {
         + (aberto ? `<div class="ev-detalhe">${reuniao ? `<button class="btn primario" data-ev-reuniao="${esc(reuniao.url)}" aria-label="Entrar na reunião (${esc(reuniao.nome)}), abre no Mac">Entrar na reunião</button>` : ''}<button class="btn secundario pequeno" data-ev-mac>Abrir no Calendário do Mac</button></div>` : '');
     }).join('') + '</section>';
   }
-  const novo = `<button class="btn secundario btn-novo" data-novo>Novo compromisso em ${esc(ag.dia.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' }))}</button>`;
-  manterRolagem(el, novo + (h || '<div class="vazio-bloco"><strong>Nada neste mês a partir deste dia</strong><span>Os eventos do Calendário do Mac aparecem aqui.</span></div>'));
+  manterRolagem(el, (h || '<div class="vazio-bloco"><strong>Nada neste mês a partir deste dia</strong><span>Os eventos do Calendário do Mac aparecem aqui.</span></div>'));
 }
 /* Troca o mês: o atual sai para um lado, o novo entra pelo outro. Vindo de um arrasto, parte de onde o dedo soltou */
 function trocarMes(passo) {
@@ -391,7 +391,6 @@ $('#ca-grade').addEventListener('click', e => {
 });
 $('#ca-lista').addEventListener('click', e => {
   if (e.target.closest('[data-tentar]')) { ag.erro = ''; pintarListaCal(); return lerAgenda(true, true) }
-  if (e.target.closest('[data-novo]')) return abrirFormNovo();
   if (e.target.closest('[data-ev-mac]')) return abrirNoMac('calendario', 'Abrindo o Calendário no Mac');
   const reu = e.target.closest('[data-ev-reuniao]'); if (reu) return entrarNaReuniao(reu.dataset.evReuniao);
   const b = e.target.closest('[data-ev]'); if (b) { ag.aberto = ag.aberto === b.dataset.ev ? null : b.dataset.ev; pintarListaCal() }
@@ -420,6 +419,33 @@ arrastoCal().addEventListener('pointerup', e => soltarMes(e, false));
 arrastoCal().addEventListener('pointercancel', e => soltarMes(e, true));
 // o toque que terminou um arrasto não escolhe o dia nem aperta a seta que estava embaixo do dedo
 arrastoCal().addEventListener('click', e => { if (ag.arrastou) { e.stopPropagation(); e.preventDefault() } }, true);
+
+/* Deslizar a lista do dia para a esquerda revela o formulário de novo compromisso: a lista segue o dedo e, ao soltar, abre se o
+   dedo foi longe ou rápido, senão volta. O puxador na borda (toque) faz o mesmo sem o gesto. Rolar na vertical continua da lista */
+let toqueLista = null;
+$('#ca-puxa').onclick = () => { if (!fo.aberto) abrirFormNovo() };
+function soltarLista(e, cancelado) {
+  const t = toqueLista; toqueLista = null; if (!t?.seguindo) return;
+  const l = $('#ca-lista'), dx = -t.dx, rapido = !cancelado && dx > 30 && dx / Math.max(1, e.timeStamp - t.t) > .5;
+  l.style.transition = ''; ag.arrastou = true; setTimeout(() => { ag.arrastou = false });
+  l.style.translate = ''; l.style.opacity = '';
+  if (!cancelado && (dx > Math.max(60, l.offsetWidth / 4) || rapido)) abrirFormNovo();
+}
+for (const el of [$('#ca-lista'), $('#ca-puxa')]) { // o puxador aceita o mesmo gesto
+  el.addEventListener('pointerdown', e => { if (e.isPrimary && !fo.aberto) toqueLista = { x: e.clientX, y: e.clientY, t: e.timeStamp, dx: 0, seguindo: false } });
+  el.addEventListener('pointermove', e => {
+    if (!toqueLista) return; const dx = e.clientX - toqueLista.x, dy = e.clientY - toqueLista.y, l = $('#ca-lista');
+    if (!toqueLista.seguindo) {
+      if (Math.abs(dy) > 10 && Math.abs(dy) >= Math.abs(dx)) { toqueLista = null; return } // é rolagem na vertical: não é do formulário
+      if (dx > -10 || Math.abs(dx) < Math.abs(dy) * 1.5) return; // só para a esquerda
+      toqueLista.seguindo = true; l.style.transition = 'none'; try { el.setPointerCapture(e.pointerId) } catch {}
+    }
+    const d = Math.min(0, dx); toqueLista.dx = d; l.style.translate = `${d}px 0`; l.style.opacity = String(1 - Math.min(-d / l.offsetWidth, 1) * .7);
+  });
+  el.addEventListener('pointerup', e => soltarLista(e, false));
+  el.addEventListener('pointercancel', e => soltarLista(e, true));
+  el.addEventListener('click', e => { if (ag.arrastou) { e.stopPropagation(); e.preventDefault() } }, true);
+}
 
 /* ---------- Novo compromisso: a parte da direita vira o formulário ---------- */
 const fo = { aberto: false, destinos: null, antigo: false, enviando: false, todo: false, querLista: false, espera: null, ate: 0 };
@@ -500,14 +526,18 @@ function abrirFormNovo() {
   $('#nc-padrao').checked = false; $('#nc-padrao').dataset.era = '0'; $('#nc-padrao').disabled = true;
   $('#nc-salvar').disabled = false; $('#nc-salvar').textContent = 'Salvar'; mensagemNovo('');
   pintarTipoNovo();
-  $('#ca-lista').hidden = true; $('#ca-form').hidden = false;
+  $('#ca-lista').hidden = true; $('#ca-form').hidden = false; $('#ca-puxa').hidden = true;
+  animarEntrada($('#ca-form'), 'entra-direita');
   carregarDestinos(false);
 }
 function fecharFormNovo() {
   fo.aberto = false; clearInterval(fo.espera); fo.espera = null;
   if ($('#ca-form').contains(document.activeElement)) document.activeElement.blur();
-  $('#ca-form').hidden = true; $('#ca-lista').hidden = false;
+  $('#ca-form').hidden = true; $('#ca-lista').hidden = false; $('#ca-puxa').hidden = false;
+  animarEntrada($('#ca-lista'), 'entra-esquerda');
 }
+// reinicia a animação de entrada (a classe sai quando acaba, para o gesto de arrastar poder usar translate depois)
+function animarEntrada(el, classe) { el.classList.remove(classe); void el.offsetWidth; el.classList.add(classe); el.addEventListener('animationend', () => el.classList.remove(classe), { once: true }) }
 async function salvarCompromisso() {
   if (fo.enviando) return;
   const titulo = $('#nc-titulo').value.trim(), dia = $('#nc-dia').value, inicio = $('#nc-inicio').value, fim = $('#nc-fim').value, destino = destinoDe($('#nc-destino').value);

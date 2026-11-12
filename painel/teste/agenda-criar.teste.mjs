@@ -12,11 +12,11 @@ const aqui = path.dirname(fileURLToPath(import.meta.url));
 // abre a agenda no mês que vem (sempre no futuro) e toca no dia 15. Devolve o dia tocado (AAAA-MM-DD)
 async function abrir(h, p) {
   await p.click('.tecla[data-id="calendario"]');
-  await h.espera(p, () => document.querySelectorAll('#ca-lista .ev-linha').length > 0 || !!document.querySelector('#ca-lista .btn-novo'));
+  await h.espera(p, () => document.querySelectorAll('#ca-lista .ev-linha').length > 0 || !!document.querySelector('#ca-lista .vazio-bloco'));
   await p.click('#ca-prox'); await h.dormir(500);
   const dia = await p.evaluate(() => document.querySelectorAll('#ca-grade .sb-dia')[14].dataset.dia);
   await p.locator('#ca-grade .sb-dia').nth(14).click();
-  await h.espera(p, () => !!document.querySelector('#ca-lista .btn-novo'));
+  await h.espera(p, () => document.querySelectorAll('#ca-lista .ev-linha').length > 0 || !!document.querySelector('#ca-lista .vazio-bloco'));
   return dia;
 }
 const formAberto = p => p.evaluate(() => !document.querySelector('#ca-form').hidden && document.querySelector('#ca-lista').hidden);
@@ -26,13 +26,15 @@ export default async function (h) {
   await h.reset();
   let p = await h.pagina(); await pronta(h, p);
   const dia = await abrir(h, p);
-  const rotulo = await texto(p, '#ca-lista .btn-novo');
-  h.ok(/^Novo compromisso em \d+ de \S+$/.test(rotulo), `tocar num dia oferece "Novo compromisso em <dia>" no topo da lista (${rotulo})`);
-  h.ok((await alvo(p, '#ca-lista .btn-novo')).a >= 44, 'o botão Novo compromisso tem alvo de toque de 44 pt');
+  const rotulo = await p.getAttribute('#ca-puxa', 'aria-label');
+  h.ok(/^Novo compromisso em \d+ de \S+$/.test(rotulo), `o puxador da borda diz "Novo compromisso em <dia>" (${rotulo})`);
+  h.ok((await alvo(p, '#ca-puxa')).a >= 44 && (await alvo(p, '#ca-puxa')).l >= 44, 'o puxador tem alvo de toque de 44 pt');
+  h.ok(!(await p.locator('#ca-lista .btn-novo').count()), 'não há botão grande "Novo compromisso" por cima da lista');
   const listaAntes = await p.evaluate(() => { const r = document.querySelector('#ca-lista').getBoundingClientRect(); return { x: Math.round(r.x), w: Math.round(r.width) } });
-  await p.click('#ca-lista .btn-novo');
+  await p.click('#ca-puxa');
   h.ok(await h.espera(p, () => !document.querySelector('#ca-form').hidden && !!document.querySelector('#nc-destino option[value^="calendario:"]')), 'o botão abre o formulário e ele carrega os lugares do Mac');
   h.ok(await formAberto(p), 'a lista some e o formulário fica no lugar dela');
+  await h.dormir(450); // a entrada animada termina
   const form = await p.evaluate(() => { const r = document.querySelector('#ca-form').getBoundingClientRect(), t = document.querySelector('#tela').getBoundingClientRect(); return { x: Math.round(r.x - t.x), dir: Math.round(r.right - t.right) } });
   h.ok(Math.abs(form.x - listaAntes.x) <= 2 && form.dir <= 2, `o formulário ocupa a parte da direita inteira (x ${form.x} contra ${listaAntes.x} da lista)`);
   const campos = await p.evaluate(() => ({ dia: document.querySelector('#nc-dia').value, destino: document.querySelector('#nc-destino').value, alerta: document.querySelector('#nc-alerta').value, todo: document.querySelector('#nc-todo').checked, titulo: document.querySelector('#nc-titulo').value }));
@@ -66,7 +68,7 @@ export default async function (h) {
   h.ok((await aviso(p)).txt === 'Compromisso criado no Calendário do Mac', 'um aviso confirma');
 
   /* ---------- o padrão vale na próxima vez ---------- */
-  await p.click('#ca-lista .btn-novo');
+  await p.click('#ca-puxa');
   await h.espera(p, () => document.querySelector('#nc-destino').value.startsWith('calendario:'));
   await h.dormir(200);
   const padrao = await p.evaluate(() => ({ v: document.querySelector('#nc-destino').value, marcado: document.querySelector('#nc-padrao').checked, off: document.querySelector('#nc-padrao').disabled, t: document.querySelector('#nc-padrao-txt').textContent }));
@@ -83,16 +85,16 @@ export default async function (h) {
 
   /* ---------- cancelar ---------- */
   await h.espera(p, () => document.querySelector('#ca-form').hidden);
-  await p.click('#ca-lista .btn-novo'); await p.fill('#nc-titulo', 'Não vai'); await p.click('[data-nc-cancelar]');
+  await p.click('#ca-puxa'); await p.fill('#nc-titulo', 'Não vai'); await p.click('[data-nc-cancelar]');
   h.ok(!(await formAberto(p)) && (await h.contadores()).criados.length === 2, 'Cancelar fecha sem mandar nada');
-  await p.click('#ca-lista .btn-novo');
+  await p.click('#ca-puxa');
   h.ok(await p.evaluate(() => document.querySelector('#nc-titulo').value === ''), 'e o formulário abre limpo da próxima vez');
   await p.context().close();
 
   /* ---------- Lembretes: o acesso é pedido só quando a pessoa escolhe ---------- */
   await h.reset(); await h.cenario({ agendaCriar: 'lembretes-pedir' });
   p = await h.pagina(); await pronta(h, p); await abrir(h, p);
-  await p.click('#ca-lista .btn-novo');
+  await p.click('#ca-puxa');
   await h.espera(p, () => !!document.querySelector('#nc-destino option[value="pedir"]'));
   c = await h.contadores();
   h.ok(await p.evaluate(() => document.querySelector('#nc-destino option[value="pedir"]').textContent) === 'Liberar os Lembretes no Mac' && c.destinosPedidos === 0, 'sem acesso aos Lembretes: só aparece "Liberar os Lembretes no Mac" e nada foi pedido ainda');
@@ -114,7 +116,7 @@ export default async function (h) {
   /* ---------- o Mac recusa ---------- */
   await h.reset(); await h.cenario({ agendaCriar: 'recusa' });
   p = await h.pagina(); await pronta(h, p); await abrir(h, p);
-  await p.click('#ca-lista .btn-novo'); await h.espera(p, () => !!document.querySelector('#nc-destino option[value^="calendario:"]'));
+  await p.click('#ca-puxa'); await h.espera(p, () => !!document.querySelector('#nc-destino option[value^="calendario:"]'));
   await p.fill('#nc-titulo', 'Reunião'); await p.click('#nc-salvar'); await h.dormir(400);
   h.ok(await formAberto(p) && (await texto(p, '#nc-msg')).startsWith('O Deck está sem acesso ao Calendário') && await p.evaluate(() => document.querySelector('#nc-msg').classList.contains('erro')), 'Mac que recusa: o motivo aparece no formulário, que continua aberto com o que foi digitado');
   h.ok(await p.evaluate(() => !document.querySelector('#nc-salvar').disabled && document.querySelector('#nc-titulo').value === 'Reunião'), 'e dá para tentar de novo');
@@ -123,7 +125,7 @@ export default async function (h) {
   /* ---------- Mac sem a função (versão antiga) ---------- */
   await h.reset(); await h.cenario({ agendaCriar: 'antigo' });
   p = await h.pagina(); await pronta(h, p); await abrir(h, p);
-  await p.click('#ca-lista .btn-novo'); await h.espera(p, () => (document.querySelector('#nc-msg').textContent || '').includes('Atualize'));
+  await p.click('#ca-puxa'); await h.espera(p, () => (document.querySelector('#nc-msg').textContent || '').includes('Atualize'));
   await p.fill('#nc-titulo', 'Teste'); await p.click('#nc-salvar'); await h.dormir(200);
   h.ok((await texto(p, '#nc-msg')).includes('Atualize o Deck no Mac') && (await h.contadores()).criados.length === 0, 'Mac antigo: pede para atualizar o Deck e não manda nada');
   await p.context().close();
@@ -131,8 +133,8 @@ export default async function (h) {
   /* ---------- em pé ---------- */
   await h.reset();
   p = await h.pagina({ w: 430, h: 932 }); await pronta(h, p);
-  await p.click('.tecla[data-id="calendario"]'); await h.espera(p, () => !!document.querySelector('#ca-lista .btn-novo'));
-  await p.click('#ca-lista .btn-novo'); await h.espera(p, () => !!document.querySelector('#nc-destino option[value^="calendario:"]')); await h.dormir(300);
+  await p.click('.tecla[data-id="calendario"]'); await h.espera(p, () => !!document.querySelector('#ca-puxa'));
+  await p.click('#ca-puxa'); await h.espera(p, () => !!document.querySelector('#nc-destino option[value^="calendario:"]')); await h.dormir(300);
   h.ok(await p.evaluate(() => { const f = document.querySelector('#ca-form').getBoundingClientRect(), t = document.querySelector('#tela').getBoundingClientRect(); return document.documentElement.scrollWidth <= innerWidth + 1 && f.right <= t.right + 1 && f.left >= t.left - 1 && document.querySelector('#nc-salvar').getBoundingClientRect().bottom <= t.bottom + 1 }), 'em pé: o formulário cabe na tela, sem rolar para o lado, com o Salvar à vista');
   await h.foto(p, 'agenda-novo-em-pe');
   await p.context().close();
