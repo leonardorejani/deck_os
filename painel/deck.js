@@ -133,7 +133,9 @@ const monitorItens = () => {
   const m = V.monitor; if (!m) return [];
   return MONITOR_ITENS.filter(k => (m.itens || []).includes(k) && (k !== 'bateria' || m.bateria != null)); // `itens`: o que a pessoa deixou ligado nos Ajustes do Mac
 };
-const velocidade = b => b == null ? '-' : b >= 1048576 ? (b / 1048576).toFixed(1).replace('.', ',') + ' MB/s' : Math.round(b / 1024) + ' KB/s';
+const velocidade = b => b == null ? '-' : b >= 1048576 ? (b / 1048576).toFixed(b >= 10485760 ? 0 : 1).replace('.', ',') + ' MB/s' : Math.round(b / 1024) + ' KB/s';
+// na tela o "/s" é um pedaço à parte: na linha apertada da horizontal ele sai e a seta já diz que é por segundo
+const velocidadeTela = b => esc(velocidade(b)).replace(/\/s$/, '<span class="por-s">/s</span>');
 const nivelBateria = m => m.naTomada || m.bateria > 20 ? '' : m.bateria <= 10 ? 'cheio' : 'alto';
 function monitorHTML() {
   const itens = monitorItens(); if (!itens.length) return '';
@@ -142,7 +144,7 @@ function monitorHTML() {
     cpu: () => pct('CPU', 'Processador', m.cpu),
     memoria: () => pct('Mem', 'Memória', m.memoria),
     bateria: () => pct(m.naTomada ? 'Tomada' : 'Bat', 'Bateria' + (m.naTomada ? ', na tomada' : ''), m.bateria, nivelBateria(m)),
-    rede: () => `<span aria-label="Rede: baixando ${velocidade(m.baixa)}, enviando ${velocidade(m.sobe)}"><span class="rot-m">${SVG.baixa}</span><b>${velocidade(m.baixa)}</b> <span class="rot-m">${SVG.sobe}</span><b>${velocidade(m.sobe)}</b></span>`,
+    rede: () => `<span aria-label="Rede: baixando ${velocidade(m.baixa)}, enviando ${velocidade(m.sobe)}"><span class="rot-m">${SVG.baixa}</span><b>${velocidadeTela(m.baixa)}</b> <span class="rot-m">${SVG.sobe}</span><b>${velocidadeTela(m.sobe)}</b></span>`,
   };
   return `<div class="monitor-tira" role="group" aria-label="Monitor do Mac">${itens.map(k => por[k]()).join('')}</div>`;
 }

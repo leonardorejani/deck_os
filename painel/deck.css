@@ -217,12 +217,13 @@ button.cartao { font: inherit; color: inherit; text-align: left; border: 0; curs
 .vertical :is(.comp-a, .comp-b).com-monitor:not(.relogio-grande) .placa { --h: 84px; --w: 59px } /* o monitor toma uma linha: as placas cedem a altura dela */
 .vertical .monitor-tira .mini { display: none } /* em pé o monitor é uma linha só, com o número */
 /* A e B não têm altura sobrando: o monitor vira uma linha só, sem as barrinhas, e o relógio cede o que ela toma */
-.monitor-tira { flex-wrap: nowrap; gap: var(--item); margin-top: var(--item); overflow: hidden }
+.monitor-tira { flex-wrap: nowrap; gap: var(--icone) calc(var(--item) - 4px); margin-top: var(--item); overflow: hidden }
 .monitor-tira .mini { display: none }
 .horizontal .comp-a:not(.comp-c).com-monitor:not(.relogio-grande) .placa { --h: 92px; --w: 64px }
 .horizontal .comp-b.com-monitor:not(.relogio-grande) .placa { --h: 84px; --w: 58px }
 .horizontal .comp-b.com-monitor:not(.relogio-grande) .sessoes .sessao ~ .sessao { display: none } /* a linha do monitor toma o lugar da segunda sessão: melhor uma inteira que duas cortadas */
-.monitor-tira > span { gap: 4px }
+.monitor-tira > span { gap: 3px }
+.horizontal .monitor-tira .por-s { display: none } /* a linha é de uma fileira só e o iPhone deitado tem pouca largura */
 .horizontal .comp-a.comp-c.relogio-grande .relogio-linha { grid-template-rows: auto minmax(0, 1fr) auto } /* na C o monitor tem a linha dele embaixo das placas, e elas cedem a altura dela */
 .horizontal .comp-c.com-monitor { --placa-h: 98px }
 

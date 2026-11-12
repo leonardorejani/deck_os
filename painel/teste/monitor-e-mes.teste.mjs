@@ -73,6 +73,27 @@ export default async function (h) {
     h.ok(ruins.length === 0, `monitor ${comp.toUpperCase()} ${pos}: nada passa da área segura${ruins.length ? ' (' + ruins.join('; ') + ')' : ''}`);
     await h.foto(p, `monitor-${comp}-${pos}`);
   }
+  /* pior caso: na tomada (rótulo "Tomada 100%") e rede em gigabit. A linha tem overflow:hidden, então o corte é silencioso:
+     o que vale é o texto caber inteiro (scrollWidth <= clientWidth), não só o retângulo estar na área segura */
+  for (const comp of ['a', 'b', 'c']) for (const pos of ['horizontal', 'vertical']) {
+    await p.setViewportSize({ width: VISTAS[pos][0], height: VISTAS[pos][1] });
+    await h.reset(); await h.cenario({ comp, blocos: { monitor: true }, monitor: { cpu: 45, memoria: 85, bateria: 100, naTomada: true, baixa: 131072000, sobe: 5242880 } });
+    await aberta(p, comp, pos); await h.dormir(1300);
+    const v = await p.evaluate(() => { const t = document.querySelector('.monitor-tira'); return { sw: t?.scrollWidth, cw: t?.clientWidth, txt: t?.textContent.replace(/\s+/g, ' ').trim() } });
+    h.ok(v.sw != null && v.sw <= v.cw, `monitor ${comp.toUpperCase()} ${pos} no pior caso: o texto cabe inteiro, sem corte (${v.sw} de ${v.cw}: ${v.txt})`);
+    h.ok(/Tomada.*100%/.test(v.txt) && /125 MB\/s/.test(v.txt) && /5,0 MB\/s/.test(v.txt), `monitor ${comp.toUpperCase()} ${pos} no pior caso: mostra tomada e as duas velocidades (${v.txt})`);
+    const ruins = await estouros(p, pos);
+    h.ok(ruins.length === 0, `monitor ${comp.toUpperCase()} ${pos} no pior caso: nada passa da área segura${ruins.length ? ' (' + ruins.join('; ') + ')' : ''}`);
+  }
+  /* na C não existe o player pequeno: quando o Spotify troca de faixa o laço de 1 s não pode tentar redesenhá-lo.
+     O erro seria engolido pelo try do tique, mas ele aborta o resto do passo: o monitor (que vem depois) pararia de atualizar */
+  await p.setViewportSize({ width: 932, height: 430 });
+  await h.reset(); await h.cenario({ comp: 'c', blocos: { monitor: true, spotify: true }, spotify: 'tocando' });
+  await aberta(p, 'c', 'horizontal'); await h.dormir(1300);
+  await h.cenario({ faixa: 'Outra faixa da C', monitor: { memoria: 41 } });
+  h.ok(await h.espera(p, () => /Mem.*41%/.test(document.querySelector('.monitor-tira')?.textContent || ''), null, 5000), 'C: o Spotify trocou de faixa e o monitor continua atualizando (o laço não quebra)');
+  await h.cenario({ spotify: 'pausado', monitor: { memoria: 42 } });
+  h.ok(await h.espera(p, () => /Mem.*42%/.test(document.querySelector('.monitor-tira')?.textContent || '') && !document.querySelector('.player'), null, 5000), 'C: o Spotify pausou e o monitor continua atualizando, sem player');
   /* a pessoa escolheu só alguns itens nos Ajustes do Mac */
   await p.setViewportSize({ width: 932, height: 430 });
   await h.reset(); await h.cenario({ comp: 'c', blocos: { monitor: true }, monitorItens: { cpu: false, memoria: true, bateria: false, rede: false } });
