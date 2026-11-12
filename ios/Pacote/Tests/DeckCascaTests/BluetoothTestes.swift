@@ -546,8 +546,75 @@ final class BluetoothTestes: XCTestCase {
         XCTAssertTrue(esqueceu.todas.isEmpty, "esqueceu o pareamento por causa de um Mac que não é o do iPhone")
         XCTAssertNotNil(cofre.ler())
     }
+
+    // MARK: Cifragem do enlace falhando (CBError 15, 12/11/2026)
+
+    /// Diário do iPhone de 12/11/2026: o Mac anuncia a um palmo, o iPhone vê, conecta e o iOS falha em cifrar o enlace
+    /// (CBError 15) todo ciclo. Antes, cada rodada conectava duas vezes no mesmo Mac (id guardado e procura), a tela
+    /// dizia só "Tentando de novo" e o laço seguia sem fim no mesmo ritmo.
+    func testCifragemQueFalhaSempreAvisaOQueFazerEParaDeInsistir() async throws {
+        let mac = MacDeTeste()
+        let radio = RadioComCifragemQuebrada(mac: mac, id: "mac-1")
+        let cofre = CofreEmMemoria(pareado("mac-1"))
+        let esperas = Linhas()
+        let linhas = Linhas()
+        let g = GerenteBluetooth(radio: radio, cofre: cofre, nomeDoIphone: "iPhone Exemplo",
+                                 esperaEntreTentativas: { esperas.anotar("\($0)"); return 0.05 },
+                                 prazoDaConexaoDireta: 0.2, prazoDaProcura: 0.3, log: { linhas.anotar($0) })
+        let esqueceu = Linhas()
+        g.aoNaoReconhecido { esqueceu.anotar("esqueceu") }
+        addTeardownBlock { g.parar() }
+        g.iniciar()
+        await esperar({ g.situacao == ErroCifragemBluetooth.mensagem }, segundos: 6)
+        XCTAssertEqual(g.situacao, ErroCifragemBluetooth.mensagem, "a tela não disse o que fazer: \(linhas.todas)")
+        XCTAssertEqual(radio.tentativas, GerenteBluetooth.cifragensParaAvisar, "cada rodada tem que conectar uma vez só no Mac que falhou a cifragem")
+        await esperar({ esperas.todas.contains("\(GerenteBluetooth.esperaSeCifragemFalha)") }, segundos: 2)
+        XCTAssertTrue(esperas.todas.contains("\(GerenteBluetooth.esperaSeCifragemFalha)"), "depois do aviso, a espera tem que ser longa: \(esperas.todas)")
+        XCTAssertTrue(esqueceu.todas.isEmpty, "cifragem falhando não é o Mac recusando: o pareamento fica")
+        XCTAssertNotNil(cofre.ler())
+
+        radio.consertar()
+        await esperar({ g.mac != nil }, segundos: 6)
+        XCTAssertEqual(g.mac?.id, "mac-1", "resolvido o enlace, tem que voltar sozinho")
+        XCTAssertNil(g.situacao)
+    }
+
+    /// No pareamento (iPhone novo), a mesma falha mostra o que fazer em vez de "Não consegui parear".
+    func testCifragemNoPareamentoMostraOQueFazer() async throws {
+        let radio = RadioComCifragemQuebrada(mac: MacDeTeste(), id: "mac-1")
+        let g = GerenteBluetooth(radio: radio, cofre: CofreEmMemoria(), nomeDoIphone: "iPhone Exemplo")
+        do {
+            _ = try await g.iniciarPareamento(com: MacEncontrado(id: "mac-1", nome: "MacBook Pro de Exemplo", perto: true))
+            XCTFail("pareou com a cifragem quebrada")
+        } catch let e as ErroCifragemBluetooth {
+            XCTAssertEqual(e.mensagem, ErroCifragemBluetooth.mensagem)
+        }
+    }
+}
+
+/// O Mac aparece no ar sempre com o mesmo id, mas conectar nele falha na cifragem do enlace até `consertar()`.
+final class RadioComCifragemQuebrada: RadioBle, @unchecked Sendable {
+    let mac: MacDeTeste
+    let id: String
+    private let trava = NSLock()
+    private var _tentativas = 0
+    private var _consertado = false
+    init(mac: MacDeTeste, id: String) { self.mac = mac; self.id = id }
+    var tentativas: Int { trava.withLock { _tentativas } }
+    func consertar() { trava.withLock { _consertado = true } }
+    var indisponivel: String? { nil }
+    var pronto: Bool { true }
+    func procurar() -> AsyncStream<[AnuncioBle]> { AsyncStream { c in c.yield([AnuncioBle(id: id, nome: "MacBook Pro de Exemplo", rssi: -40)]) } }
+    func conectar(id: String, prazo: TimeInterval) async throws -> FluxoBytes {
+        let consertado: Bool = trava.withLock { _tentativas += 1; return _consertado }
+        guard consertado else { throw ErroCifragemBluetooth(codigo: 15) }
+        let (macFio, iphoneFio) = FluxoEnlace.par()
+        mac.atender(macFio)
+        return iphoneFio
+    }
 }
 #endif
+
 
 final class DiarioBluetoothTestes: XCTestCase {
     func testAnelGuardaSoAsUltimasLinhasComHorario() {

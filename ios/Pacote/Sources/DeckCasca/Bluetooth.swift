@@ -25,6 +25,10 @@ public final class GerenteBluetooth: @unchecked Sendable {
     static let prazoDaConexaoDireta: TimeInterval = 6
     /// Quanto a procura pelo serviço espera algum Mac aparecer.
     static let prazoDaProcura: TimeInterval = 8
+    /// Rodadas seguidas com a cifragem do enlace falhando (ErroCifragemBluetooth) antes de a tela trocar "procurando" pelo
+    /// que a pessoa faz para resolver. Daí em diante o app tenta com calma, para voltar sozinho quando ela resolver.
+    static let cifragensParaAvisar = 3
+    static let esperaSeCifragemFalha: TimeInterval = 30
 
     private struct Pendente {
         var pareando: EnlaceSeguro.Pareando
@@ -143,6 +147,7 @@ public final class GerenteBluetooth: @unchecked Sendable {
         /// Macs que já disseram não conhecer este iPhone nesta rodada de procura (quando o id ainda não foi guardado).
         var recusados = Set<String>()
         var recusasSeguidas = 0
+        var cifragensSeguidas = 0
         var tentativa = 0
         defer { trava.withLock { if geracao == g { laco = nil } } }
         while !Task.isCancelled, trava.withLock({ geracao == g }) {
@@ -171,6 +176,7 @@ public final class GerenteBluetooth: @unchecked Sendable {
                 }
                 recusados = []
                 recusasSeguidas = 0
+                cifragensSeguidas = 0
                 cofre.guardarBluetooth(id)
                 tentativa = 0
                 situar(nil)
@@ -196,6 +202,17 @@ public final class GerenteBluetooth: @unchecked Sendable {
                         return
                     }
                     espera = Self.esperaMinima
+                }
+            } catch let erro as ErroCifragemBluetooth {
+                cifragensSeguidas += 1
+                if cifragensSeguidas >= Self.cifragensParaAvisar {
+                    log("bluetooth: a cifragem do enlace falhou \(cifragensSeguidas) rodadas seguidas (CBError \(erro.codigo)): aviso na tela e nova tentativa só a cada \(Int(Self.esperaSeCifragemFalha)) s")
+                    situar(erro.mensagem)
+                    espera = Self.esperaSeCifragemFalha
+                } else {
+                    log("bluetooth: tentativa \(tentativa) falhou na cifragem do enlace (CBError \(erro.codigo)), \(cifragensSeguidas) de \(Self.cifragensParaAvisar) antes de avisar")
+                    espera = min(espera * 2, Self.esperaMaxima)
+                    situar("Não achei o Mac pelo Bluetooth. Tentando de novo. Tentativa \(tentativa).")
                 }
             } catch ErroSemCandidato.todosRecusaram where pareado.idBluetooth != nil {
                 // O Mac conhecido não respondeu no id guardado e só há outros Macs por perto, que não conhecem este iPhone.
@@ -231,9 +248,12 @@ public final class GerenteBluetooth: @unchecked Sendable {
     /// do Deck (o iPhone lê o do sistema), então o nome só desempata e a ordem é o sinal, do mais forte ao mais fraco.
     /// `excluindo` são os que já recusaram este iPhone, para a reconexão chegar ao Mac certo quando há mais de um.
     private func conectarNoMac(_ pareado: Pareado, excluindo recusados: Set<String>) async throws -> (String, FluxoBytes, Bool) {
+        /// O Mac em que a cifragem do enlace acabou de falhar: conectar de novo nele na mesma rodada falha igual.
+        var cifragem: (id: String, erro: ErroCifragemBluetooth)?
         if let id = pareado.idBluetooth {
             do { return (id, try await conectarComPrazo(id), false) } catch {
                 log("bluetooth: conexão direta no id guardado \(id.prefix(8)) falhou (\(error))")
+                if let e = error as? ErroCifragemBluetooth { cifragem = (id, e) }
                 // Sem o Mac no id guardado (endereço trocado, anúncio parado, fora de alcance): não fica esperando, procura o serviço.
                 if let motivo = radio.indisponivel { throw ErroPareamento.recusado(motivo) }
                 log("bluetooth: o Mac não respondeu no id guardado, procurando o serviço do Deck")
@@ -248,8 +268,12 @@ public final class GerenteBluetooth: @unchecked Sendable {
         let achados = await busca.value
         prazo.cancel()
         log("bluetooth: a procura terminou com \(achados.count) Mac(s): \(achados.map { "\($0.id.prefix(8)) \"\($0.nome)\" rssi=\($0.rssi)" })")
+        let candidatos = achados.filter { !recusados.contains($0.id) && $0.id != cifragem?.id }.sorted { $0.rssi > $1.rssi }
+        if candidatos.isEmpty, let cifragem {
+            log("bluetooth: a procura só achou \(cifragem.id.prefix(8)), em que a cifragem acabou de falhar: não conecto de novo nesta rodada")
+            throw cifragem.erro
+        }
         guard !achados.isEmpty else { throw ErroPareamento.recusado("Nenhum Mac com o Deck por perto.") }
-        let candidatos = achados.filter { !recusados.contains($0.id) }.sorted { $0.rssi > $1.rssi }
         guard let alvo = candidatos.first(where: { $0.id == pareado.idBluetooth }) ?? candidatos.first(where: { $0.nome == pareado.nomeMac }) ?? candidatos.first else {
             throw ErroSemCandidato.todosRecusaram
         }
@@ -368,6 +392,7 @@ public final class GerenteBluetooth: @unchecked Sendable {
     private static func texto(_ erro: Error) -> String {
         switch erro {
         case let e as ErroPareamento: return e.mensagem
+        case let e as ErroCifragemBluetooth: return e.mensagem
         case ErroEnlace.recusado(let t): return t
         case ErroEnlace.naoPareado: return "O Mac não reconheceu este iPhone."
         case ErroEnlace.protocolo: return "A conversa com o Mac falhou. Tente de novo."

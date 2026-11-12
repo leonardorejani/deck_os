@@ -24,6 +24,19 @@ public struct AnuncioBle: Equatable, Sendable {
     public static let sinalDePerto = -75
 }
 
+/// O iOS achou o Mac e abriu o rádio, mas a cifragem do enlace falhou. Quem cifra é o próprio sistema, antes de o Deck
+/// trocar um byte: as características do Mac não pedem cifragem, mas o iPhone e o Mac do mesmo iCloud já se conhecem
+/// e o iOS cifra sozinho com a chave que guarda. Códigos do CBError: 14 (o outro lado apagou o pareamento) e 15 (a
+/// cifragem passou do tempo, "Failed to encrypt the connection"). Visto no iPhone em 12/11/2026, todo ciclo, com o
+/// Mac anunciando a um palmo. Insistir no mesmo Mac não resolve: o app avisa e espera mais entre as tentativas.
+public struct ErroCifragemBluetooth: Error, Equatable, Sendable {
+    public let codigo: Int
+    public init(codigo: Int) { self.codigo = codigo }
+    static let codigos: Set<Int> = [14, 15]
+    public static let mensagem = "O iPhone acha o Mac, mas o iOS não consegue cifrar a conexão Bluetooth com ele. Reinicie o iPhone e depois o Mac. Se o Mac aparecer em Ajustes > Bluetooth do iPhone, toque no (i) dele e em Esquecer Este Dispositivo. Enquanto isso, o cabo funciona."
+    public var mensagem: String { Self.mensagem }
+}
+
 /// A última lista de Macs que cada ouvinte da procura recebeu. O sinal oscila a cada anúncio, então só se avisa quem
 /// escuta quando a lista mudou para ele. Uma lista só para todos fazia a procura nova (que entrou com a lista vazia)
 /// nunca saber de um Mac que a procura anterior já tinha recebido: "a procura terminou com 0 Mac(s)" com o Mac no ar.
@@ -106,6 +119,8 @@ final class RadioCentral: NSObject, RadioBle, CBCentralManagerDelegate, CBPeriph
     /// sem nome, o rádio conecta um instante só para ler o nome e solta (um de cada vez).
     private var sondando: Set<String> = []
     private var sondados: Set<String> = []
+    /// Macs que o sistema já tem conectados com o serviço do Deck (já anotados no diário).
+    private var conectadosAnotados: Set<String> = []
     private var limpeza: DispatchSourceTimer?
     private let uuidServico = CBUUID(string: EnlaceBle.servico)
     private let uuidPedido = CBUUID(string: EnlaceBle.pedido)
@@ -209,6 +224,7 @@ final class RadioCentral: NSObject, RadioBle, CBCentralManagerDelegate, CBPeriph
         inicioDaVarredura = Date()
         c.scanForPeripherals(withServices: [uuidServico], options: [CBCentralManagerScanOptionAllowDuplicatesKey: true])
         log("bluetooth: varredura iniciada com filtro do serviço \(uuidServico.uuidString)")
+        trazerConectadosAoSistema()
         let t = DispatchSource.makeTimerSource(queue: fila)
         t.schedule(deadline: .now() + 1, repeating: 1)
         t.setEventHandler { [weak self] in self?.passoDaVarredura() }
@@ -218,6 +234,7 @@ final class RadioCentral: NSObject, RadioBle, CBCentralManagerDelegate, CBPeriph
 
     /// A cada segundo: atualiza a lista e, se o filtro de serviço do iOS não trouxe nenhum Mac, varre sem filtro.
     private func passoDaVarredura() {
+        trazerConectadosAoSistema()
         publicar()
         guard !semFiltro, !viuNestaVarredura, let c = central, c.isScanning,
               Date().timeIntervalSince(inicioDaVarredura) >= Self.esperaParaVarrerSemFiltro else { return }
@@ -225,6 +242,19 @@ final class RadioCentral: NSObject, RadioBle, CBCentralManagerDelegate, CBPeriph
         semFiltro = true
         c.scanForPeripherals(withServices: nil, options: [CBCentralManagerScanOptionAllowDuplicatesKey: true])
         log("bluetooth: o filtro de serviço não trouxe nenhum anúncio em \(Int(Self.esperaParaVarrerSemFiltro)) s, varrendo SEM filtro e conferindo o anúncio no app")
+    }
+
+    /// Um Mac que o sistema já mantém conectado (e com o serviço do Deck descoberto) entra na lista mesmo sem anúncio:
+    /// conectar nele aproveita o enlace que já está cifrado, sem cifrar de novo. Aposta contra o CBError 15.
+    private func trazerConectadosAoSistema() {
+        guard let c = central, c.state == .poweredOn else { return }
+        for p in c.retrieveConnectedPeripherals(withServices: [uuidServico]) {
+            let id = p.identifier.uuidString
+            if conectadosAnotados.insert(id).inserted {
+                log("bluetooth: \(id.prefix(8)) \"\(p.name ?? "-")\" já está conectado ao sistema com o serviço do Deck (retrieveConnectedPeripherals)")
+            }
+            vistos[id] = Visto(peripheral: p, nome: p.name ?? vistos[id]?.nome ?? "Mac", rssi: vistos[id]?.rssi ?? -60, quando: Date())
+        }
     }
 
     private func pararVarredura() {
@@ -323,7 +353,9 @@ final class RadioCentral: NSObject, RadioBle, CBCentralManagerDelegate, CBPeriph
         let gerente = garantir()
         log("bluetooth: conectar \(id.prefix(8)) (prazo \(Int(prazo)) s, estado \(Self.texto(gerente.state)))")
         if let motivo = motivoDeIndisponivel(gerente.state) { log("bluetooth: conectar recusado: \(motivo)"); return c.resume(throwing: ErroPareamento.recusado(motivo)) }
-        let visto = vistos[id]?.peripheral
+        let doSistema = gerente.retrieveConnectedPeripherals(withServices: [uuidServico])
+        if !doSistema.isEmpty { log("bluetooth: conectados ao sistema com o serviço do Deck: \(doSistema.map { $0.identifier.uuidString.prefix(8) })") }
+        let visto = doSistema.first { $0.identifier.uuidString == id } ?? vistos[id]?.peripheral
         guard let uuid = UUID(uuidString: id),
               let p = visto ?? gerente.retrievePeripherals(withIdentifiers: [uuid]).first else {
             log("bluetooth: conectar \(id.prefix(8)): o iOS não conhece esse identificador (retrievePeripherals vazio)")
@@ -354,11 +386,13 @@ final class RadioCentral: NSObject, RadioBle, CBCentralManagerDelegate, CBPeriph
     }
 
     /// Termina a conexão com erro (ainda esperando o fio) ou só a derruba (já com fio).
-    private func falhar(_ conexao: Conexao, _ texto: String) {
+    private func falhar(_ conexao: Conexao, _ texto: String) { falhar(conexao, ErroPareamento.recusado(texto), texto) }
+
+    private func falhar(_ conexao: Conexao, _ erro: Error, _ texto: String) {
         let c = conexao.continuacao
         conexao.continuacao = nil
         log("bluetooth: conexão com \(conexao.peripheral.identifier.uuidString.prefix(8)) falhou: \(texto)")
-        c?.resume(throwing: ErroPareamento.recusado(texto))
+        c?.resume(throwing: erro)
         encerrar(conexao)
     }
 
@@ -388,7 +422,13 @@ final class RadioCentral: NSObject, RadioBle, CBCentralManagerDelegate, CBPeriph
     func centralManager(_ c: CBCentralManager, didFailToConnect p: CBPeripheral, error: Error?) {
         sondando.remove(p.identifier.uuidString)
         log("bluetooth: didFailToConnect \(p.identifier.uuidString.prefix(8)) erro=\(error.map { "\($0)" } ?? "-")")
-        if let x = conexao(de: p) { falhar(x, "Não consegui conectar no Mac.") }
+        guard let x = conexao(de: p) else { return }
+        if let ns = error as NSError?, ns.domain == CBErrorDomain, ErroCifragemBluetooth.codigos.contains(ns.code) {
+            let doSistema = c.retrieveConnectedPeripherals(withServices: [uuidServico]).map { $0.identifier.uuidString.prefix(8) }
+            log("bluetooth: CIFRAGEM do enlace falhou com \(p.identifier.uuidString.prefix(8)) (CBError \(ns.code)). Quem cifra é o iOS, não o Deck. Conectados ao sistema com o serviço: \(doSistema)")
+            return falhar(x, ErroCifragemBluetooth(codigo: ns.code), "cifragem do enlace (CBError \(ns.code))")
+        }
+        falhar(x, "Não consegui conectar no Mac.")
     }
 
     func centralManager(_ c: CBCentralManager, didDisconnectPeripheral p: CBPeripheral, error: Error?) {
