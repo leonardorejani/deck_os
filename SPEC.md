@@ -1181,7 +1181,7 @@ Teste do Deck 1.0 (12/11/2026, frente iphone-bugs), dito pelo Leonardo:
     - Monitor: CPU, GPU, memória, bateria, rede (download grande, upload menor), disco disponível, energia (watts), ventoinhas
       (RPM) e dispositivos conectados. O Mac lê GPU, disco livre, energia, RPM e USB (`Estado.monitor` ganhou `gpu`,
       `discoLivre`, `discoTotal`, `watts`, `carregando`, `ventoinhas`, `ventoinhaMax` e `dispositivos`) e o item que ele não
-      consegue ler some, em vez de aparecer com "-". Cada item novo tem a chave dele em Ajustes, Este Mac, Monitor do Mac,
+      consegue ler some, em vez de aparecer com "-". Cada item novo tem a chave dele na tecla Monitor de Atividade, nos Ajustes do Deck,
       ligada por padrão. A lista dos 5 maiores processos e o Encerrar saíram da tela e do canal do painel. O número conta do
       valor antigo ao novo em 600 ms (tatile, movimento, regra 9) e os cartões não são refeitos a cada segundo.
     - Composição C: sem fileira de teclas. O calendário é o da Agenda (mês grande em vermelho, setas que só mexem nele e voltam
