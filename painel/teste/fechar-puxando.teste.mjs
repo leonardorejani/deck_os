@@ -12,7 +12,7 @@ async function dedo(p, ctx, de, para, { passos = 12, soltar = true, espera = 20 
 }
 const TELAS = [
   ['#f-player', 'abrirPlayer()'], ['#f-relogio', 'abrirRelogio()'], ['#f-cal', 'abrirCal()'], ['#f-whats', 'abrirWhats()'], ['#f-sessoes', 'abrirSessoes()'],
-  ['#f-monitor', 'abrirMonitor()'], ['#f-mail', 'abrirMail()'], ['#f-controles', 'abrirControles()'], ['#f-editor', "abrirEditor('apagar')"],
+  ['#f-monitor', 'abrirMonitor()'], ['#f-controles', 'abrirControles()'], ['#f-editor', "abrirEditor('apagar')"],
 ];
 
 export default async function (h) {

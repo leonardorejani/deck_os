@@ -609,20 +609,6 @@ button.cartao.sessoes:active { scale: .98 }
 .offline .tela-offline:not(.acesso) { opacity: 1; pointer-events: auto }
 .tela-offline.acesso { z-index: 26 }
 
-/* Mail: mesma linha da conversa do WhatsApp, com o assunto entre o remetente e a prévia */
-.conversa.mail { align-items: start }
-.conversa.mail .assunto-m { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: var(--texto-sm) }
-.conversa.mail .nome-c, .conversa.mail .assunto-m { font-weight: 400 }
-.conversa.mail.nao-lida .nome-c, .conversa.mail.nao-lida .assunto-m { font-weight: 700 }
-.conversa.mail:not(.nao-lida) .nome-c { color: var(--texto-2) }
-.ponto-nl { width: 10px; height: 10px; border-radius: 50%; background: var(--destaque) }
-.ponto-nl[hidden] { display: block; visibility: hidden } /* a hora não sobe quando a mensagem é lida */
-.contas-mail { display: flex; max-width: 50%; overflow-x: auto; overscroll-behavior: contain; scrollbar-width: none }
-.contas-mail::-webkit-scrollbar { display: none }
-.contas-mail button { white-space: nowrap; flex: 0 0 auto }
-.vertical .folha.cheia > header:has(#ma-contas:not([hidden])) { flex-wrap: wrap; row-gap: var(--item) }
-.vertical #ma-contas { order: 3; flex: 1 0 100%; max-width: none }
-
 /* esqueleto das listas das folhas: nada nos primeiros 200 ms, depois barras com a forma das linhas */
 
 .esq-lista { opacity: 0; animation: esq-entra 0ms linear 200ms forwards; pointer-events: none }
