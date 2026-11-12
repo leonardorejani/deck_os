@@ -269,6 +269,9 @@ struct Estado: Codable, Equatable, Sendable {
     var avisos: [Aviso]
     /// Só com o bloco do monitor ligado, e só os itens que a pessoa escolheu nos Ajustes do Mac.
     var monitor: EstadoMonitor? = nil
+    /// Por id de tecla de microfone ou de câmera da reunião: ligado, desligado, desconhecido ou sem-reuniao.
+    /// Ausente em Mac antigo e quando o perfil não tem tecla dessas: o painel trata como "não sabe" e desenha a tecla de sempre.
+    var reuniao: [String: EstadoDeReuniao]? = nil
 }
 
 /// Medidas do Mac. Cada uma é nil quando o item está escondido nos Ajustes ou o Mac não tem a medida

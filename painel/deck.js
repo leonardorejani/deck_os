@@ -68,7 +68,7 @@ function vistaReal() {
     sessoes: [...(e.sessoes || [])].filter(s => !dispensada(s)).sort((a, b) => Date.parse(b.desde) - Date.parse(a.desde)),
     teclas: perfil?.teclas || [], perfilAtivo: perfilId,
     perfis: (config?.perfis || []).map(p => ({ id: p.id, nome: p.nome, n: p.teclas.length })),
-    acesas: acesasOtimistas(e.acesas || []), selos: e.selos || {}, agenda: e.agenda || null,
+    acesas: acesasOtimistas(e.acesas || []), selos: e.selos || {}, agenda: e.agenda || null, reuniao: e.reuniao || null,
     whatsapp: blocos.whatsapp === false ? null : e.whatsapp || null,
   };
 }
@@ -93,7 +93,7 @@ function vistaEsqueleto() {
     uso: Array.from({ length: f.uso }, (_, i) => ({ id: 'u' + i, nome: 'Claude', conta: 'conta', semana: 0, renova: null })),
     sessoes: Array.from({ length: f.sessoes }, (_, i) => ({ id: 's' + i, nome: 'Sessão', projeto: '', pergunta: 'Pergunta', desde: new Date(agora - 300000).toISOString() })),
     teclas: Array.from({ length: f.teclas }, (_, i) => ({ id: 'e' + i, nome: 'Tecla', tipo: 'comando', valor: '', icone: 'svg:raio' })),
-    perfilAtivo: '', perfis: [], acesas: [], selos: {}, agenda: null, whatsapp: null, monitor: null,
+    perfilAtivo: '', perfis: [], acesas: [], selos: {}, agenda: null, reuniao: null, whatsapp: null, monitor: null,
   };
 }
 const semMusica = () => !V.spotify;
@@ -201,22 +201,39 @@ function horaDoEvento(ev) {
 }
 // tecla que acende: a que tem comando de conferir (`estado`) ou liga e desliga (`desligar`, o Mac guarda o estado)
 const acendeTecla = t => !!(t.estado || t.desligar);
+/* Tecla de microfone ou de câmera da reunião (Meet, Zoom, Teams): o Mac manda o estado de cada uma em `reuniao`
+   (ligado, desligado, desconhecido, sem-reuniao). Mac antigo não manda: a tecla fica como sempre foi. Mac novo que não
+   respondeu esta tecla conta como desconhecido (não finge) */
+const itemDeReuniao = t => t.tipo === 'app' && t.acao?.id === 'reuniao-microfone' ? 'microfone' : t.tipo === 'app' && t.acao?.id === 'reuniao-camera' ? 'camera' : null;
+const ESTADOS_REUNIAO = ['ligado', 'desligado', 'desconhecido', 'sem-reuniao'];
+const estadoDaReuniao = t => itemDeReuniao(t) && V.reuniao ? (ESTADOS_REUNIAO.includes(V.reuniao[t.id]) ? V.reuniao[t.id] : 'desconhecido') : null;
+// ligado não escreve nada (a tecla acesa já diz). Desligado diz qual dos dois, "?" é "não consegui ler"
+const textoDaReuniao = (t, r) => r === 'desconhecido' ? '?' : r === 'desligado' ? (itemDeReuniao(t) === 'microfone' ? 'Mutado' : 'Sem vídeo') : '';
 // o que muda na tecla a cada estado: acesa, selo (WhatsApp, "!" da Agenda) e horário da Agenda
 function infoTecla(t) {
   const cal = painelDe(t) === 'calendario';
   const selo = V.selos[t.id] ?? (cal && V.agenda && V.agenda.permissao === false ? '!' : null);
   const prox = cal && !selo && V.agenda?.proximo ? V.agenda.proximo : null;
+  const reu = estadoDaReuniao(t);
+  if (reu) return { acesa: reu === 'ligado', selo: null, hora: null, reuniao: reu };
   return { acesa: acendeTecla(t) && V.acesas.includes(t.id), selo, hora: prox ? horaDoEvento(prox) : null, titulo: prox?.titulo };
 }
+// aria-pressed: tecla de estado (acende ou apaga), e a de reunião só quando o Mac leu ligado ou desligado
+const pressionada = (t, i) => i.reuniao ? (i.reuniao === 'ligado' || i.reuniao === 'desligado' ? String(i.acesa) : null) : acendeTecla(t) ? String(i.acesa) : null;
+const rotuloDaReuniao = (t, r) => {
+  const mic = itemDeReuniao(t) === 'microfone', nome = mic ? 'Microfone' : 'Câmera';
+  return r === 'ligado' ? `${nome}: ${mic ? 'aberto' : 'ligada'}` : r === 'desligado' ? `${nome}: ${mic ? 'mutado' : 'desligada'}` : r === 'sem-reuniao' ? `${nome}: nenhuma reunião aberta` : `${nome}: não consegui ler`;
+};
 function extraTecla(t, i) {
   const seloTxt = i.selo == null ? '' : /^\d+$/.test(i.selo) && +i.selo > 99 ? '99+' : i.selo;
   const aria = i.selo === '!' ? 'Agenda sem permissão' : `${i.selo} não lidas`;
   return (i.selo != null ? `<span class="selo" aria-label="${esc(aria)}">${esc(seloTxt)}</span>` : '')
+    + (i.reuniao ? `<span class="estado-tecla ${i.reuniao}" aria-label="${esc(rotuloDaReuniao(t, i.reuniao))}">${esc(textoDaReuniao(t, i.reuniao))}</span>` : '')
     + (i.hora ? `<span class="hora-tecla" aria-label="Próximo: ${esc(i.titulo)} ${esc(i.hora)}">${esc(i.hora)}</span>` : '');
 }
 function teclaHTML(t) {
   const i = infoTecla(t);
-  return `<button class="tecla depende ${i.acesa ? 'acesa' : ''}" data-id="${esc(t.id)}" ${acendeTecla(t) ? `aria-pressed="${i.acesa}"` : ''}>
+  return `<button class="tecla depende ${i.acesa ? 'acesa' : ''} ${i.reuniao ? 'reuniao-' + i.reuniao : ''}" data-id="${esc(t.id)}" ${pressionada(t, i) != null ? `aria-pressed="${pressionada(t, i)}"` : ''}>
     <span class="editar" aria-hidden="true">${SVG.lapis}</span>
     ${iconeDaTecla(t)}<span class="nome">${esc(t.nome)}</span><span class="led" aria-hidden="true"></span>${extraTecla(t, i)}
     </button>`;
@@ -239,7 +256,7 @@ const porPagina = () => V.comp === 'b' ? (posicao === 'vertical' ? 6 : 9) : posi
 /* ---------- desenho ---------- */
 // o que, se mudar, obriga a refazer a tela inteira
 const chaveLayout = () => JSON.stringify([posicao, V.comp, monitorItens(), !!V.carregando, V.blocos.sessoes !== false, usoVisivel().length > 0, V.perfilAtivo, V.perfis, V.teclas.map(t => [t.id, t.nome, t.tipo, t.valor, t.icone, acendeTecla(t)]), appsMac.versao]);
-const chaveTeclas = () => JSON.stringify(V.teclas.map(t => { const i = infoTecla(t); return [i.acesa, i.selo, i.hora] }));
+const chaveTeclas = () => JSON.stringify(V.teclas.map(t => { const i = infoTecla(t); return [i.acesa, i.selo, i.hora, i.reuniao] }));
 const chavePlayer = () => { const s = V.spotify; return s ? JSON.stringify([s.faixa, s.artista, s.album, s.capaId, s.cores, s.duracao, temModos(s), conectado(s)]) : null };
 
 function render() {
@@ -325,8 +342,10 @@ function pintarTeclas() {
     const el = $(`.tecla[data-id="${CSS.escape(t.id)}"]`); if (!el) continue;
     const i = infoTecla(t);
     el.classList.toggle('acesa', i.acesa);
-    if (acendeTecla(t)) el.setAttribute('aria-pressed', String(i.acesa));
-    $$('.selo, .hora-tecla', el).forEach(x => x.remove());
+    const pr = pressionada(t, i);
+    if (pr != null) el.setAttribute('aria-pressed', pr); else el.removeAttribute('aria-pressed');
+    for (const r of ESTADOS_REUNIAO) el.classList.toggle('reuniao-' + r, i.reuniao === r);
+    $$('.selo, .hora-tecla, .estado-tecla', el).forEach(x => x.remove());
     el.insertAdjacentHTML('beforeend', extraTecla(t, i));
   }
 }
@@ -459,7 +478,7 @@ async function executar(id) {
   const el = $(`.tecla[data-id="${CSS.escape(id)}"]`), quer = !V.acesas.includes(id);
   el?.classList.add('piscando'); setTimeout(() => el?.classList.remove('piscando'), 400);
   if (acendeTecla(t)) { otmTeclas[id] = { acesa: quer, ate: performance.now() + JANELA_OTM }; V = vistaReal(); atualizar(); avisar(`${t.nome}: ${quer ? 'ligado' : 'desligado'}`) }
-  else avisar(t.tipo === 'app' ? `Abrindo ${t.nome} no Mac` : `${t.nome}: feito`);
+  else avisar(t.tipo === 'app' && !itemDeReuniao(t) ? `Abrindo ${t.nome} no Mac` : `${t.nome}: feito`);
   try { await canal.botao(id); atualizarJa() }
   catch (e) { delete otmTeclas[id]; el?.classList.remove('piscando'); if (V) { V = vistaReal(); atualizar() } tratarErro(e) }
   finally { ocupadas.delete(id) }

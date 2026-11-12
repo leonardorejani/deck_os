@@ -1102,9 +1102,10 @@ Teste do Deck 1.0 (12/11/2026, frente iphone-bugs), dito pelo Leonardo:
       Cmd+Shift+M e Cmd+Shift+O. No Meet, a aba da sala (meet.google.com/abc-defg-hij, não a página inicial) vem para a frente
       antes. Precisa de Acessibilidade (para teclar) e, no Meet, da Automação do navegador (para achar a aba). Ambas são pedidas
       pelo macOS na hora do uso (invariante 12).
-    - O Deck só ALTERNA. Ele não mostra se o microfone está mutado: Meet e Teams não entregam isso sem espiar a tela a cada
+    - ~~O Deck só ALTERNA. Ele não mostra se o microfone está mutado: Meet e Teams não entregam isso sem espiar a tela a cada
       segundo (Acessibilidade) ou sem o navegador liberar JavaScript por Apple Events, e o Zoom só pela leitura do menu dele.
-      Nada disso é pedido em lista de cara, então a tecla não finge saber. Se o Leonardo quiser o estado, é uma decisão nova.
+      Nada disso é pedido em lista de cara, então a tecla não finge saber. Se o Leonardo quiser o estado, é uma decisão nova.~~
+      Revisto em 12/11/2026 ("2 sim"): a tecla mostra o estado. Ver o parágrafo "Estado da reunião na tecla", no fim desta seção.
     - Zoom e Teams só têm esses atalhos com a reunião rolando e a janela na frente. Fechado, a tecla avisa "O Zoom não está
       aberto" e não abre o app só para mutar.
 
@@ -1226,6 +1227,33 @@ mensagem mostra o horário, foto aparece como imagem, áudio tem player (os dois
 Arquivadas ficam fora de Todas, Contatos e Grupos, só no filtro Arquivadas, e não contam no total nem no selo. "Responder no
 Mac" abre `https://web.whatsapp.com/send?phone=<número>` no navegador escolhido ou no padrão (grupo e contato sem número
 abrem o Web e o aviso diz que não há link direto). O Deck continua só lendo: nunca envia nem marca como lido.
+
+Estado da reunião na tecla (12/11/2026). Decisão dele ("2 sim"): a tecla de microfone e a de câmera da reunião mostram o estado
+atual, como a "Manter acordado" mostra aceso. Só as teclas de app com a ação "Mutar ou desmutar o microfone da reunião" ou "Ligar
+ou desligar a câmera da reunião" (item 35) ganham isso, e o Mac só lê quando o perfil ativo tem uma delas.
+- Contrato. `Estado.reuniao`, um mapa de id de tecla para `ligado` (microfone aberto, câmera ligada), `desligado` (mutado, câmera
+  desligada), `desconhecido` (há reunião e o Deck não conseguiu ler) ou `sem-reuniao`. Ausente em Mac antigo e em perfil sem essas
+  teclas: o painel desenha a tecla de sempre. Mac novo que não trouxe a tecla conta como `desconhecido`: o painel não finge.
+- Painel. Ligado acende como a tecla acesa. Desligado apaga e escreve "Mutado" (microfone) ou "Sem vídeo" (câmera) no topo da
+  tecla, em vermelho. Desconhecido escreve "?". Sem reunião a tecla fica esmaecida (ainda toca). Cada uma tem rótulo para o leitor
+  de tela ("Microfone: mutado"). Depois do toque o estado novo chega na leitura seguinte, em até 2 ou 3 segundos (a leitura
+  fica guardada 1,5 s para não castigar o navegador).
+- Meet no navegador (o que ele usa). O Mac executa JavaScript na aba da sala (AppleScript, nunca fora dela) e lê o
+  `data-is-muted` dos botões de microfone e de câmera, achados pelo rótulo (inglês, português e espanhol) e pelo atalho (D e E).
+  Exige que o navegador deixe JavaScript por Apple Events: no Chrome (e Arc, Brave, Edge) Visualizar > Desenvolvedor > Permitir
+  JavaScript de Eventos da Apple, no Safari Desenvolvedor > Permitir JavaScript de Eventos da Apple. É uma opção que o Deck
+  não liga sozinho (ela deixa qualquer programa com Automação executar JavaScript nas abas) e que o macOS não pede: sem ela a tecla
+  mostra "?" e o estado do Mac traz um aviso dizendo qual opção ligar. Fallback: sem a opção o Deck continua alternando pelo
+  atalho como antes, só não sabe dizer o estado. A Automação do navegador é pedida pelo macOS na primeira leitura.
+- Zoom e Teams. O Mac lê o menu do app pelo System Events (a Acessibilidade que o Deck já tem, mais a Automação do System
+  Events, pedida na hora) e entende o título do item: "Mute audio" quer dizer microfone aberto, "Unmute audio" mutado, "Start
+  video" câmera desligada, "Stop video" ligada (também em português e espanhol). "Mute All" e afins são ignorados. App fechado, ou
+  aberto sem os itens e sem janela de reunião, é `sem-reuniao`. Janela de reunião aberta e itens não entendidos (outro idioma,
+  versão nova) é `desconhecido`.
+- O que não dá. Meet em navegador que o Deck não consulta (Firefox) e Meet com a opção de JavaScript desligada: `desconhecido`.
+  A Acessibilidade lendo a página do Meet direto foi descartada: o Chrome só monta a árvore de acessibilidade da página com um
+  modo especial ligado, que deixa o navegador mais lento. Zoom e Teams não foram conferidos numa reunião de verdade (o Deck não
+  abre reunião em teste): os títulos acima são os que os apps usam e o primeiro uso real dele confirma.
 
 ## 14. Melhorias (10/11/2026)
 
