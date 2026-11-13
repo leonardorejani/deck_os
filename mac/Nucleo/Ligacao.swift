@@ -11,6 +11,9 @@ struct PaineisReais: ProvedorPaineis {
     let agenda: FonteAgenda
     var ponteQR: PonteWhatsAppQR? = nil
     var abridorWhatsApp: AbridorWhatsApp? = nil
+    /// Onde o detalhe do uso das IAs lê (nil: a rota /api/uso/detalhe responde 404).
+    var gasto: GastoTokens? = nil
+    var casa: URL = URL(fileURLWithPath: NSHomeDirectory())
 
     func estado() -> Estado { agregador.estado(config: armazem.ler()) }
     func whatsapp() -> [ConversaWhatsApp] { agregador.conversasWhatsApp() }
@@ -28,6 +31,20 @@ struct PaineisReais: ProvedorPaineis {
         return abridorWhatsApp.abrirConversa(numero: c.numero, grupo: c.grupo)
     }
     func sessoes() -> [Sessao] { agregador.sessoes() }
+
+    func usoDetalhe(periodo: PeriodoUso) -> DetalheUso? {
+        guard let gasto else { return nil }
+        let config = armazem.ler()
+        let agora = Date()
+        gasto.carregarSemVarrer()
+        gasto.disparar(agora: agora) // a resposta não espera a varredura: sai com o que já foi somado
+        let uso = config.blocos.uso ? agregador.uso(config: config, agora: agora).valor : []
+        let medicao = (try? Data(contentsOf: casa.appendingPathComponent(".config/claude-account/measure.json"))).flatMap(UsoClaude.parse)
+        let medidos = (medicao?.perfis ?? [:]).reduce(into: [String: Date]()) { if $1.value.semana != nil, let q = medicao?.medidoEm { $0[$1.key] = q } }
+        let codex = UsoCodex.lerJanelas(raiz: casa.appendingPathComponent(".codex/sessions"))
+        return UsoDetalhe.montar(periodo: periodo, uso: uso, medicaoClaude: medidos, janelasCodex: codex,
+                                 contas: config.blocos.uso ? config.contas : [], gasto: gasto, agora: agora)
+    }
 
     func agenda(de: String, dias: Int) -> [Evento] {
         let p = de.split(separator: "-").compactMap { Int($0) }
@@ -237,9 +254,12 @@ enum Ligacao {
             fontesDoMac.uso = { contas, agora in FonteUso.mesclar(lerArquivos(contas, agora), medidos: usoMedido(contas, agora)) }
         }
         let agregador = Agregador(fontes: fontesDoMac)
+        let casa = URL(fileURLWithPath: NSHomeDirectory())
+        let gastoDeTokens = GastoTokens(raizClaude: casa.appendingPathComponent(".claude/projects"), raizCodex: casa.appendingPathComponent(".codex/sessions"),
+                                        pastaDeCache: Variante.atual.pastaDeDados())
         let abridor = AbridorWhatsApp(origem: origemWhats, executor: executor)
         return Roteador(
-            paineis: PaineisReais(armazem: armazem, agregador: agregador, agenda: agenda, ponteQR: ponteQR, abridorWhatsApp: abridor),
+            paineis: PaineisReais(armazem: armazem, agregador: agregador, agenda: agenda, ponteQR: ponteQR, abridorWhatsApp: abridor, gasto: gastoDeTokens),
             teclas: ExecutorAcoes(shell: executor, whatsappWeb: { abridor.abrir() }), spotify: SpotifyReal(executor: executor, conta: contaSpotify, complemento: complemento),
             config: armazem, pareamento: pareamento, pagina: pagina, rodizio: rodizio, certificadoCA: certificadoCA,
             reunioes: AbridorDeReuniao(shell: executor), criadorDeAgenda: criadorDeAgenda ?? Self.criadorPadrao(),
