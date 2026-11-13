@@ -7,6 +7,12 @@ const pronta = (h, p) => h.espera(p, () => !document.querySelector('#conteudo.ca
 const aviso = p => p.evaluate(() => ({ txt: document.querySelector('#aviso-txt').textContent, visivel: document.querySelector('#aviso').classList.contains('visivel'), erro: document.querySelector('#aviso').classList.contains('erro') }));
 const texto = (p, sel) => p.evaluate(s => document.querySelector(s)?.textContent.replace(/\s+/g, ' ').trim() ?? null, sel);
 const alvo = (p, sel) => p.evaluate(s => { const t = document.querySelector('#tela'), k = t.getBoundingClientRect().width / t.offsetWidth, b = document.querySelector(s).getBoundingClientRect(); return { l: Math.round(b.width / k), a: Math.round(b.height / k) } }, sel);
+const dataHora = p => p.evaluate(() => {
+  const cx = [...document.querySelectorAll('#ca-form .nc-data')].map(e => { const r = e.getBoundingClientRect(), v = e.querySelector('.nc-vis'); return { l: r.left, r: r.right, t: r.top, b: r.bottom, txt: v.textContent, corta: v.scrollWidth > v.clientWidth + 1 } });
+  const f = document.querySelector('#ca-form').getBoundingClientRect();
+  return { cx, sobrepoe: cx.some((a, i) => cx.some((b, j) => i < j && a.l < b.r - 0.5 && b.l < a.r - 0.5 && a.t < b.b && b.t < a.b)), fora: cx.some(c => c.r > f.right + 1 || c.l < f.left - 1) };
+});
+const okDataHora = (h, p, onde) => p.evaluate(() => 0).then(async () => { const d = await dataHora(p); h.ok(d.cx.length === 3 && !d.sobrepoe && !d.fora && !d.cx.some(c => c.corta), `${onde}: Dia, Início e Fim lado a lado, sem se sobrepor, sem vazar e sem cortar o valor (${d.cx.map(c => c.txt).join(' | ')})`); h.ok(/^\d{1,2} [a-zç]{3}\.( \d{2})?$/.test(d.cx[0].txt), `${onde}: o dia aparece curto, tipo "13 nov." (${d.cx[0].txt})`) });
 const aqui = path.dirname(fileURLToPath(import.meta.url));
 
 // abre a agenda no mês que vem (sempre no futuro) e toca no dia 15. Devolve o dia tocado (AAAA-MM-DD)
@@ -44,6 +50,7 @@ export default async function (h) {
   h.ok((await alvo(p, '#nc-salvar')).a >= 44 && (await alvo(p, '[data-nc-cancelar]')).a >= 44, 'Salvar e Cancelar têm alvo de toque de 44 pt');
   const corte = await p.evaluate(() => { const c = document.querySelector('.nc-corpo'); return c.scrollHeight - c.clientHeight });
   h.ok(corte <= 1, `em 932x430 todos os campos cabem sem rolar (sobram ${corte} px)`);
+  await okDataHora(h, p, 'deitado');
   await h.foto(p, 'agenda-novo-deitado');
 
   /* ---------- validação antes de ir ao Mac ---------- */
@@ -136,6 +143,7 @@ export default async function (h) {
   await p.click('.tecla[data-id="calendario"]'); await h.espera(p, () => !!document.querySelector('#ca-puxa'));
   await p.click('#ca-puxa'); await h.espera(p, () => !!document.querySelector('#nc-destino option[value^="calendario:"]')); await h.dormir(300);
   h.ok(await p.evaluate(() => { const f = document.querySelector('#ca-form').getBoundingClientRect(), t = document.querySelector('#tela').getBoundingClientRect(); return document.documentElement.scrollWidth <= innerWidth + 1 && f.right <= t.right + 1 && f.left >= t.left - 1 && document.querySelector('#nc-salvar').getBoundingClientRect().bottom <= t.bottom + 1 }), 'em pé: o formulário cabe na tela, sem rolar para o lado, com o Salvar à vista');
+  await okDataHora(h, p, 'em pé');
   await h.foto(p, 'agenda-novo-em-pe');
   await p.context().close();
 

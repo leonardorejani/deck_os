@@ -1087,6 +1087,13 @@ Teste do Deck 1.0 (12/11/2026, frente iphone-bugs), dito pelo Leonardo:
   não tem elemento roxo, e o indicador de páginas e o LED ficam no lugar durante e depois do arrasto, coberto por teste).
   O que se achou e corrigiu: soltar o dedo fora da tela deixava o fantasma da tecla e a tecla apagada, e o arrasto agora
   termina em qualquer lugar onde o dedo solte. Pendente: um print do risco, para achar a causa se ele continuar.
+  13/11/2026, com o print: "A linha roxa ainda aparece". O risco (1 pt de altura, entre duas fileiras de teclas) tem a cor da capa do
+  Spotify, e nada no painel é roxo além do fundo da capa. Só o player cheio, parado fora da tela, pinta essa cor fora do card. Não
+  reproduz no Chrome, então a correção é a causa mais provável e não está provada no iPhone: tela fechada não é mais desenhada
+  (`visibility: hidden` depois da saída). Se o risco voltar, mandar outro print.
+- "UI toda em cima da outra" no Novo compromisso (13/11/2026): o iPhone desenha a data por extenso e o campo nativo estourava a
+  coluna. Dia, Início e Fim agora mostram o valor curto ("13 nov.") num campo nosso, e o campo nativo fica por cima, transparente,
+  só para abrir o seletor.
 - Telas abertas (player, relógio, agenda, WhatsApp, sessões, editor): além do X, arrastar de cima para baixo fecha. A tela
   acompanha o dedo e volta se soltar cedo. Lista que ainda rola para cima, barra de tempo, volume e campo de texto
   ficam com o gesto deles.

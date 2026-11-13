@@ -529,10 +529,18 @@ function pintarAlertas() {
   sel.innerHTML = lista.map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
   sel.value = lista.some(([v]) => v === antes) ? antes : '';
 }
+const MESES_CURTOS = ['jan.', 'fev.', 'mar.', 'abr.', 'mai.', 'jun.', 'jul.', 'ago.', 'set.', 'out.', 'nov.', 'dez.'];
+// o iPhone desenha a data por extenso ("13 de nov. de 2026") e ela não cabe na coluna: mostramos "13 nov." e o campo nativo só recebe o toque
+function pintarValoresNovo() {
+  for (const v of document.querySelectorAll('#ca-form .nc-vis')) {
+    const x = $('#' + v.dataset.de).value, d = /^(\d{4})-(\d{2})-(\d{2})$/.exec(x);
+    v.textContent = d ? Number(d[3]) + ' ' + MESES_CURTOS[Number(d[2]) - 1] + (Number(d[1]) !== new Date(V.ref).getFullYear() ? ' ' + String(d[1]).slice(2) : '') : x || '--';
+  }
+}
 function pintarTipoNovo() {
   $('#nc-todo').checked = fo.todo;
   $('#nc-inicio').disabled = $('#nc-fim').disabled = fo.todo;
-  pintarAlertas();
+  pintarAlertas(); pintarValoresNovo();
 }
 function pintarPadrao() {
   const v = $('#nc-destino').value, p = fo.destinos?.padrao, caixa = $('#nc-padrao'), ehPadrao = !!p && v === chaveDestino(p);
@@ -638,6 +646,7 @@ $('#ca-form').addEventListener('submit', e => { e.preventDefault(); salvarCompro
 $('#ca-form').addEventListener('click', e => {
   if (e.target.closest('[data-nc-cancelar]')) return fecharFormNovo();
 });
+for (const i of ['#nc-dia', '#nc-inicio', '#nc-fim']) { $(i).addEventListener('input', pintarValoresNovo); $(i).addEventListener('change', pintarValoresNovo) }
 $('#nc-todo').addEventListener('change', e => { fo.todo = e.target.checked; pintarTipoNovo() });
 $('#nc-destino').addEventListener('change', e => {
   mensagemNovo('');
