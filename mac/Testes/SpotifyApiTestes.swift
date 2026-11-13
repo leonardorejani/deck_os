@@ -474,25 +474,78 @@ final class SpotifyApiTestes: XCTestCase {
         XCTAssertEqual(f.proximas.map { $0.faixa }, ["X"])
     }
 
-    func testPularNaFilaPulaAteAMusicaEscolhida() {
-        let t = TransporteFalso { r in
-            if r.metodo == "GET" { return respostaJson(200, ["queue": ["a", "b", "c"].map { ["name": $0, "artists": [["name": "X"]], "uri": "u:\($0)"] }]) }
+    /// Fila de mentira de uma lista: toca "agora" e vêm a, b, c, d, e. `offsetAceito` diz se o Spotify aceita o salto na lista.
+    private func filaDeLista(contexto: String? = "spotify:playlist:p", tocaAposPlay: String? = nil, offsetAceito: Bool = true) -> TransporteFalso {
+        let nomes = ["a", "b", "c", "d", "e"]
+        return TransporteFalso { r in
+            if r.url.hasSuffix("/me/player/queue") {
+                return respostaJson(200, ["queue": nomes.map { ["name": $0, "artists": [["name": "X"]], "uri": "u:\($0)"] }])
+            }
+            if r.metodo == "GET" && r.url.hasSuffix("/me/player") {
+                var o: [String: Any] = ["item": ["uri": tocaAposPlay ?? "u:agora"]]
+                if let contexto { o["context"] = ["uri": contexto] }
+                return respostaJson(200, o)
+            }
+            if r.metodo == "GET" { return respostaJson(200, ["name": "Lista"]) }
+            if r.metodo == "PUT", !offsetAceito, r.url.hasSuffix("/me/player/play"),
+               String(data: r.corpo ?? Data(), encoding: .utf8)?.contains("context_uri") == true {
+                return respostaJson(404, ["error": ["status": 404, "message": "Not found"]])
+            }
             return respostaJson(204)
         }
-        let (c, _) = logada(t)
-        XCTAssertNil(c.pularFila(posicao: 1, uri: "u:c"), "a vez certa vem da fila de agora, não do que a tela achava")
-        XCTAssertEqual(t.pedidos.filter { $0.metodo == "POST" }.map { $0.url },
-                       Array(repeating: "https://api.spotify.com/v1/me/player/next", count: 3))
     }
 
-    func testPularNaFilaComMusicaRepetidaPulaAteACopiaQueFoiTocada() {
+    private func corpoJson(_ r: RequisicaoWeb) -> [String: Any] {
+        (r.corpo.flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any]) ?? [:]
+    }
+
+    func testPularNaFilaDaListaSaltaDiretoSemTocarAsDoMeio() {
+        let t = filaDeLista(tocaAposPlay: "u:d")
+        let (c, _) = logada(t); c.esperaDoPulo = 0
+        XCTAssertNil(c.pularFila(posicao: 1, uri: "u:d"), "a vez certa vem da fila de agora, não do que a tela achava")
+        XCTAssertTrue(t.pedidos.filter { $0.url.hasSuffix("/me/player/next") }.isEmpty, "nenhum next: as do meio não tocam")
+        let plays = t.pedidos.filter { $0.metodo == "PUT" && $0.url.hasSuffix("/me/player/play") }
+        XCTAssertEqual(plays.count, 1, "um play só, direto na escolhida")
+        XCTAssertEqual(corpoJson(plays[0])["context_uri"] as? String, "spotify:playlist:p")
+        XCTAssertEqual((corpoJson(plays[0])["offset"] as? [String: Any])?["uri"] as? String, "u:d")
+    }
+
+    func testPularNaFilaForaDaListaTocaAEscolhidaESeguintesSemAsDoMeio() {
+        // Faixa da fila manual: a lista recusa o offset e o play toca outra coisa.
+        let t = filaDeLista(offsetAceito: false)
+        let (c, _) = logada(t); c.esperaDoPulo = 0
+        XCTAssertNil(c.pularFila(posicao: 3, uri: "u:c"))
+        XCTAssertTrue(t.pedidos.filter { $0.url.hasSuffix("/me/player/next") }.isEmpty)
+        let ultimo = t.pedidos.last { $0.metodo == "PUT" }!
+        XCTAssertEqual(corpoJson(ultimo)["uris"] as? [String], ["u:c", "u:d", "u:e"], "a escolhida e as que vinham depois, nada de a e b")
+    }
+
+    func testPularNaFilaQuandoOSpotifyAceitaMasToCaOutraCoisaCaiNoPlayDeUris() {
+        let t = filaDeLista(tocaAposPlay: "u:agora")
+        let (c, _) = logada(t); c.esperaDoPulo = 0
+        XCTAssertNil(c.pularFila(posicao: 2, uri: "u:b"))
+        XCTAssertEqual(corpoJson(t.pedidos.last { $0.metodo == "PUT" }!)["uris"] as? [String], ["u:b", "u:c", "u:d", "u:e"])
+        XCTAssertTrue(t.pedidos.filter { $0.url.hasSuffix("/me/player/next") }.isEmpty)
+    }
+
+    func testPularNaFilaDeArtistaOuSemContextoUsaUris() {
+        for contexto in ["spotify:artist:z", nil] {
+            let t = filaDeLista(contexto: contexto)
+            let (c, _) = logada(t); c.esperaDoPulo = 0
+            XCTAssertNil(c.pularFila(posicao: 4, uri: "u:d"))
+            XCTAssertFalse(t.pedidos.contains { String(data: $0.corpo ?? Data(), encoding: .utf8)?.contains("context_uri") == true })
+            XCTAssertEqual(corpoJson(t.pedidos.last { $0.metodo == "PUT" }!)["uris"] as? [String], ["u:d", "u:e"])
+        }
+    }
+
+    func testPularNaFilaComMusicaRepetidaSaltaParaACopiaQueFoiTocada() {
         let t = TransporteFalso { r in
             if r.metodo == "GET" { return respostaJson(200, ["queue": ["X", "A", "B", "X"].map { ["name": $0, "artists": [["name": "Y"]], "uri": "u:\($0)"] }]) }
             return respostaJson(204)
         }
-        let (c, _) = logada(t)
+        let (c, _) = logada(t); c.esperaDoPulo = 0
         XCTAssertNil(c.pularFila(posicao: 4, uri: "u:X"))
-        XCTAssertEqual(t.pedidos.filter { $0.metodo == "POST" }.count, 4, "toca a cópia da posição 4, não a da 1")
+        XCTAssertEqual(corpoJson(t.pedidos.last { $0.metodo == "PUT" }!)["uris"] as? [String], ["u:X"], "a cópia da posição 4, não a da 1")
     }
 
     func testPularNaFilaQueMudouNaoPulaNada() {
@@ -505,7 +558,7 @@ final class SpotifyApiTestes: XCTestCase {
     func testPularNaFilaSemUriUsaAPosicaoDaTela() {
         let t = TransporteFalso { _ in respostaJson(204) }
         let (c, _) = logada(t)
-        XCTAssertNil(c.pularFila(posicao: 2, uri: nil))
+        XCTAssertNil(c.pularFila(posicao: 2, uri: nil), "sem uri não há como saltar")
         XCTAssertEqual(t.pedidos.filter { $0.metodo == "POST" }.count, 2)
         XCTAssertNotNil(c.pularFila(posicao: 0, uri: nil))
     }
