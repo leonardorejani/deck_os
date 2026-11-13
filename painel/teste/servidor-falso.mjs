@@ -356,7 +356,7 @@ async function api(req, res, url) {
       c.andamento = { ...(c.andamento || {}), [id]: { fase } };
       setTimeout(() => {
         if (c.comandoFalha) c.andamento = { ...c.andamento, [id]: { fase: 'falhou', erro: c.comandoFalha, fim: new Date().toISOString() } };
-        else { const { [id]: _, ...resto } = c.andamento; c.andamento = resto; if (tecla.desligar) c.acesas = ligada ? c.acesas.filter(x => x !== id) : [...c.acesas, id] }
+        else { const { [id]: _, ...resto } = c.andamento || {}; c.andamento = resto; if (tecla.desligar) c.acesas = ligada ? c.acesas.filter(x => x !== id) : [...c.acesas, id] }
       }, c.comandoLento);
       return json(res, 200, { ok: true });
     }
