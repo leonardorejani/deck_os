@@ -72,7 +72,9 @@ export default async function (h) {
   await h.dormir(1800);
   h.ok(await p.evaluate(apagada) && (await h.contadores()).botoes.join() === 'acordado', 'depois que o Mac confirma, segue apagada e ele recebeu a tecla');
   await p.click('.tecla[data-id="apagar"]');
-  h.ok(await ate(p, () => !!document.querySelector('.tecla[data-id="apagar"].piscando'), null, 600) >= 0 && (await aviso(p)).txt === 'Apagar tela: feito', 'tecla comum: o LED pisca e o aviso aparece no toque, antes de o Mac responder');
+  // 13/11/2026 (frente comando-foco): a tecla de comando não diz "feito" antes de o Mac responder, só pisca e mostra "Rodando..."
+  h.ok(await ate(p, () => !!document.querySelector('.tecla[data-id="apagar"].piscando'), null, 600) >= 0 && !/feito/.test((await aviso(p)).txt), 'tecla de comando: o LED pisca no toque e o aviso "feito" não sai antes de o Mac responder');
+  h.ok(await h.espera(p, () => document.querySelector('#aviso-txt').textContent === 'Apagar tela: feito', null, 4000), 'e o aviso "feito" sai quando o Mac responde');
   await p.context().close();
   await h.reset(); await h.cenario({ falha: true, atrasoAcao: 600 });
   p = await h.pagina(); await pronta(h, p);

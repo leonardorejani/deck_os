@@ -22,7 +22,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"net/http"
+	"math"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -92,8 +92,16 @@ type ajudante struct {
 	mu     sync.Mutex
 	grupos map[string]string // nome de grupo por JID, para não perguntar de novo
 	// Quando se tentou pela última vez (e falhou) pegar o nome de um grupo ou a foto de uma conversa.
-	tentadas  map[string]time.Time
-	filaFotos chan string
+	tentadas map[string]time.Time
+	// Fotos de perfil: as que já estão na fila (ou baixando), as vagas de download em paralelo, quantas falhas seguidas
+	// cada uma teve e as que a pessoa esconde (guardadas no disco, sobrevivem ao reinício). Tudo nasce na 1a vez.
+	emFila     map[string]bool
+	vagasFoto  chan struct{}
+	falhasFoto map[string]int
+	semFoto    map[string]time.Time
+	// pegarFoto baixa a miniatura. O teste troca a rede por um falso.
+	pegarFoto func(ctx context.Context, id string) ([]byte, error)
+	ctxGeral  context.Context
 	// completando evita duas rodadas de completar ao mesmo tempo. completarFn existe para o teste trocar a rede.
 	completando   bool
 	sincronizando bool
@@ -170,7 +178,6 @@ func (a *ajudante) completarEmFundo(ctx context.Context) {
 const (
 	esperaGrupo      = 10 * time.Minute
 	esperaConsulta   = 15 * time.Second
-	esperaFoto       = 6 * time.Hour
 	validadeFoto     = 24 * time.Hour
 	limiteMidia      = 8 << 20
 	maxArquivosMidia = 100
@@ -225,11 +232,19 @@ func (a *ajudante) nomeDeQuem(ctx context.Context, j types.JID, dica types.JID, 
 
 // completar acha o que falta nas conversas da lista (nome, telefone, foto). Devolve true se algo mudou.
 func (a *ajudante) completar(ctx context.Context) bool {
-	if a.cli == nil {
-		return false
-	}
 	mudou := false
-	for _, c := range a.estado.Pendentes() {
+	pendentes := a.estado.Pendentes()
+	// As fotos entram na fila antes de qualquer consulta de nome: descobrir o nome de um grupo é pedido de rede em série
+	// e não pode atrasar as miniaturas da lista.
+	for _, c := range pendentes {
+		if a.agendarFoto(c) {
+			mudou = true
+		}
+	}
+	if a.cli == nil {
+		return mudou
+	}
+	for _, c := range pendentes {
 		if ctx.Err() != nil {
 			return mudou
 		}
@@ -255,87 +270,8 @@ func (a *ajudante) completar(ctx context.Context) bool {
 				mudou = true
 			}
 		}
-		if a.agendarFoto(c) {
-			mudou = true
-		}
 	}
 	return mudou
-}
-
-// agendarFoto põe a conversa na fila da foto de perfil quando falta (ou venceu). Devolve true se achou uma já guardada.
-func (a *ajudante) agendarFoto(c Conversa) bool {
-	arq := arquivoDaFoto(c.ID)
-	if info, err := os.Stat(filepath.Join(a.pasta, "fotos", arq)); err == nil {
-		achou := c.Foto != arq
-		if achou {
-			a.estado.Foto(c.ID, arq)
-		}
-		if time.Since(info.ModTime()) < validadeFoto {
-			return achou
-		}
-		a.enfileirarFoto(c.ID)
-		return achou
-	}
-	a.enfileirarFoto(c.ID)
-	return false
-}
-
-func (a *ajudante) enfileirarFoto(id string) {
-	a.mu.Lock()
-	t, visto := a.tentadas["foto:"+id]
-	if visto && time.Since(t) < esperaFoto {
-		a.mu.Unlock()
-		return
-	}
-	a.tentadas["foto:"+id] = time.Now()
-	a.mu.Unlock()
-	select {
-	case a.filaFotos <- id:
-	default:
-	}
-}
-
-// trabalhadorDeFotos baixa uma foto de perfil por vez, com uma pausa entre elas para não irritar o WhatsApp.
-func (a *ajudante) trabalhadorDeFotos(ctx context.Context) {
-	cliente := &http.Client{Timeout: 15 * time.Second}
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case id := <-a.filaFotos:
-			if a.buscarFoto(ctx, cliente, id) {
-				a.marcarSujo()
-			}
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.After(400 * time.Millisecond):
-			}
-		}
-	}
-}
-
-func (a *ajudante) buscarFoto(ctx context.Context, cliente *http.Client, id string) bool {
-	j, err := types.ParseJID(id)
-	if err != nil {
-		return false
-	}
-	c, cancelar := context.WithTimeout(ctx, 20*time.Second)
-	defer cancelar()
-	info, err := a.cli.GetProfilePictureInfo(c, j, &whatsmeow.GetProfilePictureParams{Preview: true})
-	if err != nil || info == nil || info.URL == "" {
-		return false // sem foto (ou sem permissão de ver): tenta de novo só daqui a algumas horas
-	}
-	dados, err := baixarFoto(c, cliente, info.URL)
-	if err != nil {
-		return false
-	}
-	arq := arquivoDaFoto(id)
-	if err := guardarArquivo(filepath.Join(a.pasta, "fotos"), arq, dados); err != nil {
-		return false
-	}
-	a.estado.Foto(id, arq)
-	return true
 }
 
 // baixarMidiaPedida atende o pedido do núcleo e responde com uma linha. Nada de nome nem texto vai para o erro.
@@ -397,6 +333,16 @@ func (a *ajudante) tratar(ctx context.Context, ev any) {
 		_ = os.RemoveAll(filepath.Join(a.pasta, "midia"))
 		a.marcarSujo()
 		fase("erro", "O aparelho foi desconectado pelo WhatsApp. Gere um QR novo.")
+	case *events.UnarchiveChatsSetting:
+		if e.Action != nil {
+			a.estado.ManterArquivadas(!e.Action.GetUnarchiveChats())
+			a.marcarSujo()
+		}
+	case *events.Mute:
+		if e.Action != nil {
+			a.estado.Silenciar(e.JID.String(), fimDoSilencio(e.Action.GetMuted(), e.Action.GetMuteEndTimestamp()))
+			a.marcarSujo()
+		}
 	case *events.StreamReplaced:
 		fase("erro", "Outro programa tomou o lugar do Deck nesta conexão.")
 	case *events.Message:
@@ -405,7 +351,7 @@ func (a *ajudante) tratar(ctx context.Context, ev any) {
 		a.historico(ctx, e)
 	case *events.Archive:
 		if e.Action != nil {
-			a.estado.Arquivar(e.JID.String(), e.Action.GetArchived())
+			a.estado.ArquivarEm(e.JID.String(), e.Action.GetArchived(), e.Timestamp)
 			a.marcarSujo()
 		}
 	case *events.PushName, *events.Contact:
@@ -475,7 +421,7 @@ func (a *ajudante) sincronizarArquivadas(ctx context.Context) {
 	if a.cli == nil || a.pasta == "" {
 		return
 	}
-	marca := filepath.Join(a.pasta, "arquivadas-sincronizadas")
+	marca := filepath.Join(a.pasta, "arquivadas-sincronizadas-2")
 	if _, err := os.Stat(marca); err == nil {
 		return
 	}
@@ -496,6 +442,21 @@ func (a *ajudante) sincronizarArquivadas(ctx context.Context) {
 			a.marcarSujo()
 		}
 	}()
+}
+
+// fimDoSilencio converte o fim do silêncio do WhatsApp (segundos, ms, ou -1 para sempre) em unix ms.
+// Zero quer dizer sem silêncio.
+func fimDoSilencio(silenciada bool, fim int64) int64 {
+	if !silenciada {
+		return 0
+	}
+	if fim <= 0 || fim > math.MaxInt64/1000 {
+		return math.MaxInt64
+	}
+	if fim < 100_000_000_000 {
+		return fim * 1000
+	}
+	return fim
 }
 
 func (a *ajudante) historico(ctx context.Context, e *events.HistorySync) {
@@ -531,8 +492,10 @@ func (a *ajudante) historico(ctx context.Context, e *events.HistorySync) {
 		a.estado.Numero(j.String(), numero)
 		// Arquivada: fica fora de Todas, Contatos e Grupos e só aparece no filtro Arquivadas. Histórico sem o campo
 		// não diz nada (não desarquiva).
+		a.estado.Silenciar(j.String(), fimDoSilencio(c.GetMuteEndTime() > 0, int64(c.GetMuteEndTime())))
 		if c.Archived != nil {
-			a.estado.Arquivar(j.String(), c.GetArchived())
+			ultima := time.Unix(int64(c.GetConversationTimestamp()), 0)
+			a.estado.ArquivarEm(j.String(), c.GetArchived(), ultima)
 		}
 	}
 	a.marcarSujo()
@@ -670,10 +633,10 @@ func main() {
 	cli.EmitAppStateEventsOnFullSync = true
 	a := &ajudante{cli: cli, estado: NovoEstado(filepath.Join(*pasta, "conversas.json")), pasta: *pasta,
 		sujo: make(chan struct{}, 1), grupos: map[string]string{},
-		tentadas: map[string]time.Time{}, filaFotos: make(chan string, 64)}
+		tentadas: map[string]time.Time{}}
+	a.ctxGeral = ctx
 	cli.AddEventHandler(func(ev any) { a.tratar(ctx, ev) })
 	go a.publicar(ctx)
-	go a.trabalhadorDeFotos(ctx)
 	a.marcarSujo()
 
 	// Comandos do núcleo. Fim do stdin: o Deck fechou, então este ajudante também.

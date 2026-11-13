@@ -49,7 +49,7 @@ function otimistaSpotify(campos, posicao) {
 function acesasOtimistas(lista) {
   const agora = performance.now(), r = new Set(lista);
   for (const [id, o] of Object.entries(otmTeclas)) {
-    if (agora > o.ate || r.has(id) === o.acesa) { delete otmTeclas[id]; continue }
+    if (agora > o.ate || r.has(id) === o.acesa || rodandoSolto(id)) { delete otmTeclas[id]; continue } // o Mac já disse que está rodando: vale o "Ligando...", não o palpite
     if (o.acesa) r.add(id); else r.delete(id);
   }
   return [...r];
@@ -120,14 +120,16 @@ const relogioHTML = () => `<div class="relogio" aria-label="Hora"><div class="pl
 const relogioQHTML = () => `<div class="relogio relogio-q" aria-label="Hora"><div class="placa" data-i="h"></div><div class="placa" data-i="m"></div></div>`;
 const nivel = p => p == null ? '' : p >= 90 ? 'cheio' : p >= 70 ? 'alto' : '';
 const medidor = (rot, p) => `<div class="medidor ${nivel(p)}" aria-label="${rot}: ${p == null ? 'sem medição' : p + '%'}"><span class="trilho"><i style="width:${p ?? 0}%"></i></span><b>${p == null ? '-' : p + '%'}</b></div>`;
+/* o bloco todo é um botão: o toque abre o detalhe do uso (uso.js). O rótulo lê os números, já que o leitor de tela não entra no botão */
+const usoToque = () => `data-abrir-uso role="button" tabindex="0" aria-haspopup="dialog" aria-label="${esc('Uso das IAs: ' + usoVisivel().map(u => `${u.nome} ${u.conta} ${u.semana == null ? 'sem medição' : u.semana + '%'}`).join(', ') + '. Ver detalhes')}"`;
 function usoCartao() {
   if (!usoVisivel().length) return '';
-  return `<div class="cartao uso depende">${esconder('uso')}<div class="cartao-titulo"><span>Uso da semana</span><span class="renova-tit">renova</span></div>
+  return `<div class="cartao uso depende" ${usoToque()}>${esconder('uso')}<div class="cartao-titulo"><span>Uso da semana</span><span class="renova-tit">renova</span></div>
     ${usoVisivel().map(u => `<div class="uso-linha"><span class="uso-nome">${icServico(u.nome)}<span>${esc(u.nome)} <small>${esc(u.conta)}</small></span></span>${medidor('semana', u.semana)}<span class="renova" aria-label="renova ${renovaEm(u.renova, true, V.ref)}">${renovaEm(u.renova, true, V.ref)}</span></div>`).join('')}</div>`;
 }
 function usoTira() {
   if (!usoVisivel().length) return ''; // nenhuma conta para mostrar: a faixa some
-  return `<div class="uso-tira depende">${esconder('uso')}${usoVisivel().map(u => { const p = u.semana, txt = p == null ? '-' : p + '%'; return `<span class="${nivel(p)}" aria-label="${esc(u.nome)} ${esc(u.conta)}: ${p == null ? 'sem medição' : txt}">${icServico(u.nome)}<span class="nome-u">${esc(u.nome === 'Claude' ? u.conta : u.nome)}</span> <span class="mini"><i style="width:${p ?? 0}%"></i></span><b>${txt}</b></span>` }).join('')}</div>`;
+  return `<div class="uso-tira depende" ${usoToque()}>${esconder('uso')}${usoVisivel().map(u => { const p = u.semana, txt = p == null ? '-' : p + '%'; return `<span class="${nivel(p)}" aria-label="${esc(u.nome)} ${esc(u.conta)}: ${p == null ? 'sem medição' : txt}">${icServico(u.nome)}<span class="nome-u">${esc(u.nome === 'Claude' ? u.conta : u.nome)}</span> <span class="mini"><i style="width:${p ?? 0}%"></i></span><b>${txt}</b></span>` }).join('')}</div>`;
 }
 /* Monitor do Mac: uma faixa pequena com o que a pessoa deixou ligado nos Ajustes do Mac (`itens` do estado).
    Bateria some sozinha em Mac sem bateria. Processador, memória e rede ficam com "-" até a primeira medida. */
@@ -199,6 +201,22 @@ function horaDoEvento(ev) {
   const dia = dias <= 0 ? '' : dias === 1 ? 'amanhã' : d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '');
   return ev.diaTodo ? dia || 'hoje' : (dia + ' ' + hh).trim();
 }
+/* Tecla de comando que o Mac está rodando solto (o comando demora: troca de apps, foco...). `andamento` do estado traz a fase de cada
+   uma: ligando, desligando, rodando, ou falhou (por uns 30 s, com o motivo). O toque responde na hora e a tecla mostra o que acontece. */
+const fasesLocais = {};  // tecla de comando tocada que o Mac ainda não respondeu: o "Ligando..." vem do próprio toque, a tecla não finge estar ligada
+const faseDaTecla = id => { const f = estado?.andamento?.[id]?.fase || fasesLocais[id]; return f === 'ligando' || f === 'desligando' || f === 'rodando' ? f : null };
+const rodandoSolto = id => !!faseDaTecla(id);
+const TEXTO_DA_FASE = { ligando: 'Ligando...', desligando: 'Desligando...', rodando: 'Rodando...' };
+// falha de comando solto: avisa uma vez por falha (o Mac guarda a falha por uns 30 s no estado)
+const falhasAvisadas = new Set();
+function avisarFalhasDeComando() {
+  for (const [id, a] of Object.entries(estado?.andamento || {})) {
+    if (a?.fase !== 'falhou' || !a.erro) continue;
+    const chave = id + '|' + a.fim; if (falhasAvisadas.has(chave)) continue;
+    falhasAvisadas.add(chave);
+    const t = V?.teclas?.find(x => x.id === id); avisar(`${t ? t.nome + ': ' : ''}${a.erro}`, { erro: true });
+  }
+}
 // tecla que acende: a que tem comando de conferir (`estado`) ou liga e desliga (`desligar`, o Mac guarda o estado)
 const acendeTecla = t => !!(t.estado || t.desligar);
 /* Tecla de microfone ou de câmera da reunião (Meet, Zoom, Teams): o Mac manda o estado de cada uma em `reuniao`
@@ -214,9 +232,9 @@ function infoTecla(t) {
   const cal = painelDe(t) === 'calendario';
   const selo = V.selos[t.id] ?? (cal && V.agenda && V.agenda.permissao === false ? '!' : null);
   const prox = cal && !selo && V.agenda?.proximo ? V.agenda.proximo : null;
-  const reu = estadoDaReuniao(t);
+  const reu = estadoDaReuniao(t), fase = faseDaTecla(t.id);
   if (reu) return { acesa: reu === 'ligado', selo: null, hora: null, reuniao: reu };
-  return { acesa: acendeTecla(t) && V.acesas.includes(t.id), selo, hora: prox ? horaDoEvento(prox) : null, titulo: prox?.titulo };
+  return { acesa: acendeTecla(t) && V.acesas.includes(t.id), selo, hora: prox ? horaDoEvento(prox) : null, titulo: prox?.titulo, fase };
 }
 // aria-pressed: tecla de estado (acende ou apaga), e a de reunião só quando o Mac leu ligado ou desligado
 const pressionada = (t, i) => i.reuniao ? (i.reuniao === 'ligado' || i.reuniao === 'desligado' ? String(i.acesa) : null) : acendeTecla(t) ? String(i.acesa) : null;
@@ -229,6 +247,7 @@ function extraTecla(t, i) {
   const aria = i.selo === '!' ? 'Agenda sem permissão' : `${i.selo} não lidas`;
   return (i.selo != null ? `<span class="selo" aria-label="${esc(aria)}">${esc(seloTxt)}</span>` : '')
     + (i.reuniao ? `<span class="estado-tecla ${i.reuniao}" aria-label="${esc(rotuloDaReuniao(t, i.reuniao))}">${esc(textoDaReuniao(t, i.reuniao))}</span>` : '')
+    + (i.fase ? `<span class="estado-tecla andando" aria-label="${esc(t.nome)}: ${esc(TEXTO_DA_FASE[i.fase].replace('...', ''))}">${esc(TEXTO_DA_FASE[i.fase])}</span>` : '')
     + (i.hora ? `<span class="hora-tecla" aria-label="Próximo: ${esc(i.titulo)} ${esc(i.hora)}">${esc(i.hora)}</span>` : '');
 }
 function teclaHTML(t) {
@@ -256,7 +275,7 @@ const porPagina = () => V.comp === 'b' ? (posicao === 'vertical' ? 6 : 9) : posi
 /* ---------- desenho ---------- */
 // o que, se mudar, obriga a refazer a tela inteira
 const chaveLayout = () => JSON.stringify([posicao, V.comp, monitorItens(), !!V.carregando, V.blocos.sessoes !== false, usoVisivel().length > 0, V.perfilAtivo, V.perfis, V.teclas.map(t => [t.id, t.nome, t.tipo, t.valor, t.icone, acendeTecla(t)]), appsMac.versao]);
-const chaveTeclas = () => JSON.stringify(V.teclas.map(t => { const i = infoTecla(t); return [i.acesa, i.selo, i.hora, i.reuniao] }));
+const chaveTeclas = () => JSON.stringify(V.teclas.map(t => { const i = infoTecla(t); return [i.acesa, i.selo, i.hora, i.reuniao, i.fase] }));
 const chavePlayer = () => { const s = V.spotify; return s ? JSON.stringify([s.faixa, s.artista, s.album, s.capaId, s.cores, s.duracao, temModos(s), conectado(s)]) : null };
 
 function render() {
@@ -473,15 +492,24 @@ const ocupadas = new Set(); // um toque, uma ação: a tecla espera o Mac respon
 async function executar(id) {
   if (id === 'menu') { const lp = $('#lista-perfis'); return lp.hidden ? abrirMenu($('.tecla.menu')) : (lp.hidden = true) }
   const t = V.teclas.find(x => x.id === id); if (!t || ocupadas.has(id)) return;
+  if (rodandoSolto(id)) return avisar(`${t.nome}: ainda ${faseDaTecla(id)}. Espere terminar.`); // o Mac ainda está no comando anterior
   if (painelDe(t)) return abrirPainel(painelDe(t), id); // WhatsApp e Calendário abrem a lista aqui, com "Abrir no Mac" dentro
   ocupadas.add(id);
   // resposta otimista: a tecla acende (ou pisca) e o aviso aparece no toque. Se o Mac recusar, volta e o aviso vira o erro
   const el = $(`.tecla[data-id="${CSS.escape(id)}"]`), quer = !V.acesas.includes(id);
   el?.classList.add('piscando'); setTimeout(() => el?.classList.remove('piscando'), 400);
-  if (acendeTecla(t)) { otmTeclas[id] = { acesa: quer, ate: performance.now() + JANELA_OTM }; V = vistaReal(); atualizar(); avisar(`${t.nome}: ${quer ? 'ligado' : 'desligado'}`) }
+  if (t.tipo === 'comando') { fasesLocais[id] = t.desligar ? (quer ? 'ligando' : 'desligando') : 'rodando'; V = vistaReal(); atualizar() } // sem palpite: acende e avisa só depois de o Mac responder
+  else if (acendeTecla(t)) { otmTeclas[id] = { acesa: quer, ate: performance.now() + JANELA_OTM }; V = vistaReal(); atualizar(); avisar(`${t.nome}: ${quer ? 'ligado' : 'desligado'}`) }
   else avisar(t.tipo === 'app' && !itemDeReuniao(t) ? `Abrindo ${t.nome} no Mac` : `${t.nome}: feito`);
-  try { await canal.botao(id); atualizarJa() }
-  catch (e) { delete otmTeclas[id]; el?.classList.remove('piscando'); if (V) { V = vistaReal(); atualizar() } tratarErro(e) }
+  try {
+    await canal.botao(id);
+    if (t.tipo === 'comando') {
+      await atualizarJa(); delete fasesLocais[id];
+      if (rodandoSolto(id)) { V = vistaReal(); atualizar() } // o Mac disse que está rodando: vale o "Ligando..." dele
+      else { if (acendeTecla(t)) otmTeclas[id] = { acesa: quer, ate: performance.now() + JANELA_OTM }; V = vistaReal(); atualizar(); avisar(acendeTecla(t) ? `${t.nome}: ${quer ? 'ligado' : 'desligado'}` : `${t.nome}: feito`) }
+    } else atualizarJa();
+  }
+  catch (e) { delete otmTeclas[id]; delete fasesLocais[id]; el?.classList.remove('piscando'); if (V) { V = vistaReal(); atualizar() } tratarErro(e) }
   finally { ocupadas.delete(id) }
 }
 /* Spotify: um comando de cada vez, na ordem do toque (dois pedidos soltos podem chegar trocados ao Mac) */
@@ -543,6 +571,7 @@ tela.addEventListener('click', ev => {
   if (!lp.hidden && !ev.target.closest('#lista-perfis, .tecla.menu')) { lp.hidden = true; return }
   const eb = ev.target.closest('[data-esconder]'); if (eb && organizando) { ev.stopPropagation(); return trocarBloco(eb.dataset.esconder, false) }
   const mb = ev.target.closest('[data-mostrar]'); if (mb) return trocarBloco(mb.dataset.mostrar, true);
+  if (!organizando && ev.target.closest('[data-abrir-uso]')) return abrirUso();
   if (ev.target.closest('#f-relogio')) return fecharRelogio();
   const m = ev.target.closest('[data-midia]'); if (m) return midia(m.dataset.midia);
   if (!organizando && ev.target.closest('[data-abrir-spotify]') && V.spotify) return abrirPlayer();
@@ -555,6 +584,7 @@ tela.addEventListener('click', ev => {
   if (t && ev.detail === 0) return organizando ? abrirEditor(t.dataset.id === 'menu' ? 'nova' : t.dataset.id) : executar(t.dataset.id);
   if (organizando && !t && !ev.target.closest('.barra-organizar, .folha, .veu, #aviso')) sairOrganizar();
 });
+addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && !organizando && e.target.matches?.('[data-abrir-uso]')) { e.preventDefault(); abrirUso() } });
 addEventListener('keydown', e => { if (e.key === 'Escape') { fecharRelogio(); fecharFolha(); sairOrganizar() } });
 
 /* ---------- gravar no Mac: o iPhone só grava pela config inteira (PUT /api/config) ---------- */
@@ -844,6 +874,7 @@ async function passo() {
         if (!config && !configFalhou) { configFalhou = true; avisar('Não consegui ler as teclas do Mac. Tentando de novo.', { erro: true }) }
       }
     }
+    avisarFalhasDeComando();
     pintarGlobal(); mostrarVista();
   } catch (er) {
     if (er.status === 401) semAcesso = true;

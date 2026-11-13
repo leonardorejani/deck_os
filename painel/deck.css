@@ -777,7 +777,10 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; text
 .pc-lista > .corpo { grid-row: 3 }
 .pc-lista > header { display: flex; align-items: center; gap: var(--icone); padding: var(--pad) 0 var(--item); min-height: var(--linha) }
 .pc-lista > header h2 { margin: 0; flex: 1; font-size: var(--texto-md) }
-.pc-lista .corpo { overflow: auto; overscroll-behavior: contain; scrollbar-width: none; padding: 0 0 var(--seguro-baixo) }
+/* O corpo da lista nunca rola para o lado. A folga de --item de cada lado (onde o fundo da linha sangra no toque) é do corpo, em margem e
+   padding, e o fundo que sangra é sombra (não conta na rolagem), nunca margem negativa da linha: ela virava rolagem horizontal. */
+.pc-lista { --fila-sangra: calc(-1 * var(--item)) 0 0 0 var(--superficie-2), var(--item) 0 0 0 var(--superficie-2) }
+.pc-lista .corpo, .folha.cheia .pc-lista .corpo { overflow: hidden auto; overscroll-behavior: contain; scrollbar-width: none; margin: 0 calc(-1 * var(--item)); padding: 0 var(--item) var(--seguro-baixo) }
 .pc-lista .corpo::-webkit-scrollbar { display: none }
 .vertical .pc-lista > header { padding-top: var(--seguro-cima) }
 .item-lista { display: flex; align-items: center; gap: var(--icone); width: 100%; min-height: var(--linha); padding: var(--item) 0; border: 0; border-top: 1px solid var(--borda); background: none; color: inherit; font: inherit; text-align: left }
@@ -793,13 +796,13 @@ button.item-lista:disabled { opacity: .5; cursor: default }
 .abas button[aria-selected="true"] { color: var(--texto) }
 .abas button[aria-selected="true"]::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; border-radius: var(--raio-pilula); background: var(--sucesso) }
 /* linha com capa: no toque (pressionada) ou com o mouse em cima, o fundo clareia e o play aparece sobre a capa */
-.item-lista.com-capa { padding: var(--micro-gap) var(--item); margin: 0 calc(-1 * var(--item)); width: calc(100% + 2 * var(--item)); border-top: 0; border-radius: var(--raio) }
+.item-lista.com-capa { padding: var(--micro-gap) 0; border-top: 0; border-radius: var(--raio) }
 .capa-fila { position: relative; flex: none; width: 48px; height: 48px; display: block }
 .capa-fila .capa-mini { width: 100%; height: 100%; border-radius: var(--raio-sm); object-fit: cover; background: var(--superficie-2); display: block }
 .capa-fila svg { position: absolute; inset: 0; margin: auto; width: 24px; height: 24px; color: #fff; opacity: 0; filter: drop-shadow(0 1px 3px rgba(0, 0, 0, .6)); transition: opacity var(--mov-rapido) var(--curva-move) }
-button.item-lista.com-capa:active, button.item-lista.com-capa:focus-visible { background: var(--superficie-2) }
+button.item-lista.com-capa:active, button.item-lista.com-capa:focus-visible { background: var(--superficie-2); box-shadow: var(--fila-sangra) }
 button.item-lista.com-capa:active .capa-fila svg, button.item-lista.com-capa:focus-visible .capa-fila svg { opacity: 1 }
-@media (hover: hover) { button.item-lista.com-capa:hover { background: var(--superficie-2) } button.item-lista.com-capa:hover .capa-fila svg { opacity: 1 } }
+@media (hover: hover) { button.item-lista.com-capa:hover { background: var(--superficie-2); box-shadow: var(--fila-sangra) } button.item-lista.com-capa:hover .capa-fila svg { opacity: 1 } }
 .item-lista .tag { flex: none; font-size: var(--texto-xs); color: var(--sucesso); background: var(--sucesso-suave); border-radius: var(--raio-pilula); padding: var(--micro-gap) var(--icone) }
 .volume-aparelho { padding: 0 0 var(--item) }
 .vertical .pc-corpo { padding-top: calc(var(--seguro-cima) + var(--alvo-sm)) }
@@ -870,6 +873,63 @@ button.item-lista.com-capa:active .capa-fila svg, button.item-lista.com-capa:foc
 .mn-seta { display: inline-flex; flex: none; color: var(--texto-2) }
 .mn-seta svg { width: 18px; height: 18px }
 .mn-vazio { height: auto; min-height: 120px; padding-bottom: var(--secao) }
+
+/* ---------- Uso das IAs (uso.js): o bloco de uso é um botão, e a folha tem um cartão escuro por assunto, como no Monitor ---------- */
+[data-abrir-uso] { cursor: pointer; -webkit-tap-highlight-color: transparent }
+[data-abrir-uso]:focus-visible { outline: 2px solid var(--texto-2); outline-offset: 2px }
+.uso-tira[data-abrir-uso] { position: relative }
+.uso-tira[data-abrir-uso]::after { content: ''; position: absolute; inset: -12px -8px } /* a faixa é fina: o toque vale 44 px de altura */
+.organizando [data-abrir-uso]::after { display: none }
+#us-filtro { flex: none; min-width: 240px }
+.vertical .folha.cheia > header:has(#us-filtro) { flex-wrap: wrap; row-gap: var(--item) }
+.vertical #us-filtro { order: 3; flex: 1 0 100% }
+.vertical #us-filtro button { flex: 1 }
+.us-secoes { display: flex; flex-wrap: wrap; gap: var(--item) var(--grade); align-items: flex-start }
+.us-conta { flex: 1 1 100%; display: grid; gap: var(--item); padding-bottom: var(--pad); min-width: 0 }
+.us-conta h3 { display: flex; align-items: center; margin: 0; font-size: var(--texto-md); font-weight: 600 }
+.us-conta h3 small { font-size: var(--texto-sm); color: var(--texto-2); font-weight: 400; margin-left: var(--item) }
+.us-simples { flex: 1 1 200px; max-width: 100% }
+.us-simples .us-grade { grid-template-columns: minmax(0, 1fr) }
+.us-aviso { margin: 0; font-size: var(--texto-xs); color: var(--texto-2); line-height: 1.4 }
+.us-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); grid-auto-flow: row dense; gap: var(--grade) }
+.vertical .us-grade { grid-template-columns: repeat(2, minmax(0, 1fr)) }
+.us-cartao { grid-template-rows: none; align-content: start }
+.us-larga, .us-sem { grid-column: span 2 }
+.vertical .us-larga, .vertical .us-sem { grid-column: 1 / -1 }
+.us-valor { all: unset; box-sizing: border-box; display: grid; gap: var(--item); min-height: var(--alvo); cursor: pointer; border-radius: var(--raio-dentro) }
+.us-valor:focus-visible, .us-renova:focus-visible { outline: 2px solid var(--texto-2); outline-offset: 2px }
+.us-cartao .mn-num { align-self: start }
+.us-nota { display: block; font-size: var(--texto-xs); line-height: 1.4; color: var(--texto-2); overflow-wrap: anywhere }
+.us-nota:empty { display: none }
+.us-renova { all: unset; box-sizing: border-box; display: flex; align-items: center; min-height: var(--alvo-sm); margin: -6px 0; font-size: var(--texto-xs); color: var(--texto-2); cursor: pointer; border-radius: var(--raio-mini) }
+.us-renova[hidden] { display: none }
+.us-barra { position: relative; height: 6px; margin: 0 }
+.us-barra u { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--texto); opacity: .85; text-decoration: none }
+.us-barra u[hidden] { display: none }
+.us-janela.alto .us-barra i { background: var(--aviso) }
+.us-janela.alto .mn-num { color: var(--aviso) }
+.us-janela.cheio .us-barra i { background: var(--perigo) }
+.us-janela.cheio .mn-num { color: var(--perigo) }
+.us-tipos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--item) var(--pad); margin: 0 }
+.us-tipos > div { display: flex; justify-content: space-between; align-items: baseline; gap: var(--item); min-width: 0 }
+.us-tipos dt { font-size: var(--texto-xs); color: var(--texto-2) }
+.us-tipos dd { margin: 0; font-size: var(--texto-md); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap }
+.us-tipos dd small { font-size: var(--texto-xs); color: var(--texto-2); margin-left: var(--micro-gap) }
+.us-grafico { display: flex; align-items: flex-end; gap: 2px; height: 88px; border-bottom: 1px solid var(--borda) }
+.us-grafico i { flex: 1; align-self: stretch; border-radius: 2px 2px 0 0; background: var(--texto-2); transform: scaleY(0); transform-origin: bottom; transition: transform var(--mov-contar) var(--curva-entra), background-color var(--mov-padrao) var(--curva-move) }
+.us-grafico i.vazia { transform: scaleY(.02) !important; opacity: .5 }
+.us-grafico i.agora { background: var(--texto) }
+.us-eixo { display: flex; justify-content: space-between; font-size: var(--texto-xs); color: var(--texto-2); font-variant-numeric: tabular-nums }
+.us-eixo-semana span { flex: 1; text-align: center }
+.us-modelos { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--icone) }
+.us-modelo { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; align-items: baseline; column-gap: var(--icone); row-gap: var(--micro-gap); font-size: var(--texto-sm); font-variant-numeric: tabular-nums }
+.us-m-nome { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.us-m-parte { min-width: 3ch; text-align: right }
+.us-m-tok, .us-m-custo { min-width: 7ch; text-align: right; color: var(--texto-2); font-size: var(--texto-xs); white-space: nowrap }
+.us-m-barra { grid-column: 1 / -1; margin: 0 }
+.us-rodape { margin: var(--pad) 0 0; min-height: 3em; font-size: var(--texto-xs); line-height: 1.5; color: var(--texto-2) }
+.us-carregando .us-grade .us-cartao:not(.us-janela) { opacity: .45 }
+.us-cartao { transition: opacity var(--mov-padrao) var(--curva-move), background-color var(--mov-padrao) var(--curva-move) }
 
 /* ---------- Google Meet: a central da reunião ---------- */
 .mt-estado { display: flex; align-items: center; gap: var(--item); min-height: var(--alvo-sm); color: var(--texto-2); font-size: var(--texto-sm) }

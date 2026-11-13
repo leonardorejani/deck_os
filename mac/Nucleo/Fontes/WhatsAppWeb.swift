@@ -100,24 +100,6 @@ enum WhatsAppWeb {
         return Shell.limitado("osascript " + linhas.map { "-e " + Shell.aspas($0) }.joined(separator: " "), segundos: limiteSegundos)
     }
 
-    /// Leva a aba que já está aberta direto para a conversa de um número (muda o endereço dela, sem abrir aba nova) e a
-    /// traz para a frente. nil se o número não vale: só dígitos entram no endereço, e janela e aba são inteiros.
-    static func comandoIrParaConversa(_ a: AbaWeb, numero: String) -> String? {
-        guard let endereco = enderecoDaConversa(numero: numero) else { return nil }
-        let escolher = a.navegador.estilo == .safari
-            ? "set current tab of window \(a.janela) to tab \(a.aba) of window \(a.janela)"
-            : "set active tab index of window \(a.janela) to \(a.aba)"
-        let linhas = [
-            #"tell application id "\#(a.navegador.idBundle)""#,
-            #"set URL of tab \#(a.aba) of window \#(a.janela) to "\#(endereco)""#,
-            escolher,
-            "set index of window \(a.janela) to 1",
-            "activate",
-            "end tell",
-        ]
-        return Shell.limitado("osascript " + linhas.map { "-e " + Shell.aspas($0) }.joined(separator: " "), segundos: limiteSegundos)
-    }
-
     /// Sem aba aberta: abre o WhatsApp Web no navegador escolhido, ou no padrão do Mac.
     static func comandoAbrir(navegador: NavegadorWeb?) -> String {
         comandoAbrir(endereco: endereco, navegador: navegador)
@@ -302,25 +284,71 @@ enum AberturaWhatsApp: Equatable, Sendable {
 struct AbridorWhatsApp: Sendable {
     var origem: OrigemWhatsApp
     var executor: any Executor
+    /// Quem escreve na busca do WhatsApp Web (Acessibilidade). Nil: sem busca, a aba só vem para a frente.
+    var busca: (any BuscaNaPagina)? = nil
+    var dormir: @Sendable (TimeInterval) -> Void = { Thread.sleep(forTimeInterval: $0) }
 
     static let erro = "Não consegui abrir o WhatsApp Web no navegador."
 
-    static let avisoDoGrupo = "Abri o WhatsApp Web. Grupo não tem link direto: procure o grupo na lista."
-    static let avisoSemNumero = "Abri o WhatsApp Web, mas não achei o número desse contato: procure a conversa na lista."
+    static let avisoDoGrupo = "Abri o WhatsApp Web, mas não consegui buscar o grupo sozinho. Procure o grupo na lista."
+    static let avisoSemNumero = "Abri o WhatsApp Web, mas não consegui buscar a conversa sozinho. Procure ela na lista."
+    static let avisoSemAcesso = "Abri o WhatsApp Web. Libere a Acessibilidade para o Deck em Ajustes do Mac, Privacidade e Segurança, e ele abre a conversa sozinho. Por enquanto, procure ela na lista."
 
-    /// "Responder no Mac": usa a aba do WhatsApp Web que já está aberta e só abre uma nova se não houver nenhuma.
-    /// Contato com número vai direto na conversa. Grupo (ou contato sem número) não tem link direto: a aba vem para a
-    /// frente e o aviso diz para escolher a conversa na lista. Vale para qualquer origem de leitura.
-    func abrirConversa(numero: String?, grupo: Bool) -> AberturaDeConversa {
-        let link = grupo ? nil : numero.flatMap { WhatsAppWeb.enderecoDaConversa(numero: $0) }
-        let aviso: String? = grupo ? Self.avisoDoGrupo : (link == nil ? Self.avisoSemNumero : nil)
-        if let aba = origem.abaAberta() {
-            let comando = numero.flatMap { link == nil ? nil : WhatsAppWeb.comandoIrParaConversa(aba, numero: $0) } ?? WhatsAppWeb.comandoTrazer(aba)
-            if executor.rodar(comando).status == 0 { return .aberta(aviso: aviso) }
-            // A aba fechou nesse meio tempo: cai para abrir uma nova.
+    /// "Responder no Mac" (13/11/2026): a aba que já está aberta vem para a frente e a conversa abre pela busca do próprio
+    /// WhatsApp Web (Acessibilidade), sem trocar o endereço da aba nem recarregar a página. Só sem aba aberta se abre uma
+    /// nova: contato com número vai direto em /send?phone=, o resto abre o WhatsApp Web e busca depois de carregar.
+    /// Sem a busca (sem acesso, ou o campo não apareceu) a aba fica na frente e o aviso diz para escolher na lista.
+    func abrirConversa(numero: String?, grupo: Bool, nome: String? = nil) -> AberturaDeConversa {
+        let termo = CampoDoWhatsApp.termo(nome: nome, numero: numero)
+        if let aba = origem.abaAberta(), executor.rodar(WhatsAppWeb.comandoTrazer(aba)).status == 0 {
+            dormir(0.3) // o navegador leva um instante para passar a aba para a frente
+            return .aberta(aviso: buscar(termo, em: aba.navegador, aguardar: 2, grupo: grupo))
         }
+        // Sem aba (ou ela fechou nesse meio tempo): abre uma nova.
+        let link = grupo ? nil : numero.flatMap { WhatsAppWeb.enderecoDaConversa(numero: $0) }
         let r = executor.rodar(WhatsAppWeb.comandoAbrir(endereco: link ?? WhatsAppWeb.endereco, navegador: origem.navegadorEscolhido()))
-        return r.status == 0 ? .aberta(aviso: aviso) : .falhou(Self.erro)
+        guard r.status == 0 else { return .falhou(Self.erro) }
+        if link != nil { return .aberta(aviso: nil) }
+        // Sem link direto: espera a página carregar e busca pelo nome.
+        guard let termo else { return .aberta(aviso: grupo ? Self.avisoDoGrupo : Self.avisoSemNumero) }
+        var navegador = origem.navegadorEscolhido()
+        if navegador == nil {
+            for _ in 0..<6 {
+                dormir(1)
+                if let aba = origem.abaAberta() { navegador = aba.navegador; break }
+            }
+        }
+        guard let navegador else { return .aberta(aviso: grupo ? Self.avisoDoGrupo : Self.avisoSemNumero) }
+        return .aberta(aviso: buscar(termo, em: navegador, aguardar: 10, grupo: grupo))
+    }
+
+    /// Escreve na busca do WhatsApp Web. nil: abriu. Senão, o aviso do que a pessoa ainda precisa fazer.
+    private func buscar(_ termo: String?, em navegador: NavegadorWeb, aguardar: TimeInterval, grupo: Bool) -> String? {
+        let procure = grupo ? Self.avisoDoGrupo : Self.avisoSemNumero
+        guard let termo, let busca else { return procure }
+        // Pode haver mais de um processo com o nome do navegador (outro perfil, instância de automação): a aba do WhatsApp
+        // está em um só. Primeiro uma passada rápida em todos, depois a espera inteira repartida entre eles.
+        let pids = LeitorDeMeetAX.pids(navegador, executor: executor)
+        guard !pids.isEmpty else { return procure }
+        let rapida: TimeInterval = pids.count == 1 ? aguardar : min(aguardar, 1)
+        var tempos = [rapida]
+        if pids.count > 1, aguardar > rapida { tempos.append((aguardar / Double(pids.count)).rounded(.up)) }
+        var resultado = ResultadoBusca.semCampo
+        for tempo in tempos {
+            for pid in pids {
+                resultado = busca.pesquisar(pid: pid, texto: termo, aguardar: tempo)
+                if resultado != .semCampo { return resposta(resultado, procure) }
+            }
+        }
+        return resposta(resultado, procure)
+    }
+
+    private func resposta(_ r: ResultadoBusca, _ procure: String) -> String? {
+        switch r {
+        case .aberta: return nil
+        case .semAcesso: return Self.avisoSemAcesso
+        case .semCampo, .ambiguo, .naoFocou: return procure
+        }
     }
 
     func abrir() -> AberturaWhatsApp {
