@@ -91,4 +91,16 @@ export default async function (h) {
   await h.espera(p, () => document.querySelectorAll('#wa-lista .conversa').length === 5);
   h.ok(await p.evaluate(() => document.querySelector('#wa-filtro [data-f="arquivadas"]').hidden), 'pelo app do Mac o filtro Arquivadas não aparece (ele não entrega arquivadas)');
   await p.context().close();
+
+  /* ---------- Responder no Mac demora mais que o prazo comum e não vira erro ---------- */
+  // O Mac traz a aba, acha a busca e digita: passa de 5 s. O prazo comum (aqui 400 ms no lugar dos 5 s) não pode valer.
+  await h.reset();
+  await h.cenario({ whatsappOrigem: 'qr', whatsappRico: true, abrirAtraso: 1200 });
+  p = await h.pagina({ ajustes: { tempoLimite: 400 } }); await pronta(h, p);
+  await p.click('.tecla[data-id="whatsapp"]');
+  await h.espera(p, () => document.querySelectorAll('#wa-lista .conversa').length >= 3);
+  await p.click('#wa-lista [data-wa="r2@lid"]');
+  await p.click('#wa-lista [data-wa-mac]');
+  h.ok(await h.espera(p, () => document.querySelector('#aviso-txt')?.textContent.includes('Abrindo a conversa'), undefined, 4000), `Responder no Mac que demora espera a resposta em vez de mostrar erro (${await texto(p, '#aviso-txt')})`);
+  await p.context().close();
 }

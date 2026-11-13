@@ -25,6 +25,7 @@ const padrao = () => ({
   whatsapp: 'normal',        // normal | vazio | muitas (30 conversas) | erro (a rota falha)
   whatsappFotos: 0,          // quantas conversas extras com foto de perfil (para medir o pico de pedidos juntos)
   fotoFalhaPrimeira: false,  // o 1o pedido de cada foto de perfil dá erro 500 (rede ruim)
+  abrirAtraso: 0,            // espera, em ms, antes de responder o Responder no Mac (abre a conversa pela busca da página)
   fotoAtraso: 0,             // espera, em ms, antes de responder cada foto de perfil
   whatsappRico: false,       // lista do aparelho conectado com foto, áudio, visualização única, arquivada e conversa sem nome (precisa de whatsappOrigem 'qr')
   whatsappVersao: null,      // número: o Mac por QR dá versão à lista (?v=<versão> igual responde só {igual}). null: Mac sem versão, a lista vai sempre inteira
@@ -474,6 +475,7 @@ async function api(req, res, url) {
   }
   if (c.whatsappRico && rota === '/api/whatsapp/abrir' && m === 'POST') {
     const id = String((await lerCorpo(req)).id || ''); cont.whatsappAbertas.push(id);
+    if (c.abrirAtraso) await new Promise(r => setTimeout(r, c.abrirAtraso));
     return json(res, 200, id.endsWith('@g.us') ? { ok: true, aviso: 'Abri o WhatsApp Web. Grupo não tem link direto: procure o grupo na lista.' } : { ok: true });
   }
   if (rota === '/api/whatsapp') {

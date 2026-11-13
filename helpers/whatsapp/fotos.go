@@ -23,11 +23,13 @@ import (
 const (
 	vagasDeFoto    = 4
 	esperaSemFoto  = 7 * 24 * time.Hour
-	esperaFalhaMin = 30 * time.Second
 	esperaFalhaMax = 10 * time.Minute
 	prazoDaFoto    = 10 * time.Second
 	arquivoSemFoto = "sem-foto.json"
 )
+
+// var só para o teste encurtar.
+var esperaFalhaMin = 30 * time.Second
 
 var errSemFoto = errors.New("sem foto")
 
@@ -127,6 +129,9 @@ func (a *ajudante) trabalharFoto(id string) {
 			espera = esperaFalhaMax
 		}
 		a.tentadas["foto:"+id] = time.Now().Add(espera)
+		// Ninguém mais acorda a lista por conta própria: sem isto a foto só voltava a ser tentada quando chegasse
+		// uma mensagem qualquer, e com a rede ruim no começo a lista ficava só com inicial.
+		time.AfterFunc(espera, a.marcarSujo)
 	}
 	nenhuma := errors.Is(err, errSemFoto)
 	a.mu.Unlock()

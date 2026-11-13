@@ -325,8 +325,26 @@ struct AbridorWhatsApp: Sendable {
     /// Escreve na busca do WhatsApp Web. nil: abriu. Senão, o aviso do que a pessoa ainda precisa fazer.
     private func buscar(_ termo: String?, em navegador: NavegadorWeb, aguardar: TimeInterval, grupo: Bool) -> String? {
         let procure = grupo ? Self.avisoDoGrupo : Self.avisoSemNumero
-        guard let termo, let busca, let pid = LeitorDeMeetAX.pid(navegador, executor: executor) else { return procure }
-        switch busca.pesquisar(pid: pid, texto: termo, aguardar: aguardar) {
+        guard let termo, let busca else { return procure }
+        // Pode haver mais de um processo com o nome do navegador (outro perfil, instância de automação): a aba do WhatsApp
+        // está em um só. Primeiro uma passada rápida em todos, depois a espera inteira repartida entre eles.
+        let pids = LeitorDeMeetAX.pids(navegador, executor: executor)
+        guard !pids.isEmpty else { return procure }
+        let rapida: TimeInterval = pids.count == 1 ? aguardar : min(aguardar, 1)
+        var tempos = [rapida]
+        if pids.count > 1, aguardar > rapida { tempos.append((aguardar / Double(pids.count)).rounded(.up)) }
+        var resultado = ResultadoBusca.semCampo
+        for tempo in tempos {
+            for pid in pids {
+                resultado = busca.pesquisar(pid: pid, texto: termo, aguardar: tempo)
+                if resultado != .semCampo { return resposta(resultado, procure) }
+            }
+        }
+        return resposta(resultado, procure)
+    }
+
+    private func resposta(_ r: ResultadoBusca, _ procure: String) -> String? {
+        switch r {
         case .aberta: return nil
         case .semAcesso: return Self.avisoSemAcesso
         case .semCampo, .ambiguo, .naoFocou: return procure

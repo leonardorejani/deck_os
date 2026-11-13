@@ -332,15 +332,15 @@ final class FontesWhatsAppWebTestes: XCTestCase {
     func testResponderAbreAConversaDoNumeroNoNavegadorPadrao() {
         let ex = ExecutorFalso([("open 'https", SaidaShell(status: 0, saida: ""))])
         let abridor = AbridorWhatsApp(origem: origem(ConfigWhatsApp(origem: "qr", navegador: nil), ex), executor: ex)
-        XCTAssertEqual(abridor.abrirConversa(numero: "5544984097902", grupo: false), .aberta(aviso: nil))
-        XCTAssertEqual(ex.comandos.filter { $0.hasPrefix("open") }, ["open 'https://web.whatsapp.com/send?phone=5544984097902'"])
+        XCTAssertEqual(abridor.abrirConversa(numero: "5511900000000", grupo: false), .aberta(aviso: nil))
+        XCTAssertEqual(ex.comandos.filter { $0.hasPrefix("open") }, ["open 'https://web.whatsapp.com/send?phone=5511900000000'"])
     }
 
     func testResponderUsaONavegadorEscolhido() {
         let ex = ExecutorFalso([("open -a", SaidaShell(status: 0, saida: ""))])
         let abridor = AbridorWhatsApp(origem: origem(ConfigWhatsApp(origem: "qr", navegador: "Arc"), ex), executor: ex)
-        XCTAssertEqual(abridor.abrirConversa(numero: "5544984097902", grupo: false), .aberta(aviso: nil))
-        XCTAssertEqual(ex.comandos.filter { $0.hasPrefix("open") }, ["open -a 'Arc' 'https://web.whatsapp.com/send?phone=5544984097902'"])
+        XCTAssertEqual(abridor.abrirConversa(numero: "5511900000000", grupo: false), .aberta(aviso: nil))
+        XCTAssertEqual(ex.comandos.filter { $0.hasPrefix("open") }, ["open -a 'Arc' 'https://web.whatsapp.com/send?phone=5511900000000'"])
     }
 
     func testResponderEmGrupoAbreOWebEDizQueNaoTemLinkDireto() {
@@ -357,10 +357,10 @@ final class FontesWhatsAppWebTestes: XCTestCase {
     }
 
     func testNumeroComLixoNuncaViraParteDoComando() {
-        for ruim in ["5544'; rm -rf ~; '", "55 44984097902", "123", "1234567890123456", "+5544984097902", "55４４984097902"] {
+        for ruim in ["5544'; rm -rf ~; '", "55 11900000000", "123", "1234567890123456", "+5511900000000", "55１１900000000"] {
             XCTAssertNil(WhatsAppWeb.enderecoDaConversa(numero: ruim), ruim)
         }
-        XCTAssertEqual(WhatsAppWeb.enderecoDaConversa(numero: "5544984097902"), "https://web.whatsapp.com/send?phone=5544984097902")
+        XCTAssertEqual(WhatsAppWeb.enderecoDaConversa(numero: "5511900000000"), "https://web.whatsapp.com/send?phone=5511900000000")
     }
 
     // A aba que já está aberta é reaproveitada SEM trocar o endereço dela (13/11/2026: "é pra permanecer na mesma"): ela vem
@@ -384,7 +384,7 @@ final class FontesWhatsAppWebTestes: XCTestCase {
     func testResponderComAbaAbertaNaoTrocaOEnderecoEBuscaPeloNome() {
         let busca = BuscaFalsa()
         let ex = ExecutorFalso([("set active tab index", SaidaShell(status: 0, saida: "")), chromeComAba("(3) WhatsApp", janela: 2, aba: 4)] + outrosFechados + [comPid])
-        let r = abridor(ex, busca).abrirConversa(numero: "5544984097902", grupo: false, nome: "Ana Souza")
+        let r = abridor(ex, busca).abrirConversa(numero: "5511900000000", grupo: false, nome: "Ana Souza")
         XCTAssertEqual(r, .aberta(aviso: nil))
         XCTAssertEqual(busca.pedidos.map(\.texto), ["Ana Souza"])
         XCTAssertEqual(busca.pedidos.first?.pid, 4321)
@@ -392,6 +392,33 @@ final class FontesWhatsAppWebTestes: XCTestCase {
         for trecho in ["set active tab index of window 2 to 4", "set index of window 2 to 1", "activate", "com.google.Chrome"] { XCTAssertTrue(trouxe.contains(trecho), trecho) }
         XCTAssertFalse(ex.comandos.contains { $0.contains("set URL") || $0.contains("send?phone") }, "a página não recarrega: o endereço da aba não muda")
         XCTAssertFalse(ex.comandos.contains { $0.hasPrefix("open") }, "nada de aba nova")
+    }
+
+    /// Vários processos com o nome do navegador (perfil extra, instância de automação): a aba do WhatsApp está em um só.
+    final class BuscaPorProcesso: BuscaNaPagina, @unchecked Sendable {
+        var tentativas: [Int32] = []
+        let ondeTem: Int32
+        init(ondeTem: Int32) { self.ondeTem = ondeTem }
+        func pesquisar(pid: Int32, texto: String, aguardar: TimeInterval) -> ResultadoBusca {
+            tentativas.append(pid); return pid == ondeTem ? .aberta : .semCampo
+        }
+    }
+
+    func testResponderTentaCadaProcessoDoNavegadorAteAchar() {
+        let busca = BuscaPorProcesso(ondeTem: 333)
+        let ex = ExecutorFalso([("set active tab index", SaidaShell(status: 0, saida: "")), chromeComAba("WhatsApp"), ("pgrep -x", SaidaShell(status: 0, saida: "111\n222\n333\n"))] + outrosFechados)
+        let r = AbridorWhatsApp(origem: origem(ConfigWhatsApp(origem: "qr", navegador: nil), ex), executor: ex, busca: busca, dormir: { _ in })
+            .abrirConversa(numero: nil, grupo: true, nome: "Louvor")
+        XCTAssertEqual(r, .aberta(aviso: nil))
+        XCTAssertEqual(busca.tentativas, [111, 222, 333])
+    }
+
+    func testResponderComNenhumProcessoComCampoAvisaParaProcurarNaLista() {
+        let busca = BuscaPorProcesso(ondeTem: 999)
+        let ex = ExecutorFalso([("set active tab index", SaidaShell(status: 0, saida: "")), chromeComAba("WhatsApp"), ("pgrep -x", SaidaShell(status: 0, saida: "111\n222\n"))] + outrosFechados)
+        let r = AbridorWhatsApp(origem: origem(ConfigWhatsApp(origem: "qr", navegador: nil), ex), executor: ex, busca: busca, dormir: { _ in })
+            .abrirConversa(numero: nil, grupo: true, nome: "Louvor")
+        XCTAssertEqual(r, .aberta(aviso: AbridorWhatsApp.avisoDoGrupo))
     }
 
     func testResponderEmGrupoComAbaAbertaBuscaOGrupoPeloNome() {
@@ -405,22 +432,22 @@ final class FontesWhatsAppWebTestes: XCTestCase {
     func testResponderContatoSemNomeBuscaPeloNumero() {
         let busca = BuscaFalsa()
         let ex = ExecutorFalso([("set active tab index", SaidaShell(status: 0, saida: "")), chromeComAba("WhatsApp")] + outrosFechados + [comPid])
-        _ = abridor(ex, busca).abrirConversa(numero: "5544984097902", grupo: false, nome: "Contato")
-        XCTAssertEqual(busca.pedidos.map(\.texto), ["5544984097902"])
-        _ = abridor(ex, busca).abrirConversa(numero: "5544984097902", grupo: false, nome: "+55 44 98409-7902")
-        XCTAssertEqual(busca.pedidos.map(\.texto), ["5544984097902", "5544984097902"])
+        _ = abridor(ex, busca).abrirConversa(numero: "5511900000000", grupo: false, nome: "Contato")
+        XCTAssertEqual(busca.pedidos.map(\.texto), ["5511900000000"])
+        _ = abridor(ex, busca).abrirConversa(numero: "5511900000000", grupo: false, nome: "+55 11 90000-0000")
+        XCTAssertEqual(busca.pedidos.map(\.texto), ["5511900000000", "5511900000000"])
     }
 
     func testResponderComAbaNoSafariUsaAAbaAtualDele() {
         let safari = ("com.apple.Safari", SaidaShell(status: 0, saida: "1\t3\t(1) WhatsApp\n"))
         let ex = ExecutorFalso([("set current tab of window", SaidaShell(status: 0, saida: "")), safari] + outrosFechados.filter { !$0.0.contains("Safari") } + [comPid])
-        XCTAssertEqual(abridor(ex, BuscaFalsa()).abrirConversa(numero: "5544984097902", grupo: false, nome: "Ana"), .aberta(aviso: nil))
+        XCTAssertEqual(abridor(ex, BuscaFalsa()).abrirConversa(numero: "5511900000000", grupo: false, nome: "Ana"), .aberta(aviso: nil))
         XCTAssertTrue(ex.comandos.contains { $0.contains("set current tab of window 1 to tab 3 of window 1") })
     }
 
     func testResponderSemABuscaTrazAAbaEAvisaSemTrocarOEndereco() {
         let ex = ExecutorFalso([("set active tab index", SaidaShell(status: 0, saida: "")), chromeComAba("WhatsApp")] + outrosFechados + [comPid])
-        XCTAssertEqual(abridor(ex, nil).abrirConversa(numero: "5544984097902", grupo: false, nome: "Ana"), .aberta(aviso: AbridorWhatsApp.avisoSemNumero))
+        XCTAssertEqual(abridor(ex, nil).abrirConversa(numero: "5511900000000", grupo: false, nome: "Ana"), .aberta(aviso: AbridorWhatsApp.avisoSemNumero))
         XCTAssertEqual(abridor(ex, nil).abrirConversa(numero: nil, grupo: true, nome: "Louvor"), .aberta(aviso: AbridorWhatsApp.avisoDoGrupo))
         XCTAssertFalse(ex.comandos.contains { $0.contains("set URL") })
     }
@@ -430,15 +457,15 @@ final class FontesWhatsAppWebTestes: XCTestCase {
         let casos: [(ResultadoBusca, String)] = [(.semAcesso, AbridorWhatsApp.avisoSemAcesso), (.semCampo, AbridorWhatsApp.avisoSemNumero),
                                                  (.ambiguo, AbridorWhatsApp.avisoSemNumero), (.naoFocou, AbridorWhatsApp.avisoSemNumero)]
         for (res, aviso) in casos {
-            XCTAssertEqual(abridor(ex, BuscaFalsa(res)).abrirConversa(numero: "5544984097902", grupo: false, nome: "Ana"), .aberta(aviso: aviso), "\(res)")
+            XCTAssertEqual(abridor(ex, BuscaFalsa(res)).abrirConversa(numero: "5511900000000", grupo: false, nome: "Ana"), .aberta(aviso: aviso), "\(res)")
         }
     }
 
     func testResponderSemAbaDeContatoComNumeroAbreNovaPeloLinkDireto() {
         let busca = BuscaFalsa()
         let ex = ExecutorFalso([("open 'https", SaidaShell(status: 0, saida: ""))] + ["com.google.Chrome", "com.apple.Safari", "company.thebrowser.Browser", "com.brave.Browser", "com.microsoft.edgemac"].map { ($0, SaidaShell(status: 0, saida: "fechado\n")) })
-        XCTAssertEqual(abridor(ex, busca).abrirConversa(numero: "5544984097902", grupo: false, nome: "Ana"), .aberta(aviso: nil))
-        XCTAssertEqual(ex.comandos.last, "open 'https://web.whatsapp.com/send?phone=5544984097902'")
+        XCTAssertEqual(abridor(ex, busca).abrirConversa(numero: "5511900000000", grupo: false, nome: "Ana"), .aberta(aviso: nil))
+        XCTAssertEqual(ex.comandos.last, "open 'https://web.whatsapp.com/send?phone=5511900000000'")
         XCTAssertTrue(busca.pedidos.isEmpty, "o link direto já abre a conversa")
     }
 
@@ -453,8 +480,8 @@ final class FontesWhatsAppWebTestes: XCTestCase {
 
     func testResponderSeAAbaSumiuNoMeioDoCaminhoAbreUmaNova() {
         let ex = ExecutorFalso([("set active tab index", SaidaShell(status: 1, saida: "erro")), ("open 'https", SaidaShell(status: 0, saida: "")), chromeComAba("WhatsApp")] + outrosFechados)
-        XCTAssertEqual(abridor(ex, BuscaFalsa()).abrirConversa(numero: "5544984097902", grupo: false, nome: "Ana"), .aberta(aviso: nil))
-        XCTAssertEqual(ex.comandos.last, "open 'https://web.whatsapp.com/send?phone=5544984097902'")
+        XCTAssertEqual(abridor(ex, BuscaFalsa()).abrirConversa(numero: "5511900000000", grupo: false, nome: "Ana"), .aberta(aviso: nil))
+        XCTAssertEqual(ex.comandos.last, "open 'https://web.whatsapp.com/send?phone=5511900000000'")
     }
 
     // MARK: Que campo vale como a busca
@@ -472,11 +499,11 @@ final class FontesWhatsAppWebTestes: XCTestCase {
     }
 
     func testTermoDeBuscaEONomeOuONumeroDeQuemNaoTemNome() {
-        XCTAssertEqual(CampoDoWhatsApp.termo(nome: " Ana Souza ", numero: "5544984097902"), "Ana Souza")
+        XCTAssertEqual(CampoDoWhatsApp.termo(nome: " Ana Souza ", numero: "5511900000000"), "Ana Souza")
         XCTAssertEqual(CampoDoWhatsApp.termo(nome: "Louvor", numero: nil), "Louvor")
-        XCTAssertEqual(CampoDoWhatsApp.termo(nome: "Contato", numero: "5544984097902"), "5544984097902")
-        XCTAssertEqual(CampoDoWhatsApp.termo(nome: "", numero: "5544984097902"), "5544984097902")
-        XCTAssertEqual(CampoDoWhatsApp.termo(nome: "+55 44 98409-7902", numero: "5544984097902"), "5544984097902")
+        XCTAssertEqual(CampoDoWhatsApp.termo(nome: "Contato", numero: "5511900000000"), "5511900000000")
+        XCTAssertEqual(CampoDoWhatsApp.termo(nome: "", numero: "5511900000000"), "5511900000000")
+        XCTAssertEqual(CampoDoWhatsApp.termo(nome: "+55 11 90000-0000", numero: "5511900000000"), "5511900000000")
         XCTAssertNil(CampoDoWhatsApp.termo(nome: "Grupo", numero: nil))
         XCTAssertNil(CampoDoWhatsApp.termo(nome: nil, numero: "12"))
         XCTAssertNil(CampoDoWhatsApp.termo(nome: nil, numero: "55 44'; rm -rf ~; '"))
@@ -485,7 +512,7 @@ final class FontesWhatsAppWebTestes: XCTestCase {
     func testResponderFalhaDaErroEmPortugues() {
         let ex = ExecutorFalso([("open", SaidaShell(status: 1, saida: "x"))])
         let abridor = AbridorWhatsApp(origem: origem(ConfigWhatsApp(origem: "qr", navegador: nil), ex), executor: ex)
-        XCTAssertEqual(abridor.abrirConversa(numero: "5544984097902", grupo: false), .falhou(AbridorWhatsApp.erro))
+        XCTAssertEqual(abridor.abrirConversa(numero: "5511900000000", grupo: false), .falhou(AbridorWhatsApp.erro))
     }
 
 }

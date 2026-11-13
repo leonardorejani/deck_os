@@ -147,3 +147,35 @@ func TestFalhaDeRedeNaoViraSemFotoETentaDeNovo(t *testing.T) {
 	a.completar(context.Background())
 	esperar(t, time.Second, func() bool { return guardadas(a) == 1 })
 }
+
+// Falha de rede agenda a nova tentativa sozinha: sem nenhum evento de fora, a lista é refeita quando a espera vence.
+func TestFalhaDeRedeTentaDeNovoSozinha(t *testing.T) {
+	antes := esperaFalhaMin
+	esperaFalhaMin = 80 * time.Millisecond
+	defer func() { esperaFalhaMin = antes }()
+	var chamadas int32
+	a := ajudanteDeFotos(t, t.TempDir(), 1, func(ctx context.Context, id string) ([]byte, error) {
+		if atomic.AddInt32(&chamadas, 1) == 1 {
+			return nil, errors.New("timeout")
+		}
+		return []byte("jpg"), nil
+	})
+	// O laço do ajudante: toda vez que a lista é marcada como suja, ela é refeita.
+	parar := make(chan struct{})
+	defer close(parar)
+	go func() {
+		for {
+			select {
+			case <-a.sujo:
+				a.completar(context.Background())
+			case <-parar:
+				return
+			}
+		}
+	}()
+	a.completar(context.Background())
+	esperar(t, 3*time.Second, func() bool { return guardadas(a) == 1 })
+	if n := atomic.LoadInt32(&chamadas); n != 2 {
+		t.Fatalf("esperava 2 chamadas (falha e nova tentativa), foram %d", n)
+	}
+}
