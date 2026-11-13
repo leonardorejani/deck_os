@@ -485,6 +485,16 @@ final class SpotifyApiTestes: XCTestCase {
                        Array(repeating: "https://api.spotify.com/v1/me/player/next", count: 3))
     }
 
+    func testPularNaFilaComMusicaRepetidaPulaAteACopiaQueFoiTocada() {
+        let t = TransporteFalso { r in
+            if r.metodo == "GET" { return respostaJson(200, ["queue": ["X", "A", "B", "X"].map { ["name": $0, "artists": [["name": "Y"]], "uri": "u:\($0)"] }]) }
+            return respostaJson(204)
+        }
+        let (c, _) = logada(t)
+        XCTAssertNil(c.pularFila(posicao: 4, uri: "u:X"))
+        XCTAssertEqual(t.pedidos.filter { $0.metodo == "POST" }.count, 4, "toca a cópia da posição 4, não a da 1")
+    }
+
     func testPularNaFilaQueMudouNaoPulaNada() {
         let t = TransporteFalso { r in r.metodo == "GET" ? respostaJson(200, ["queue": [["name": "a", "uri": "u:a"]]]) : respostaJson(204) }
         let (c, _) = logada(t)

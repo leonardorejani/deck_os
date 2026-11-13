@@ -422,7 +422,10 @@ final class ContaSpotify: @unchecked Sendable {
     func pularFila(posicao: Int, uri: String?) -> ErroSpotify? {
         var vezes = posicao
         if let uri {
-            guard case .success(let f) = fila(limite: 50), let i = f.proximas.firstIndex(where: { $0.uri == uri }) else {
+            guard case .success(let f) = fila(limite: 50) else { return ErroSpotify(texto: "A fila mudou. Abra a fila de novo.") }
+            // A mesma música pode aparecer mais de uma vez: fica com a cópia mais perto da vez que a tela mandou.
+            let achadas = f.proximas.indices.filter { f.proximas[$0].uri == uri }
+            guard let i = achadas.min(by: { abs($0 + 1 - posicao) < abs($1 + 1 - posicao) }) else {
                 return ErroSpotify(texto: "A fila mudou. Abra a fila de novo.")
             }
             vezes = i + 1
