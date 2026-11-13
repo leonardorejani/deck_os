@@ -417,22 +417,50 @@ final class ContaSpotify: @unchecked Sendable {
         return nome
     }
 
-    /// Toca a música da fila que a pessoa escolheu, pulando as de antes dela. `posicao` é a vez dela na fila (1 é a próxima).
+    /// Quanto esperar o Spotify assentar o que está tocando antes de conferir o pulo. Os testes zeram.
+    var esperaDoPulo: TimeInterval = 0.4
+
+    /// Toca a música da fila que a pessoa escolheu, direto, sem tocar as do meio. `posicao` é a vez dela (1 é a próxima).
     /// Com `uri`, confere na fila de agora: se ela andou, acha a música onde estiver, e se sumiu, não pula nada.
+    /// Salto direto, nunca `next` em sequência (cada `next` faz a faixa do meio começar a tocar):
+    /// 1. lista ou álbum que toca: `play` com `context_uri` e `offset` na música, e a lista segue dali.
+    /// 2. música da fila manual (fora da lista), artista ou o Spotify recusou o salto: `play` com `uris`, a escolhida
+    ///    seguida das que vinham depois dela na fila. A lista de origem deixa de ser o contexto, mas a ordem da tela se mantém.
+    /// Sem `uri` não há como saltar: cai nos `next` de antes.
     func pularFila(posicao: Int, uri: String?) -> ErroSpotify? {
-        var vezes = posicao
-        if let uri {
-            guard case .success(let f) = fila(limite: 50) else { return ErroSpotify(texto: "A fila mudou. Abra a fila de novo.") }
-            // A mesma música pode aparecer mais de uma vez: fica com a cópia mais perto da vez que a tela mandou.
-            let achadas = f.proximas.indices.filter { f.proximas[$0].uri == uri }
-            guard let i = achadas.min(by: { abs($0 + 1 - posicao) < abs($1 + 1 - posicao) }) else {
-                return ErroSpotify(texto: "A fila mudou. Abra a fila de novo.")
-            }
-            vezes = i + 1
+        guard let uri else {
+            guard (1...50).contains(posicao) else { return .recusou }
+            for _ in 0..<posicao { if let e = erro(chamar("POST", "/me/player/next")) { return e } }
+            return nil
         }
-        guard (1...50).contains(vezes) else { return .recusou }
-        for _ in 0..<vezes { if let e = erro(chamar("POST", "/me/player/next")) { return e } }
-        return nil
+        guard case .success(let f) = fila(limite: 50) else { return ErroSpotify(texto: "A fila mudou. Abra a fila de novo.") }
+        // A mesma música pode aparecer mais de uma vez: fica com a cópia mais perto da vez que a tela mandou.
+        let achadas = f.proximas.indices.filter { f.proximas[$0].uri == uri }
+        guard let i = achadas.min(by: { abs($0 + 1 - posicao) < abs($1 + 1 - posicao) }) else {
+            return ErroSpotify(texto: "A fila mudou. Abra a fila de novo.")
+        }
+        guard (1...50).contains(i + 1) else { return .recusou }
+        let depois = f.proximas[i...].compactMap { $0.uri }
+        let contexto = contextoQueToca()
+        if let contexto, ["playlist", "album"].contains(contexto.split(separator: ":").dropFirst().first.map(String.init) ?? "") {
+            let r = chamar("PUT", "/me/player/play", json: ["context_uri": contexto, "offset": ["uri": uri]])
+            if case .success = r, tocaAgora(uri) { return nil }
+        }
+        return erro(chamar("PUT", "/me/player/play", json: ["uris": depois]))
+    }
+
+    private func contextoQueToca() -> String? {
+        guard case .success(let r) = chamar("GET", "/me/player") else { return nil }
+        return ((json(r) as? [String: Any])?["context"] as? [String: Any])?["uri"] as? String
+    }
+
+    /// O Spotify às vezes aceita o `play` com um offset que não é da lista e toca outra coisa. Confere o que tocou.
+    private func tocaAgora(_ uri: String) -> Bool {
+        for tentativa in 0..<3 {
+            if case .success(let j) = jogador(), j.uri == uri { return true }
+            if tentativa < 2 && esperaDoPulo > 0 { Thread.sleep(forTimeInterval: esperaDoPulo) }
+        }
+        return false
     }
 
     /// O que tocou por último, mais recente primeiro. Pede a permissão de histórico, que logins antigos não têm.

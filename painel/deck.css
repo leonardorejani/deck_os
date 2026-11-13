@@ -773,7 +773,10 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; text
 .pc-lista > .corpo { grid-row: 3 }
 .pc-lista > header { display: flex; align-items: center; gap: var(--icone); padding: var(--pad) 0 var(--item); min-height: var(--linha) }
 .pc-lista > header h2 { margin: 0; flex: 1; font-size: var(--texto-md) }
-.pc-lista .corpo { overflow: auto; overscroll-behavior: contain; scrollbar-width: none; padding: 0 0 var(--seguro-baixo) }
+/* O corpo da lista nunca rola para o lado. A folga de --item de cada lado (onde o fundo da linha sangra no toque) é do corpo, em margem e
+   padding, e o fundo que sangra é sombra (não conta na rolagem), nunca margem negativa da linha: ela virava rolagem horizontal. */
+.pc-lista { --fila-sangra: calc(-1 * var(--item)) 0 0 0 var(--superficie-2), var(--item) 0 0 0 var(--superficie-2) }
+.pc-lista .corpo, .folha.cheia .pc-lista .corpo { overflow: hidden auto; overscroll-behavior: contain; scrollbar-width: none; margin: 0 calc(-1 * var(--item)); padding: 0 var(--item) var(--seguro-baixo) }
 .pc-lista .corpo::-webkit-scrollbar { display: none }
 .vertical .pc-lista > header { padding-top: var(--seguro-cima) }
 .item-lista { display: flex; align-items: center; gap: var(--icone); width: 100%; min-height: var(--linha); padding: var(--item) 0; border: 0; border-top: 1px solid var(--borda); background: none; color: inherit; font: inherit; text-align: left }
@@ -789,13 +792,13 @@ button.item-lista:disabled { opacity: .5; cursor: default }
 .abas button[aria-selected="true"] { color: var(--texto) }
 .abas button[aria-selected="true"]::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; border-radius: var(--raio-pilula); background: var(--sucesso) }
 /* linha com capa: no toque (pressionada) ou com o mouse em cima, o fundo clareia e o play aparece sobre a capa */
-.item-lista.com-capa { padding: var(--micro-gap) var(--item); margin: 0 calc(-1 * var(--item)); width: calc(100% + 2 * var(--item)); border-top: 0; border-radius: var(--raio) }
+.item-lista.com-capa { padding: var(--micro-gap) 0; border-top: 0; border-radius: var(--raio) }
 .capa-fila { position: relative; flex: none; width: 48px; height: 48px; display: block }
 .capa-fila .capa-mini { width: 100%; height: 100%; border-radius: var(--raio-sm); object-fit: cover; background: var(--superficie-2); display: block }
 .capa-fila svg { position: absolute; inset: 0; margin: auto; width: 24px; height: 24px; color: #fff; opacity: 0; filter: drop-shadow(0 1px 3px rgba(0, 0, 0, .6)); transition: opacity var(--mov-rapido) var(--curva-move) }
-button.item-lista.com-capa:active, button.item-lista.com-capa:focus-visible { background: var(--superficie-2) }
+button.item-lista.com-capa:active, button.item-lista.com-capa:focus-visible { background: var(--superficie-2); box-shadow: var(--fila-sangra) }
 button.item-lista.com-capa:active .capa-fila svg, button.item-lista.com-capa:focus-visible .capa-fila svg { opacity: 1 }
-@media (hover: hover) { button.item-lista.com-capa:hover { background: var(--superficie-2) } button.item-lista.com-capa:hover .capa-fila svg { opacity: 1 } }
+@media (hover: hover) { button.item-lista.com-capa:hover { background: var(--superficie-2); box-shadow: var(--fila-sangra) } button.item-lista.com-capa:hover .capa-fila svg { opacity: 1 } }
 .item-lista .tag { flex: none; font-size: var(--texto-xs); color: var(--sucesso); background: var(--sucesso-suave); border-radius: var(--raio-pilula); padding: var(--micro-gap) var(--icone) }
 .volume-aparelho { padding: 0 0 var(--item) }
 .vertical .pc-corpo { padding-top: calc(var(--seguro-cima) + var(--alvo-sm)) }

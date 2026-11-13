@@ -23,6 +23,10 @@ const padrao = () => ({
   sessoes: 5,                // 0 a 12
   sessaoMuda: false,         // a primeira sessão chega com outra pergunta (ela mudou)
   whatsapp: 'normal',        // normal | vazio | muitas (30 conversas) | erro (a rota falha)
+  whatsappFotos: 0,          // quantas conversas extras com foto de perfil (para medir o pico de pedidos juntos)
+  fotoFalhaPrimeira: false,  // o 1o pedido de cada foto de perfil dá erro 500 (rede ruim)
+  abrirAtraso: 0,            // espera, em ms, antes de responder o Responder no Mac (abre a conversa pela busca da página)
+  fotoAtraso: 0,             // espera, em ms, antes de responder cada foto de perfil
   whatsappRico: false,       // lista do aparelho conectado com foto, áudio, visualização única, arquivada e conversa sem nome (precisa de whatsappOrigem 'qr')
   whatsappVersao: null,      // número: o Mac por QR dá versão à lista (?v=<versão> igual responde só {igual}). null: Mac sem versão, a lista vai sempre inteira
   whatsappExtra: false,      // chega uma conversa nova na lista (mede a velocidade com que a folha aberta a mostra)
@@ -165,6 +169,7 @@ const WHATSAPP_RICO = () => {
     { id: 'g1@g.us', nome: 'Louvor', grupo: true, naoLidas: 1, ultima: ha(30), mensagens: [{ de: 'Carla', texto: 'Ensaio confirmado', hora: ha(30) }] },
     { id: 'sn@lid', nome: '', grupo: false, naoLidas: 1, ultima: ha(40), mensagens: [M('Alguém sem nome salvo', 40)] },
     { id: 'arq@s.whatsapp.net', nome: 'Bia Arquivada', grupo: false, naoLidas: 4, ultima: ha(50), arquivada: true, mensagens: [M('Mensagem de conversa arquivada', 50)] },
+    ...Array.from({ length: c.whatsappFotos }, (_, i) => ({ id: 'f' + i + '@s.whatsapp.net', nome: 'Foto ' + (i + 1), grupo: false, naoLidas: 1, ultima: ha(60 + i), foto: i.toString(16).padStart(16, 'a') + '.jpg', mensagens: [M('Oi ' + i, 60 + i)] })),
     ...(c.whatsappExtra ? [{ id: 'novo@s.whatsapp.net', nome: 'Chegou Agora', grupo: false, naoLidas: 1, ultima: ha(0), mensagens: [M('Acabou de chegar', 0)] }] : []),
   ];
 };
@@ -498,13 +503,21 @@ async function api(req, res, url) {
   }
   if (rota === '/api/sessoes') { cont.sessoes++; return json(res, 200, SESSOES().slice(0, c.sessoes)) }
   if ((rota === '/api/whatsapp' || rota === '/api/agenda') && c.atrasoListas) await new Promise(r => setTimeout(r, c.atrasoListas));
-  if (c.whatsappRico && rota.startsWith('/api/whatsapp/foto/') && m === 'GET') { cont.fotos.push(rota.split('/').pop()); return json(res, 200, { tipo: 'image/png', dados: PNG_B64 }) }
+  if (c.whatsappRico && rota.startsWith('/api/whatsapp/foto/') && m === 'GET') {
+    const arq = rota.split('/').pop(); cont.fotos.push(arq);
+    cont.fotoAgora = (cont.fotoAgora || 0) + 1; cont.fotoPico = Math.max(cont.fotoPico || 0, cont.fotoAgora);
+    if (c.fotoAtraso) await new Promise(r => setTimeout(r, c.fotoAtraso));
+    cont.fotoAgora--;
+    if (c.fotoFalhaPrimeira && cont.fotos.filter(x => x === arq).length === 1) return json(res, 500, { erro: 'O Mac não conseguiu.' });
+    return json(res, 200, { tipo: 'image/png', dados: PNG_B64 });
+  }
   if (c.whatsappRico && rota === '/api/whatsapp/midia' && m === 'GET') {
     const id = url.searchParams.get('id'); cont.midias.push(id);
     return json(res, 200, id === 'A1' ? { tipo: 'audio/wav', dados: WAV_B64 } : { tipo: 'image/png', dados: PNG_B64 });
   }
   if (c.whatsappRico && rota === '/api/whatsapp/abrir' && m === 'POST') {
     const id = String((await lerCorpo(req)).id || ''); cont.whatsappAbertas.push(id);
+    if (c.abrirAtraso) await new Promise(r => setTimeout(r, c.abrirAtraso));
     return json(res, 200, id.endsWith('@g.us') ? { ok: true, aviso: 'Abri o WhatsApp Web. Grupo não tem link direto: procure o grupo na lista.' } : { ok: true });
   }
   if (rota === '/api/whatsapp') {

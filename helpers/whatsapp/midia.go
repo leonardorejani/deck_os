@@ -135,6 +135,13 @@ func baixarMidia(ctx context.Context, b baixador, pasta, chat string, m Msg) (ar
 	}
 	arquivo = hashCurto("midia:"+chat+":"+m.ID) + extensao(tipo)
 	caminho := filepath.Join(pasta, arquivo)
+	if m.Tipo == "foto" {
+		// A cópia reduzida (sempre JPEG) tem vez sobre a original.
+		reduzida := hashCurto("midia:"+chat+":"+m.ID) + ".jpg"
+		if info, e := os.Stat(filepath.Join(pasta, reduzida)); e == nil && info.Size() > 0 {
+			return reduzida, "image/jpeg", nil
+		}
+	}
 	if info, e := os.Stat(caminho); e == nil && info.Size() > 0 {
 		return arquivo, tipo, nil
 	}
@@ -144,6 +151,12 @@ func baixarMidia(ctx context.Context, b baixador, pasta, chat string, m Msg) (ar
 	}
 	if len(dados) > limiteMidia {
 		return "", "", errors.New("Arquivo grande demais para abrir aqui.")
+	}
+	if m.Tipo == "foto" {
+		if menor := reduzirFoto(dados); len(menor) < len(dados) {
+			dados, tipo = menor, "image/jpeg"
+			arquivo = hashCurto("midia:"+chat+":"+m.ID) + ".jpg"
+		}
 	}
 	if e := guardarArquivo(pasta, arquivo, dados); e != nil {
 		return "", "", errors.New("Não consegui guardar o arquivo.")

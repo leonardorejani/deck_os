@@ -203,7 +203,8 @@ function horaDoEvento(ev) {
 }
 /* Tecla de comando que o Mac está rodando solto (o comando demora: troca de apps, foco...). `andamento` do estado traz a fase de cada
    uma: ligando, desligando, rodando, ou falhou (por uns 30 s, com o motivo). O toque responde na hora e a tecla mostra o que acontece. */
-const faseDaTecla = id => { const f = estado?.andamento?.[id]?.fase; return f === 'ligando' || f === 'desligando' || f === 'rodando' ? f : null };
+const fasesLocais = {};  // tecla de comando tocada que o Mac ainda não respondeu: o "Ligando..." vem do próprio toque, a tecla não finge estar ligada
+const faseDaTecla = id => { const f = estado?.andamento?.[id]?.fase || fasesLocais[id]; return f === 'ligando' || f === 'desligando' || f === 'rodando' ? f : null };
 const rodandoSolto = id => !!faseDaTecla(id);
 const TEXTO_DA_FASE = { ligando: 'Ligando...', desligando: 'Desligando...', rodando: 'Rodando...' };
 // falha de comando solto: avisa uma vez por falha (o Mac guarda a falha por uns 30 s no estado)
@@ -497,10 +498,18 @@ async function executar(id) {
   // resposta otimista: a tecla acende (ou pisca) e o aviso aparece no toque. Se o Mac recusar, volta e o aviso vira o erro
   const el = $(`.tecla[data-id="${CSS.escape(id)}"]`), quer = !V.acesas.includes(id);
   el?.classList.add('piscando'); setTimeout(() => el?.classList.remove('piscando'), 400);
-  if (acendeTecla(t)) { otmTeclas[id] = { acesa: quer, ate: performance.now() + JANELA_OTM }; V = vistaReal(); atualizar(); avisar(`${t.nome}: ${quer ? 'ligado' : 'desligado'}`) }
+  if (t.tipo === 'comando') { fasesLocais[id] = t.desligar ? (quer ? 'ligando' : 'desligando') : 'rodando'; V = vistaReal(); atualizar() } // sem palpite: acende e avisa só depois de o Mac responder
+  else if (acendeTecla(t)) { otmTeclas[id] = { acesa: quer, ate: performance.now() + JANELA_OTM }; V = vistaReal(); atualizar(); avisar(`${t.nome}: ${quer ? 'ligado' : 'desligado'}`) }
   else avisar(t.tipo === 'app' && !itemDeReuniao(t) ? `Abrindo ${t.nome} no Mac` : `${t.nome}: feito`);
-  try { await canal.botao(id); atualizarJa() }
-  catch (e) { delete otmTeclas[id]; el?.classList.remove('piscando'); if (V) { V = vistaReal(); atualizar() } tratarErro(e) }
+  try {
+    await canal.botao(id);
+    if (t.tipo === 'comando') {
+      await atualizarJa(); delete fasesLocais[id];
+      if (rodandoSolto(id)) { V = vistaReal(); atualizar() } // o Mac disse que está rodando: vale o "Ligando..." dele
+      else { if (acendeTecla(t)) otmTeclas[id] = { acesa: quer, ate: performance.now() + JANELA_OTM }; V = vistaReal(); atualizar(); avisar(acendeTecla(t) ? `${t.nome}: ${quer ? 'ligado' : 'desligado'}` : `${t.nome}: feito`) }
+    } else atualizarJa();
+  }
+  catch (e) { delete otmTeclas[id]; delete fasesLocais[id]; el?.classList.remove('piscando'); if (V) { V = vistaReal(); atualizar() } tratarErro(e) }
   finally { ocupadas.delete(id) }
 }
 /* Spotify: um comando de cada vez, na ordem do toque (dois pedidos soltos podem chegar trocados ao Mac) */

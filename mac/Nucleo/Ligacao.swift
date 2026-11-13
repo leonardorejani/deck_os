@@ -28,7 +28,7 @@ struct PaineisReais: ProvedorPaineis {
         guard let abridorWhatsApp else { return .falhou("Não consegui abrir a conversa.") }
         // O id vem do iPhone, mas só vale o que está na lista de agora: o número sai da conversa, nunca do pedido.
         guard let c = agregador.conversasWhatsApp().first(where: { $0.id == id }) else { return .falhou("Não achei essa conversa. Abra a lista de novo.") }
-        return abridorWhatsApp.abrirConversa(numero: c.numero, grupo: c.grupo)
+        return abridorWhatsApp.abrirConversa(numero: c.numero, grupo: c.grupo, nome: c.nome)
     }
     func sessoes() -> [Sessao] { agregador.sessoes() }
 
@@ -257,7 +257,7 @@ enum Ligacao {
         let casa = URL(fileURLWithPath: NSHomeDirectory())
         let gastoDeTokens = GastoTokens(raizClaude: casa.appendingPathComponent(".claude/projects"), raizCodex: casa.appendingPathComponent(".codex/sessions"),
                                         pastaDeCache: Variante.atual.pastaDeDados())
-        let abridor = AbridorWhatsApp(origem: origemWhats, executor: executor)
+        let abridor = AbridorWhatsApp(origem: origemWhats, executor: executor, busca: BuscaPadrao.para(executor))
         return Roteador(
             paineis: PaineisReais(armazem: armazem, agregador: agregador, agenda: agenda, ponteQR: ponteQR, abridorWhatsApp: abridor, gasto: gastoDeTokens),
             teclas: ExecutorAcoes(shell: executor, whatsappWeb: { abridor.abrir() }), spotify: SpotifyReal(executor: executor, conta: contaSpotify, complemento: complemento),

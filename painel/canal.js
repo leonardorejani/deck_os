@@ -106,7 +106,7 @@ function criarCanalHttps() {
     whatsapp: versao => pedir('GET', '/api/whatsapp' + (versao != null ? '?v=' + encodeURIComponent(versao) : ''), undefined, TEMPO_WHATSAPP),
     whatsappFoto: arquivo => pedir('GET', '/api/whatsapp/foto/' + encodeURIComponent(arquivo)),
     whatsappMidia: (chat, id) => pedir('GET', `/api/whatsapp/midia?chat=${encodeURIComponent(chat)}&id=${encodeURIComponent(id)}`, undefined, 45000), // o Mac baixa da internet antes de responder
-    abrirConversa: id => pedir('POST', '/api/whatsapp/abrir', { id }),
+    abrirConversa: id => pedir('POST', '/api/whatsapp/abrir', { id }, AJUSTES.tempoLimite * 6), // o Mac traz a aba, acha a busca e digita (e, sem aba, espera o navegador e a página abrirem): passa de 5 s
     agenda: (de, dias) => pedir('GET', `/api/agenda?de=${encodeURIComponent(de)}&dias=${encodeURIComponent(dias)}`),
     sessoes: () => pedir('GET', '/api/sessoes'),
     usoDetalhe: periodo => pedir('GET', '/api/uso/detalhe?periodo=' + encodeURIComponent(periodo)),

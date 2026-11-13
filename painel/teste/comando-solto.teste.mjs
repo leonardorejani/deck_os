@@ -45,4 +45,23 @@ export default async function (h) {
   h.ok(await h.espera(q, () => document.querySelector('.tecla[data-id="apagar"] .estado-tecla.andando')?.textContent === 'Rodando...'), 'tecla de comando comum e lenta mostra "Rodando..."');
   h.ok(await h.espera(q, () => !document.querySelector('.tecla[data-id="apagar"] .estado-tecla.andando'), null, 8000), 'e o "Rodando..." some ao terminar');
   await q.context().close();
+
+  // Mac que demora a responder o toque (cerca de 2 s): a tecla não acende nem avisa "ligado" ou "feito" antes da resposta
+  for (const [id, cfg, texto] of [['foco', { comFoco: true, acesas: [], comandoLento: 4000 }, 'Ligando...'], ['apagar', { acesas: [], comandoLento: 4000 }, 'Rodando...']]) {
+    await h.reset(); await h.cenario(cfg);
+    const r = await h.pagina({ w: 2000, h: 1100 }); await pronta(h, r);
+    await r.route(/api\/botao/, async rota => { const resp = await rota.fetch(); await new Promise(s => setTimeout(s, 2000)); rota.fulfill({ response: resp }) });
+    await r.evaluate(i => document.querySelector(`.tecla[data-id="${i}"]`).click(), id);
+    let acendeuAntes = false, avisouAntes = '';
+    const ini = Date.now();
+    while (Date.now() - ini < 1800) {
+      const s = await r.evaluate(i => ({ a: document.querySelector(`.tecla[data-id="${i}"]`).classList.contains('acesa'), v: document.querySelector('#aviso').classList.contains('visivel') ? document.querySelector('#aviso-txt').textContent : '' }), id);
+      if (s.a) acendeuAntes = true; if (/ligado|feito|desligado/.test(s.v)) avisouAntes = s.v;
+      await h.dormir(60);
+    }
+    h.ok(!acendeuAntes, `${id}: a tecla não acende antes de o Mac responder o toque`);
+    h.ok(!avisouAntes, `${id}: nenhum aviso de ligado ou feito antes de o Mac responder (${avisouAntes})`);
+    h.ok((await tecla(r, id)).texto === texto, `${id}: o "${texto}" aparece no toque`);
+    await r.context().close();
+  }
 }
