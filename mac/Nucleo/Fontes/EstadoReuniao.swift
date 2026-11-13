@@ -263,17 +263,21 @@ struct LeitorDeReuniao: Sendable {
 
     func lerMeet(_ navegadores: [NavegadorWeb]) -> LeituraDeReuniao {
         // Primeiro a Acessibilidade (não pede nada ao usuário). O JavaScript do navegador fica de reserva.
-        if let sala = salaDoMeet(navegadores) { return sala.leitura }
+        let sala = salaDoMeet(navegadores)
+        if let sala, !sala.somenteAba { return sala.leitura }
         var problema: LeituraDeReuniao?
         for n in navegadores {
             switch LeituraDeMeet.ler(n, executor: executor) {
             case .fechado, .semSala, .falhou: continue
-            case .sala(let l): return l
+            case .sala(let l):
+                if sala != nil, l.microfone == .desconhecido, l.camera == .desconhecido { continue }
+                return l
             case .javascriptDesligado: problema = problema ?? .desconhecida(LeituraDeMeet.avisoJavascript)
             case .semPermissao: problema = problema ?? .desconhecida(LeituraDeMeet.avisoPermissao(n.nome))
             }
         }
-        return problema ?? .nenhuma
+        // Só se achou o título da aba da reunião: há reunião, o estado não dá para ler.
+        return problema ?? (sala != nil ? .desconhecida() : .nenhuma)
     }
 
     private func lerApp(_ processos: [String]) -> LeituraDeReuniao {

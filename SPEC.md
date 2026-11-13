@@ -1289,6 +1289,21 @@ como "Não consegui ler". Isso revisa o descarte da Acessibilidade acima: o Chro
 AXEnhancedUserInterface ligado (o AXManualAccessibility ele recusa, provado em 13/11/2026), então o Deck liga esse modo no
 navegador na primeira leitura e a leitura tem limite de nós e de tempo. Rotas: `GET /api/meet` e `POST /api/meet/entrar|microfone|camera|sair`.
 
+Meet em Picture-in-Picture e em aba de fundo (13/11/2026). Palavras dele: "não tá identificando a chamada aberta no meet", com o Meet
+numa janelinha flutuante e a aba da reunião atrás da do Deck, e a tela dizendo "Nenhuma reunião aberta". O Mac agora olha todas as
+janelas de todos os processos do navegador, não só a aba da frente. A janelinha flutuante (que o Chrome mostra como janela sem barra
+de abas, provado em 13/11/2026 com um Document Picture-in-Picture de teste) dá o estado do microfone e da câmera e recebe o toque
+em microfone, câmera e sair. Sem janelinha, o título da aba na barra de abas ("Meet: abc-defg-hij") já diz que há reunião, sem
+precisar da Automação: a tela mostra "Reunião aberta" com o estado desconhecido, e só quando ele toca em microfone, câmera, sair ou
+entrar o Deck seleciona a aba pela Acessibilidade e aperta o botão. Antes de dizer que não há reunião o Deck confere todos os
+processos com o nome do navegador, porque pode haver mais de um.
+
+Meet depois de sair e Entrar no Meet com a chamada na janelinha (13/11/2026). Palavras dele: "porque parou?!!!!!", cobrando prova de
+verdade. Ao sair da chamada a aba fica na tela "Você saiu da reunião" com o título da sala, mas sem reunião: o Deck reconhece essa
+tela pelos botões "Entrar novamente" e "Voltar à tela inicial" e volta a dizer "Nenhuma reunião aberta". Com a chamada só na
+janelinha e sem a permissão de Automação, "Entrar no Meet" seleciona pela Acessibilidade a aba da sala que está na janela principal
+e, se não houver aba, abre o Meet como antes, nunca responde sucesso sem ter feito nada.
+
 Bluetooth no sentido invertido (12/11/2026). O iPhone achava o Mac, mas toda conexão pelo Bluetooth falhava na cifragem do
 sistema (CBError 15 no iPhone). O log do bluetoothd do Mac mostrou a causa: com o iPhone e o Mac na mesma conta do iCloud, toda
 conexão LE entre eles passa pelo Fast LE Connection do macOS, que falhava a cifragem com o Mac periférico ("Failed to encrypt

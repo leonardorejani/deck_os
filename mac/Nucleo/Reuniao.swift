@@ -192,6 +192,12 @@ extension ExecutorAcoes {
         for n in navegadores {
             guard case .sala(let sala) = LeitorDeMeetAX.ler(n, executor: shell, ax: ax, confiavel: temAcessibilidade()) else { continue }
             if LeitorDeMeetAX.apertar(sala, pedido, executor: shell, ax: ax) { return true }
+            // Reunião só com a aba (atrás de outra, sem janela flutuante): a pessoa agiu, então seleciona a aba pela
+            // Acessibilidade (sem Automação) e aperta o botão que aparece.
+            guard sala.somenteAba, LeitorDeMeetAX.trazerAba(sala, ax: ax) else { continue }
+            _ = shell.rodar(Self.esperaDoFoco)
+            guard case .sala(let agora) = LeitorDeMeetAX.ler(n, executor: shell, ax: ax, confiavel: temAcessibilidade()), !agora.somenteAba else { continue }
+            if LeitorDeMeetAX.apertar(agora, pedido, executor: shell, ax: ax) { return true }
         }
         return false
     }

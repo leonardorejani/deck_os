@@ -39,6 +39,7 @@ struct MeetReal: MeetDoMac {
 
     static let endereco = "https://meet.google.com"
     static let semAcessibilidade = "O Deck precisa do acesso de Acessibilidade para controlar o Meet. Libere em Ajustes do Mac, Privacidade e Segurança, Acessibilidade."
+    static let avisoSoAba = "A reunião está aberta em outra aba. Abra a janelinha flutuante do Meet ou deixe a aba na frente para o Deck ler o microfone e a câmera."
     static let naoAchouAChamada = "Não achei a chamada do Meet na frente do navegador. Deixe a aba da reunião na frente e tente de novo."
 
     private var leitor: LeitorDeReuniao {
@@ -47,9 +48,13 @@ struct MeetReal: MeetDoMac {
 
     func estado() -> EstadoMeet {
         let l = leitor
-        if let sala = l.salaDoMeet(NavegadorWeb.todos) {
+        let sala = l.salaDoMeet(NavegadorWeb.todos)
+        if let sala, !sala.somenteAba {
             return EstadoMeet(aberta: true, naChamada: sala.naChamada, microfone: sala.microfone, camera: sala.camera)
         }
+        // A reunião existe (achada pelo título da aba) mas está atrás de outra aba e sem janela flutuante: se o JavaScript do
+        // navegador deixar ler, melhor, senão fica "Reunião aberta" com o estado desconhecido, sem trazer nada para a frente.
+        let soAba = EstadoMeet(aberta: true, naChamada: nil, microfone: .desconhecido, camera: .desconhecido, aviso: Self.avisoSoAba)
         // Reserva: a aba da sala por JavaScript. Também dá "?" quando a sala existe e não dá para ler. Sem a permissão de
         // Automação não se sabe se há sala: não é motivo para dizer "Reunião aberta" nem para avisar, a Acessibilidade é o caminho.
         var javascriptDesligado = false
@@ -57,11 +62,13 @@ struct MeetReal: MeetDoMac {
             switch LeituraDeMeet.ler(n, executor: executor) {
             case .sala(let r):
                 guard r.microfone != .semReuniao || r.camera != .semReuniao else { continue }
+                if sala != nil, r.microfone == .desconhecido, r.camera == .desconhecido { continue }
                 return EstadoMeet(aberta: true, naChamada: nil, microfone: r.microfone, camera: r.camera, aviso: r.aviso?.texto)
             case .javascriptDesligado: javascriptDesligado = true
             case .fechado, .semSala, .falhou, .semPermissao: continue
             }
         }
+        if sala != nil { return soAba }
         guard javascriptDesligado else { return .semReuniao }
         return EstadoMeet(aberta: true, naChamada: nil, microfone: .desconhecido, camera: .desconhecido, aviso: LeituraDeMeet.avisoJavascript.texto)
     }
@@ -78,6 +85,16 @@ struct MeetReal: MeetDoMac {
     /// Traz a aba da reunião para a frente, ou abre o Meet no navegador padrão quando não há reunião aberta.
     private func entrar() -> String? {
         if acoes.trazerSalaDoMeet() == nil { return nil }
+        // Sem a Automação do navegador o AppleScript não acha a aba: a Acessibilidade acha pelo título e seleciona a aba, para
+        // "Entrar no Meet" nunca abrir uma segunda aba por cima de uma reunião aberta.
+        if let ax = acoes.ax, acoes.temAcessibilidade() {
+            for n in NavegadorWeb.todos {
+                guard case .sala(let sala) = LeitorDeMeetAX.ler(n, executor: executor, ax: ax, confiavel: true) else { continue }
+                if sala.somenteAba { if LeitorDeMeetAX.trazerAba(sala, ax: ax) { return nil } }
+                else if sala.flutuante { if LeitorDeMeetAX.trazerAbaDaJanelaFlutuante(sala, ax: ax) { return nil } }
+                else { return nil } // a chamada já está na aba da frente da janela dela
+            }
+        }
         return executor.rodar("open \(ExecutorAcoes.escapar(Self.endereco))").status == 0 ? nil : "Não consegui abrir o Meet no navegador"
     }
 
