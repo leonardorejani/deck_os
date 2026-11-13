@@ -691,6 +691,9 @@ async function salvarCompromisso() {
 }
 $('#ca-form').addEventListener('submit', e => { e.preventDefault(); salvarCompromisso() });
 $('#ca-form').addEventListener('click', e => {
+  // o campo nativo está invisível por cima do texto nosso: no Chrome do desktop o clique cai nos segmentos e o seletor não abre, então abre na mão
+  const campo = e.target.closest('.nc-data');
+  if (campo) { const i = campo.querySelector('input'); if (i && !i.disabled && i.showPicker) { try { i.showPicker() } catch {} } }
   if (e.target.closest('[data-nc-cancelar]')) return fecharFormNovo();
 });
 for (const i of ['#nc-dia', '#nc-inicio', '#nc-fim']) { $(i).addEventListener('input', pintarValoresNovo); $(i).addEventListener('change', pintarValoresNovo) }
