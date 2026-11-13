@@ -14,6 +14,8 @@ struct PaineisReais: ProvedorPaineis {
 
     func estado() -> Estado { agregador.estado(config: armazem.ler()) }
     func whatsapp() -> [ConversaWhatsApp] { agregador.conversasWhatsApp() }
+    /// Só a origem QR tem lista com versão: nas outras o conteúdo muda sem a versão mudar.
+    func versaoWhatsApp() -> Int? { armazem.ler().whatsapp.origem == "qr" ? ponteQR?.versao : nil }
     func fotoWhatsApp(arquivo: String) -> MidiaBaixada? { ponteQR?.foto(arquivo: arquivo) }
     func midiaWhatsApp(chat: String, id: String) -> ResultadoMidia {
         guard let ponteQR else { return .erro("O WhatsApp por QR não está ligado.") }

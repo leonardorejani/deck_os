@@ -1062,3 +1062,14 @@ final class PlanoDoPerifericoTestes: XCTestCase {
         XCTAssertEqual(p.proxima(ligado: true, anunciando: true, agora: t0.addingTimeInterval(60)), [], "já anunciando")
     }
 }
+
+final class PrazoBluetoothTestes: XCTestCase {
+    /// A página espera 25 s pela lista do WhatsApp (ponte.js). Com os 10 s do cabo o pedido estourava antes, mesmo com o Mac ainda enviando.
+    func testConexaoBluetoothEsperaMaisQueOCaboEQueAPagina() {
+        let (a, _) = FluxoEnlace.par()
+        let c = ConexaoCabo.bluetooth(fluxo: a)
+        XCTAssertGreaterThanOrEqual(c.prazoDoPedido, 25)
+        XCTAssertGreaterThan(c.prazoDoPedido, ConexaoCabo.prazoDoPedidoPadrao)
+        XCTAssertTrue(c.autenticada)
+    }
+}
