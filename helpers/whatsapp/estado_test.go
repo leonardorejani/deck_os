@@ -106,3 +106,82 @@ func TestArquivadaSegueNaListaMarcadaEMidiaNaoVazaReferencia(t *testing.T) {
 		t.Fatal("desarquivar")
 	}
 }
+
+// Arquivada, depois chega mensagem nova: com "manter arquivadas" desligado (padrão), o WhatsApp desarquiva no
+// celular sem avisar pelo app state. O Deck tem de contar a conversa em Todas, não como arquivada.
+func TestMensagemNovaDesarquivaQuandoNaoMantem(t *testing.T) {
+	e := NovoEstado("")
+	e.ArquivarEm("a", true, t0)
+	e.Recebida("a", "Ana", false, Msg{Texto: "oi", Hora: "h"}, t0.Add(time.Hour))
+	if l := e.Lista(); len(l) != 1 || l[0].Arquivada {
+		t.Fatalf("mensagem nova depois de arquivar tem de desarquivar: %+v", l)
+	}
+}
+
+// Arquivar depois da última mensagem segue valendo (a ação é mais nova que a mensagem).
+func TestArquivadaDepoisDaMensagemContinuaArquivada(t *testing.T) {
+	e := NovoEstado("")
+	e.Recebida("a", "Ana", false, Msg{Texto: "oi", Hora: "h"}, t0)
+	e.ArquivarEm("a", true, t0.Add(time.Hour))
+	if l := e.Lista(); !l[0].Arquivada {
+		t.Fatal("ação mais nova que a mensagem tem de manter arquivada")
+	}
+}
+
+// Com "manter arquivadas" ligado, mensagem nova não desarquiva. A ordem dos eventos não importa.
+func TestManterArquivadasLigadoNaoDesarquiva(t *testing.T) {
+	e := NovoEstado("")
+	e.ArquivarEm("a", true, t0)
+	e.Recebida("a", "Ana", false, Msg{Texto: "oi", Hora: "h"}, t0.Add(time.Hour))
+	e.ManterArquivadas(true)
+	if l := e.Lista(); !l[0].Arquivada {
+		t.Fatal("com manter ligado a conversa fica arquivada")
+	}
+	e.ManterArquivadas(false)
+	if l := e.Lista(); l[0].Arquivada {
+		t.Fatal("desligando o ajuste a mensagem nova volta a desarquivar")
+	}
+}
+
+// Estado já gravado pelo formato antigo (lista de ids, sem instante): conversa com não lidas se conserta sozinha
+// no próximo início, e conversa arquivada sem não lidas continua arquivada.
+func TestMarcaAntigaComNaoLidasSeConsertaNoInicio(t *testing.T) {
+	dir := t.TempDir()
+	arq := filepath.Join(dir, "conversas.json")
+	conv := `[{"id":"a","nome":"Ana","naoLidas":2,"ultima":"2026-11-13T10:00:00Z","arquivada":true,"mensagens":[{"texto":"x","hora":"h"},{"texto":"y","hora":"h"}]}]`
+	if err := os.WriteFile(arq, []byte(conv), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(arq+".arquivadas", []byte(`["a","b"]`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	e := NovoEstado(arq)
+	if l := e.Lista(); len(l) != 1 || l[0].Arquivada {
+		t.Fatalf("a marca antiga com não lidas tinha de cair: %+v", l)
+	}
+	e.Recebida("b", "Bia", false, Msg{Texto: "oi", Hora: "h"}, t0)
+	if l := e.Lista(); len(l) != 2 {
+		t.Fatalf("lista: %+v", l)
+	}
+	if err := e.Salvar(); err != nil {
+		t.Fatal(err)
+	}
+	if l := NovoEstado(arq).Lista(); len(l) != 2 {
+		t.Fatalf("recarga: %+v", l)
+	}
+}
+
+// Ajuste e instantes sobrevivem ao reinício.
+func TestAjusteEInstantePersistem(t *testing.T) {
+	arq := filepath.Join(t.TempDir(), "conversas.json")
+	e := NovoEstado(arq)
+	e.ManterArquivadas(true)
+	e.ArquivarEm("a", true, t0)
+	e.Recebida("a", "Ana", false, Msg{Texto: "oi", Hora: "h"}, t0.Add(time.Hour))
+	if err := e.Salvar(); err != nil {
+		t.Fatal(err)
+	}
+	if l := NovoEstado(arq).Lista(); len(l) != 1 || !l[0].Arquivada {
+		t.Fatalf("manter ligado tem de sobreviver: %+v", l)
+	}
+}

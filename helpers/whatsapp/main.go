@@ -22,6 +22,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"math"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -332,6 +333,16 @@ func (a *ajudante) tratar(ctx context.Context, ev any) {
 		_ = os.RemoveAll(filepath.Join(a.pasta, "midia"))
 		a.marcarSujo()
 		fase("erro", "O aparelho foi desconectado pelo WhatsApp. Gere um QR novo.")
+	case *events.UnarchiveChatsSetting:
+		if e.Action != nil {
+			a.estado.ManterArquivadas(!e.Action.GetUnarchiveChats())
+			a.marcarSujo()
+		}
+	case *events.Mute:
+		if e.Action != nil {
+			a.estado.Silenciar(e.JID.String(), fimDoSilencio(e.Action.GetMuted(), e.Action.GetMuteEndTimestamp()))
+			a.marcarSujo()
+		}
 	case *events.StreamReplaced:
 		fase("erro", "Outro programa tomou o lugar do Deck nesta conexão.")
 	case *events.Message:
@@ -340,7 +351,7 @@ func (a *ajudante) tratar(ctx context.Context, ev any) {
 		a.historico(ctx, e)
 	case *events.Archive:
 		if e.Action != nil {
-			a.estado.Arquivar(e.JID.String(), e.Action.GetArchived())
+			a.estado.ArquivarEm(e.JID.String(), e.Action.GetArchived(), e.Timestamp)
 			a.marcarSujo()
 		}
 	case *events.PushName, *events.Contact:
@@ -410,7 +421,7 @@ func (a *ajudante) sincronizarArquivadas(ctx context.Context) {
 	if a.cli == nil || a.pasta == "" {
 		return
 	}
-	marca := filepath.Join(a.pasta, "arquivadas-sincronizadas")
+	marca := filepath.Join(a.pasta, "arquivadas-sincronizadas-2")
 	if _, err := os.Stat(marca); err == nil {
 		return
 	}
@@ -431,6 +442,21 @@ func (a *ajudante) sincronizarArquivadas(ctx context.Context) {
 			a.marcarSujo()
 		}
 	}()
+}
+
+// fimDoSilencio converte o fim do silêncio do WhatsApp (segundos, ms, ou -1 para sempre) em unix ms.
+// Zero quer dizer sem silêncio.
+func fimDoSilencio(silenciada bool, fim int64) int64 {
+	if !silenciada {
+		return 0
+	}
+	if fim <= 0 || fim > math.MaxInt64/1000 {
+		return math.MaxInt64
+	}
+	if fim < 100_000_000_000 {
+		return fim * 1000
+	}
+	return fim
 }
 
 func (a *ajudante) historico(ctx context.Context, e *events.HistorySync) {
@@ -466,8 +492,10 @@ func (a *ajudante) historico(ctx context.Context, e *events.HistorySync) {
 		a.estado.Numero(j.String(), numero)
 		// Arquivada: fica fora de Todas, Contatos e Grupos e só aparece no filtro Arquivadas. Histórico sem o campo
 		// não diz nada (não desarquiva).
+		a.estado.Silenciar(j.String(), fimDoSilencio(c.GetMuteEndTime() > 0, int64(c.GetMuteEndTime())))
 		if c.Archived != nil {
-			a.estado.Arquivar(j.String(), c.GetArchived())
+			ultima := time.Unix(int64(c.GetConversationTimestamp()), 0)
+			a.estado.ArquivarEm(j.String(), c.GetArchived(), ultima)
 		}
 	}
 	a.marcarSujo()

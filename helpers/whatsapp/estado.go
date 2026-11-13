@@ -52,20 +52,44 @@ type Estado struct {
 	arquivo   string
 	// arquivadas lembra quais conversas o WhatsApp arquivou, mesmo as sem não lidas (que não vão para o conversas.json).
 	// Sem isso, a mensagem nova de uma arquivada nascia como conversa comum e furava Todas e o total.
-	arquivadas    map[string]bool
+	// O valor é o instante (unix ms) em que o WhatsApp arquivou, ou 0 quando só se sabe que está arquivada (marca antiga).
+	arquivadas    map[string]int64
 	gravadasAntes []byte
+	// manterArquivadas é o ajuste "Manter conversas arquivadas" do WhatsApp. Desligado (o padrão), mensagem nova
+	// desarquiva a conversa no celular sem mandar nada pelo app state, então o Deck tem de fazer o mesmo.
+	manterArquivadas bool
+	// silenciadas guarda até quando (unix ms) cada conversa está silenciada. Arquivada e silenciada continua
+	// arquivada com mensagem nova, mesmo com "manter arquivadas" desligado.
+	silenciadas map[string]int64
+}
+
+// arqFormato é o que vai em conversas.json.arquivadas. Antes era só a lista de ids (ainda se lê).
+type arqFormato struct {
+	Ids              map[string]int64 `json:"ids"`
+	ManterArquivadas bool             `json:"manterArquivadas,omitempty"`
+	Silenciadas      map[string]int64 `json:"silenciadas,omitempty"`
 }
 
 func NovoEstado(arquivo string) *Estado {
-	e := &Estado{conversas: map[string]*Conversa{}, arquivo: arquivo, arquivadas: map[string]bool{}}
+	e := &Estado{conversas: map[string]*Conversa{}, arquivo: arquivo, arquivadas: map[string]int64{}, silenciadas: map[string]int64{}}
 	if arquivo == "" {
 		return e
 	}
 	if b, err := os.ReadFile(arquivo + ".arquivadas"); err == nil {
 		var ids []string
+		var f arqFormato
 		if json.Unmarshal(b, &ids) == nil {
 			for _, id := range ids {
-				e.arquivadas[id] = true
+				e.arquivadas[id] = 0
+			}
+			e.gravadasAntes = b
+		} else if json.Unmarshal(b, &f) == nil {
+			for id, ts := range f.Ids {
+				e.arquivadas[id] = ts
+			}
+			e.manterArquivadas = f.ManterArquivadas
+			for id, ate := range f.Silenciadas {
+				e.silenciadas[id] = ate
 			}
 			e.gravadasAntes = b
 		}
@@ -75,8 +99,8 @@ func NovoEstado(arquivo string) *Estado {
 		if json.Unmarshal(b, &lista) == nil {
 			for _, c := range lista {
 				e.conversas[c.ID] = c
-				if c.Arquivada {
-					e.arquivadas[c.ID] = true
+				if _, ok := e.arquivadas[c.ID]; !ok && c.Arquivada {
+					e.arquivadas[c.ID] = 0
 				}
 			}
 		}
@@ -86,6 +110,15 @@ func NovoEstado(arquivo string) *Estado {
 
 func hora(t time.Time) string { return t.UTC().Format(time.RFC3339) }
 
+// maisNova devolve o instante mais recente entre o já gravado e o novo. Mensagem fora de ordem ou histórico
+// atrasado não fazem a Ultima voltar no tempo (isso reabriria a conta de arquivada).
+func maisNova(atual string, novo time.Time) string {
+	if t, err := time.Parse(time.RFC3339, atual); err == nil && t.After(novo.UTC().Truncate(time.Second)) {
+		return atual
+	}
+	return hora(novo)
+}
+
 // Historico aplica uma conversa vinda da sincronização de histórico: o total de não lidas é o do WhatsApp.
 func (e *Estado) Historico(id, nome string, grupo bool, naoLidas int, ultima time.Time, msgs []Msg) {
 	e.mu.Lock()
@@ -93,7 +126,7 @@ func (e *Estado) Historico(id, nome string, grupo bool, naoLidas int, ultima tim
 	c := e.obter(id, nome, grupo)
 	c.NaoLidas = naoLidas
 	if !ultima.IsZero() {
-		c.Ultima = hora(ultima)
+		c.Ultima = maisNova(c.Ultima, ultima)
 	}
 	if len(msgs) > 0 {
 		c.Mensagens = aparar(msgs)
@@ -106,7 +139,7 @@ func (e *Estado) Recebida(id, nome string, grupo bool, m Msg, quando time.Time) 
 	defer e.mu.Unlock()
 	c := e.obter(id, nome, grupo)
 	c.NaoLidas++
-	c.Ultima = hora(quando)
+	c.Ultima = maisNova(c.Ultima, quando)
 	c.Mensagens = aparar(append(c.Mensagens, m))
 }
 
@@ -116,7 +149,7 @@ func (e *Estado) Enviada(id string, quando time.Time) {
 	defer e.mu.Unlock()
 	if c, ok := e.conversas[id]; ok {
 		c.NaoLidas = 0
-		c.Ultima = hora(quando)
+		c.Ultima = maisNova(c.Ultima, quando)
 	}
 }
 
@@ -154,7 +187,9 @@ func (e *Estado) Nome(id, nome string) {
 func (e *Estado) Limpar() {
 	e.mu.Lock()
 	e.conversas = map[string]*Conversa{}
-	e.arquivadas = map[string]bool{}
+	e.arquivadas = map[string]int64{}
+	e.manterArquivadas = false
+	e.silenciadas = map[string]int64{}
 	e.gravadasAntes = nil
 	e.mu.Unlock()
 	if e.arquivo != "" {
@@ -172,7 +207,7 @@ func (e *Estado) Remover(id string) {
 func (e *Estado) obter(id, nome string, grupo bool) *Conversa {
 	c, ok := e.conversas[id]
 	if !ok {
-		c = &Conversa{ID: id, Arquivada: e.arquivadas[id]}
+		c = &Conversa{ID: id}
 		e.conversas[id] = c
 	}
 	if nome != "" {
@@ -214,6 +249,7 @@ func (e *Estado) Lista() []Conversa {
 			continue
 		}
 		cp := soNaoLidas(c)
+		cp.Arquivada = e.arquivadaAgora(c)
 		if strings.TrimSpace(cp.Nome) == "" {
 			cp.Nome = formatarNumero(cp.Numero)
 		}
@@ -236,16 +272,17 @@ func (e *Estado) Salvar() error {
 	lista := make([]Conversa, 0, len(e.conversas))
 	for _, c := range e.conversas {
 		if c.NaoLidas > 0 {
-			lista = append(lista, soNaoLidas(c))
+			cp := soNaoLidas(c)
+			cp.Arquivada = e.arquivadaAgora(c)
+			lista = append(lista, cp)
 		}
 	}
 	b, err := json.Marshal(lista)
-	ids := make([]string, 0, len(e.arquivadas))
-	for id := range e.arquivadas {
-		ids = append(ids, id)
+	ids := make(map[string]int64, len(e.arquivadas))
+	for id, ts := range e.arquivadas {
+		ids[id] = ts
 	}
-	sort.Strings(ids)
-	arq, errArq := json.Marshal(ids)
+	arq, errArq := json.Marshal(arqFormato{Ids: ids, ManterArquivadas: e.manterArquivadas, Silenciadas: e.silenciadas})
 	igual := bytes.Equal(arq, e.gravadasAntes)
 	e.mu.Unlock()
 	if err != nil {
@@ -265,20 +302,60 @@ func (e *Estado) Salvar() error {
 	return os.Rename(tmp, e.arquivo)
 }
 
-// Arquivar marca ou desmarca a conversa como arquivada (o WhatsApp avisa por evento).
-func (e *Estado) Arquivar(id string, sim bool) {
+// Arquivar marca ou desmarca a conversa como arquivada, no instante do aviso do WhatsApp (zero = agora).
+func (e *Estado) Arquivar(id string, sim bool) { e.ArquivarEm(id, sim, time.Time{}) }
+
+func (e *Estado) ArquivarEm(id string, sim bool, quando time.Time) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if sim {
-		e.arquivadas[id] = true
-		e.obter(id, "", false).Arquivada = true
+		if quando.IsZero() {
+			quando = time.Now()
+		}
+		e.arquivadas[id] = quando.UnixMilli()
 		return
 	}
 	// Desarquivar conversa que nunca vimos não cria linha vazia (o app state manda isso para todas as conversas comuns).
 	delete(e.arquivadas, id)
-	if c, ok := e.conversas[id]; ok {
-		c.Arquivada = false
+}
+
+// ManterArquivadas guarda o ajuste "Manter conversas arquivadas" (o WhatsApp avisa por evento). O valor do
+// WhatsApp é o inverso: UnarchiveChats ligado quer dizer que mensagem nova desarquiva.
+func (e *Estado) ManterArquivadas(manter bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.manterArquivadas = manter
+}
+
+// Silenciar guarda o silêncio da conversa até o instante dado (unix ms). Zero ou negativo tira o silêncio.
+func (e *Estado) Silenciar(id string, ate int64) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if ate <= 0 {
+		delete(e.silenciadas, id)
+		return
 	}
+	e.silenciadas[id] = ate
+}
+
+// arquivadaAgora diz se a conversa continua arquivada. Com "manter arquivadas" desligado, o WhatsApp desarquiva
+// no celular a conversa que recebeu mensagem depois de ser arquivada, e não avisa por app state. Sem o instante
+// do arquivamento (marca antiga), conversa com não lidas conta como desarquivada. Chamar com o mutex tomado.
+func (e *Estado) arquivadaAgora(c *Conversa) bool {
+	ts, ok := e.arquivadas[c.ID]
+	if !ok {
+		return false
+	}
+	if e.manterArquivadas || e.silenciadas[c.ID] > time.Now().UnixMilli() {
+		return true
+	}
+	if ts == 0 {
+		return c.NaoLidas <= 0
+	}
+	if t, err := time.Parse(time.RFC3339, c.Ultima); err == nil && t.UnixMilli() > ts {
+		return false
+	}
+	return true
 }
 
 // Numero guarda os dígitos do telefone da conversa, quando se descobre.
