@@ -267,7 +267,11 @@ final class FontesSpotifyTestes: XCTestCase {
         XCTAssertTrue(ex.comandos[0].hasPrefix("perl -e "), "sem tempo limite um osascript pendurado segura a leitura para sempre")
     }
 
-    func testVigiaDeVerdadeMataOSpotifyQueNaoAtende() {
+    func testVigiaDeVerdadeMataOSpotifyQueNaoAtende() throws {
+        // O vigia de verdade usa o perl do macOS, que a imagem Linux do CI não tem.
+        #if !os(macOS)
+        throw XCTSkip("o vigia de tempo limite usa o perl do macOS")
+        #endif
         let t0 = Date()
         let r = ExecutorShell().rodar(Shell.limitado("sleep 30", segundos: 1))
         XCTAssertEqual(r.status, 142)
@@ -275,6 +279,10 @@ final class FontesSpotifyTestes: XCTestCase {
     }
 
     func testCicloFechadoAbertoTocandoVoltaNoEstado() throws {
+        // O Spotify do Mac só existe no macOS: no Linux do CI o agregador soma avisos das fontes do Mac.
+        #if !os(macOS)
+        throw XCTSkip("o player do Spotify só existe no macOS")
+        #endif
         // O ciclo do defeito: tocando, o app fecha (sai do painel), abre de novo (ainda sem faixa) e toca (volta).
         let chave = Chave()
         let ex = ExecutorMutavel("playing\tQuero Ser Feliz\tCoral\t10\t200000\t")
