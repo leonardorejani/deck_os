@@ -13,6 +13,73 @@ enum EnlaceBle {
     static let pedido = "DECC0002-6D8F-4B1E-9A53-5E1A7C0D0001"
     /// O Mac notifica aqui. Quem assina é quem abre a sessão.
     static let resposta = "DECC0003-6D8F-4B1E-9A53-5E1A7C0D0001"
+
+    // Sentido invertido (12/11/2026): o iPhone anuncia e o Mac conecta como central. Com o iPhone e o Mac na mesma conta
+    // do iCloud, o macOS cifra toda conexão LE entre eles pelo FastLE, e no sentido de cima (Mac periférico) a cifragem
+    // falha (CBError 15). Com o Mac central ela passa. Só o transporte troca de mãos: o iPhone continua pedindo e o Mac
+    // respondendo, com o mesmo aperto de mão e os mesmos quadros. Os UUIDs terminam em 0002 para não colidir com os de cima.
+    /// Serviço que o iPhone anuncia com o app aberto. O Mac só conecta em quem anuncia este.
+    static let servicoInvertido = "DECC0001-6D8F-4B1E-9A53-5E1A7C0D0002"
+    /// O iPhone notifica aqui os pedidos (iPhone -> Mac). Notificação vazia é o iPhone avisando que fechou o fio.
+    static let pedidoInvertido = "DECC0002-6D8F-4B1E-9A53-5E1A7C0D0002"
+    /// O Mac escreve aqui as respostas (Mac -> iPhone), sem resposta do rádio.
+    static let respostaInvertida = "DECC0003-6D8F-4B1E-9A53-5E1A7C0D0002"
+}
+
+/// Espera o rádio liberar a fila de envio. Quem escreve arma antes de cada envio, o aviso do rádio libera, e a espera só
+/// acontece quando o envio foi recusado. Armar antes de enviar não deixa perder o aviso que chega entre a recusa e a espera.
+final class PortaoDoRadio: @unchecked Sendable {
+    private let condicao = NSCondition()
+    private var pronto = true
+    private var fechado = false
+
+    func armar() { condicao.lock(); pronto = false; condicao.unlock() }
+    func liberar() { condicao.lock(); pronto = true; condicao.broadcast(); condicao.unlock() }
+    func fechar() { condicao.lock(); fechado = true; condicao.broadcast(); condicao.unlock() }
+    var estaFechado: Bool { condicao.lock(); defer { condicao.unlock() }; return fechado }
+
+    /// true quando o rádio liberou. false no prazo ou com o fio fechado.
+    func esperar(_ segundos: TimeInterval) -> Bool {
+        condicao.lock(); defer { condicao.unlock() }
+        let limite = Date().addingTimeInterval(segundos)
+        while !pronto && !fechado {
+            if !condicao.wait(until: limite) { break }
+        }
+        return pronto && !fechado
+    }
+}
+
+/// Parte o que a sessão escreve em pacotes do tamanho do MTU e respeita a fila do rádio.
+enum Pacotes {
+    /// `enviar` devolve false quando a fila do rádio está cheia: `aguardar` espera o rádio liberar e o mesmo pacote vai de
+    /// novo. Devolve false quando o rádio não liberou (prazo ou fio fechado).
+    static func escrever(_ dados: Data, tamanho: Int, enviar: (Data) -> Bool, aguardar: () -> Bool) -> Bool {
+        let passo = max(1, tamanho)
+        var inicio = 0
+        while inicio < dados.count {
+            let fim = min(inicio + passo, dados.count)
+            let parte = Data(dados[dados.startIndex + inicio ..< dados.startIndex + fim])
+            while !enviar(parte) {
+                guard aguardar() else { return false }
+            }
+            inicio = fim
+        }
+        return true
+    }
+}
+
+/// O que chega na notificação de pedido do sentido invertido. O periférico não consegue derrubar a central, então o iPhone
+/// avisa que fechou o fio com uma notificação vazia (o protocolo do Deck nunca manda pacote vazio).
+enum EnlaceInvertido {
+    static let avisoDeFechar = Data()
+
+    /// Entrega o pacote ao fio. Devolve false quando era o aviso de fechar (e fecha o fio).
+    @discardableResult
+    static func receber(_ valor: Data?, em fluxo: FluxoEnlace) -> Bool {
+        guard let valor, !valor.isEmpty else { fluxo.fechar(); return false }
+        fluxo.fila.empurrar(valor)
+        return true
+    }
 }
 
 /// Fila de bytes com leitura que espera. A escrita vem do rádio (callback), a leitura da thread da sessão.

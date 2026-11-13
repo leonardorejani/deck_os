@@ -85,6 +85,7 @@ final class MacDeTeste: @unchecked Sendable {
 
     /// Derruba todos os fios abertos, como se o Mac saísse do alcance.
     func sairDoAlcance() { for f in trava.withLock({ _fios }) { f.fechar() } }
+    func abertos() -> Int { trava.withLock { _fios.filter { !$0.fila.estaFechada }.count } }
 
     func atender(_ fio: FluxoEnlace) {
         trava.withLock { _fios.append(fio) }
@@ -546,5 +547,452 @@ final class BluetoothTestes: XCTestCase {
         XCTAssertTrue(esqueceu.todas.isEmpty, "esqueceu o pareamento por causa de um Mac que não é o do iPhone")
         XCTAssertNotNil(cofre.ler())
     }
+
+    // MARK: Cifragem do enlace falhando (CBError 15, 12/11/2026)
+
+    /// Diário do iPhone de 12/11/2026: o Mac anuncia a um palmo, o iPhone vê, conecta e o iOS falha em cifrar o enlace
+    /// (CBError 15) todo ciclo. Antes, cada rodada conectava duas vezes no mesmo Mac (id guardado e procura), a tela
+    /// dizia só "Tentando de novo" e o laço seguia sem fim no mesmo ritmo.
+    func testCifragemQueFalhaSempreAvisaOQueFazerEParaDeInsistir() async throws {
+        let mac = MacDeTeste()
+        let radio = RadioComCifragemQuebrada(mac: mac, id: "mac-1")
+        let cofre = CofreEmMemoria(pareado("mac-1"))
+        let esperas = Linhas()
+        let linhas = Linhas()
+        let g = GerenteBluetooth(radio: radio, cofre: cofre, nomeDoIphone: "iPhone Exemplo",
+                                 esperaEntreTentativas: { esperas.anotar("\($0)"); return 0.05 },
+                                 prazoDaConexaoDireta: 0.2, prazoDaProcura: 0.3, log: { linhas.anotar($0) })
+        let esqueceu = Linhas()
+        g.aoNaoReconhecido { esqueceu.anotar("esqueceu") }
+        addTeardownBlock { g.parar() }
+        g.iniciar()
+        await esperar({ g.situacao == ErroCifragemBluetooth.mensagem }, segundos: 6)
+        XCTAssertEqual(g.situacao, ErroCifragemBluetooth.mensagem, "a tela não disse o que fazer: \(linhas.todas)")
+        XCTAssertEqual(radio.tentativas, GerenteBluetooth.cifragensParaAvisar, "cada rodada tem que conectar uma vez só no Mac que falhou a cifragem")
+        await esperar({ esperas.todas.contains("\(GerenteBluetooth.esperaSeCifragemFalha)") }, segundos: 2)
+        XCTAssertTrue(esperas.todas.contains("\(GerenteBluetooth.esperaSeCifragemFalha)"), "depois do aviso, a espera tem que ser longa: \(esperas.todas)")
+        XCTAssertTrue(esqueceu.todas.isEmpty, "cifragem falhando não é o Mac recusando: o pareamento fica")
+        XCTAssertNotNil(cofre.ler())
+
+        radio.consertar()
+        await esperar({ g.mac != nil }, segundos: 6)
+        XCTAssertEqual(g.mac?.id, "mac-1", "resolvido o enlace, tem que voltar sozinho")
+        XCTAssertNil(g.situacao)
+    }
+
+    /// No pareamento (iPhone novo), a mesma falha mostra o que fazer em vez de "Não consegui parear".
+    func testCifragemNoPareamentoMostraOQueFazer() async throws {
+        let radio = RadioComCifragemQuebrada(mac: MacDeTeste(), id: "mac-1")
+        let g = GerenteBluetooth(radio: radio, cofre: CofreEmMemoria(), nomeDoIphone: "iPhone Exemplo")
+        do {
+            _ = try await g.iniciarPareamento(com: MacEncontrado(id: "mac-1", nome: "MacBook Pro de Exemplo", perto: true))
+            XCTFail("pareou com a cifragem quebrada")
+        } catch let e as ErroCifragemBluetooth {
+            XCTAssertEqual(e.mensagem, ErroCifragemBluetooth.mensagem)
+        }
+    }
+}
+
+/// O Mac aparece no ar sempre com o mesmo id, mas conectar nele falha na cifragem do enlace até `consertar()`.
+final class RadioComCifragemQuebrada: RadioBle, @unchecked Sendable {
+    let mac: MacDeTeste
+    let id: String
+    private let trava = NSLock()
+    private var _tentativas = 0
+    private var _consertado = false
+    init(mac: MacDeTeste, id: String) { self.mac = mac; self.id = id }
+    var tentativas: Int { trava.withLock { _tentativas } }
+    func consertar() { trava.withLock { _consertado = true } }
+    var indisponivel: String? { nil }
+    var pronto: Bool { true }
+    func procurar() -> AsyncStream<[AnuncioBle]> { AsyncStream { c in c.yield([AnuncioBle(id: id, nome: "MacBook Pro de Exemplo", rssi: -40)]) } }
+    func conectar(id: String, prazo: TimeInterval) async throws -> FluxoBytes {
+        let consertado: Bool = trava.withLock { _tentativas += 1; return _consertado }
+        guard consertado else { throw ErroCifragemBluetooth(codigo: 15) }
+        let (macFio, iphoneFio) = FluxoEnlace.par()
+        mac.atender(macFio)
+        return iphoneFio
+    }
+}
+
+// MARK: - Sentido invertido (12/11/2026): o iPhone anuncia e o Mac conecta
+
+/// O ar entre o iPhone (periférico) e o Mac (central) no sentido invertido, sem rádio. Cada lado parte o que escreve em
+/// pacotes do MTU (Pacotes), a fila do rádio enche a cada 4 envios e libera logo depois (PortaoDoRadio), o pedido do iPhone
+/// chega ao Mac como notificação (EnlaceInvertido, com o aviso de fechar vazio) e a resposta do Mac entra como escrita.
+final class ArInvertido: @unchecked Sendable {
+    let mtu: Int
+    private let trava = NSLock()
+    private var envios = 0
+    private var _subida: [Int] = []
+    private var _descida: [Int] = []
+    private var _cheias = 0
+
+    init(mtu: Int = 20) { self.mtu = mtu }
+
+    /// Tamanho de cada pacote que subiu (iPhone -> Mac) e desceu (Mac -> iPhone), e quantas vezes a fila do rádio encheu.
+    var subida: [Int] { trava.withLock { _subida } }
+    var descida: [Int] { trava.withLock { _descida } }
+    var cheias: Int { trava.withLock { _cheias } }
+
+    /// (lado do iPhone, lado do Mac)
+    func par() -> (iphone: FluxoEnlace, mac: FluxoEnlace) {
+        final class Ponta: @unchecked Sendable { var fluxo: FluxoEnlace? }
+        let i = Ponta(), m = Ponta()
+        let portaoI = PortaoDoRadio(), portaoM = PortaoDoRadio()
+        let mtu = mtu
+        let fi = FluxoEnlace(
+            escritor: { [self] dados in
+                Pacotes.escrever(dados, tamanho: mtu, enviar: { p in
+                    passar(p, portaoI, subindo: true) { if let f = m.fluxo { EnlaceInvertido.receber(p, em: f) } }
+                }, aguardar: { portaoI.esperar(2) })
+            },
+            aoFechar: {
+                portaoI.fechar()
+                if let f = m.fluxo { EnlaceInvertido.receber(EnlaceInvertido.avisoDeFechar, em: f) }
+            })
+        let fm = FluxoEnlace(
+            escritor: { [self] dados in
+                Pacotes.escrever(dados, tamanho: mtu, enviar: { p in
+                    passar(p, portaoM, subindo: false) { i.fluxo?.fila.empurrar(p) }
+                }, aguardar: { portaoM.esperar(2) })
+            },
+            // O Mac solta a conexão: o iPhone vê a central sair da assinatura.
+            aoFechar: { portaoM.fechar(); i.fluxo?.fila.fechar() })
+        i.fluxo = fi
+        m.fluxo = fm
+        return (fi, fm)
+    }
+
+    private func passar(_ p: Data, _ portao: PortaoDoRadio, subindo: Bool, _ entregar: () -> Void) -> Bool {
+        portao.armar()
+        let cheia: Bool = trava.withLock {
+            envios += 1
+            if envios % 4 == 0 { _cheias += 1; return true }
+            if subindo { _subida.append(p.count) } else { _descida.append(p.count) }
+            return false
+        }
+        if cheia {
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.001) { portao.liberar() }
+            return false
+        }
+        entregar()
+        return true
+    }
+}
+
+/// O rádio de periférico do iPhone sem rádio, com um Mac central de teste que conecta sozinho sempre que o iPhone anuncia
+/// e ele não está conectado (como o RadioCentralMac faz ao ver o anúncio).
+final class PerifericoFalso: PerifericoBle, @unchecked Sendable {
+    let mac: MacDeTeste
+    let ar: ArInvertido
+    private let trava = NSLock()
+    private var receptor: (@Sendable (FluxoBytes, String) -> Void)?
+    private var _anunciando = false
+    private var _pedidosDeAnuncio = 0
+    private var _conexoes = 0
+    private var _macLigado = false
+    private var atual: FluxoEnlace?
+    private var vigia: Thread?
+
+    init(mac: MacDeTeste, ar: ArInvertido = ArInvertido()) { self.mac = mac; self.ar = ar }
+
+    var anunciando: Bool { trava.withLock { _anunciando } }
+    /// Quantas vezes alguém pediu para anunciar (sem pareamento tem que ficar em zero: é o que pede a permissão).
+    var pedidosDeAnuncio: Int { trava.withLock { _pedidosDeAnuncio } }
+    var conexoes: Int { trava.withLock { _conexoes } }
+
+    func aoAbrir(_ f: @escaping @Sendable (FluxoBytes, String) -> Void) { trava.withLock { receptor = f } }
+    func anunciar(_ ligado: Bool) { trava.withLock { _anunciando = ligado; if ligado { _pedidosDeAnuncio += 1 } } }
+
+    /// Liga o Mac central: a cada 20 ms, se o iPhone anuncia e o Mac não tem enlace aberto, conecta.
+    func ligarMac() {
+        trava.withLock { _macLigado = true }
+        let t = Thread { [self] in
+            while trava.withLock({ _macLigado }) {
+                let (deve, r): (Bool, (@Sendable (FluxoBytes, String) -> Void)?) = trava.withLock {
+                    (_anunciando && (atual == nil || atual!.fila.estaFechada), receptor)
+                }
+                if deve, let r {
+                    let (i, m) = ar.par()
+                    let n: Int = trava.withLock { atual = m; _conexoes += 1; return _conexoes }
+                    mac.atender(m)
+                    r(i, "inv-\(n)")
+                }
+                Thread.sleep(forTimeInterval: 0.02)
+            }
+        }
+        t.start()
+        vigia = t
+    }
+
+    func desligarMac() { trava.withLock { _macLigado = false } }
+}
+
+/// O sentido antigo sem Mac nenhum no ar: conectar falha e a procura não acha nada.
+final class RadioSemMac: RadioBle, @unchecked Sendable {
+    private let trava = NSLock()
+    private var _tentativas = 0
+    var tentativas: Int { trava.withLock { _tentativas } }
+    var indisponivel: String? { nil }
+    var pronto: Bool { true }
+    func procurar() -> AsyncStream<[AnuncioBle]> { AsyncStream { c in c.yield([]) } }
+    func conectar(id: String, prazo: TimeInterval) async throws -> FluxoBytes {
+        trava.withLock { _tentativas += 1 }
+        throw ErroPareamento.recusado("O Mac não respondeu.")
+    }
+}
+
+extension MacDeTeste {
+    /// Fios do Mac ainda abertos: com um iPhone só, nunca mais que um depois de a corrida assentar.
+    var fiosAbertos: Int { abertos() }
+}
+
+@MainActor
+final class EnlaceInvertidoTestes: XCTestCase {
+    private func gerente(_ radio: RadioBle, _ periferico: PerifericoFalso, cofre: Cofre, pausa: TimeInterval = 60, aviso: TimeInterval = 60) -> (GerenteBluetooth, Linhas) {
+        let linhas = Linhas()
+        let g = GerenteBluetooth(radio: radio, periferico: periferico, cofre: cofre, nomeDoIphone: "iPhone Exemplo", esperaEntreTentativas: { _ in 0.05 },
+                                 prazoDaConexaoDireta: 0.2, prazoDaProcura: 0.2, pausaDoSentidoAntigo: pausa, avisoDeCifragemApos: aviso,
+                                 esperaDoMacNoPareamento: 3, log: { linhas.anotar($0) })
+        addTeardownBlock { g.parar(); periferico.desligarMac() }
+        return (g, linhas)
+    }
+
+    private func pareado(_ id: String? = "mac-1") -> Pareado {
+        Pareado(codigoAcesso: "ABCDEFGHIJKLMNOPQRST", nomeMac: "MacBook Pro de Exemplo", idBluetooth: id)
+    }
+
+    /// Pedido e resposta maiores que o MTU nos dois sentidos, a fila do rádio enchendo, a queda e a volta sozinha.
+    func testSessaoCompletaPeloEnlaceInvertidoComPacotesPartidosQuedaEVolta() async throws {
+        let mac = MacDeTeste()
+        let grande = Data((0..<3000).map { UInt8($0 % 251) })
+        mac.responder = { p in RespostaCanal(status: 200, tipo: "application/octet-stream", corpo: p.corpo.reversed() + grande) }
+        let ar = ArInvertido(mtu: 20)
+        let periferico = PerifericoFalso(mac: mac, ar: ar)
+        let cofre = CofreEmMemoria(pareado())
+        let (g, linhas) = gerente(RadioSemMac(), periferico, cofre: cofre)
+        g.iniciar()
+        periferico.ligarMac()
+        await esperar({ g.mac != nil }, segundos: 5)
+        XCTAssertEqual(g.mac?.nome, "MacBook Pro de Exemplo", "\(linhas.todas)")
+        XCTAssertFalse(periferico.anunciando, "com a conexão de dados de pé o iPhone para de anunciar")
+
+        let corpo = Data((0..<1500).map { UInt8($0 % 7) })
+        let r = try await g.enviar(PedidoCanal(metodo: "POST", caminho: "/api/teste", corpo: corpo))
+        XCTAssertEqual(r.corpo, Data(corpo.reversed()) + grande)
+        XCTAssertEqual(mac.vistos.last?.corpo, corpo)
+        XCTAssertGreaterThan(ar.subida.count, 50, "o pedido subiu partido")
+        XCTAssertGreaterThan(ar.descida.count, 150, "a resposta desceu partida")
+        XCTAssertLessThanOrEqual((ar.subida + ar.descida).max() ?? 0, 20, "nenhum pacote passa do MTU")
+        XCTAssertGreaterThan(ar.cheias, 0, "a fila do rádio encheu e a escrita esperou")
+        XCTAssertEqual(cofre.ler()?.idBluetooth, "mac-1", "o id do sentido antigo não pode ser trocado pelo da central")
+
+        mac.sairDoAlcance()
+        await esperar({ g.mac == nil }, segundos: 3)
+        await esperar({ g.mac != nil }, segundos: 5)
+        XCTAssertNotNil(g.mac, "voltou sem parear de novo: \(linhas.todas)")
+        XCTAssertEqual(periferico.conexoes, 2)
+        let r2 = try await g.enviar(PedidoCanal(metodo: "GET", caminho: "/api/estado"))
+        XCTAssertEqual(r2.status, 200)
+        XCTAssertEqual(cofre.ler()?.codigoAcesso, "ABCDEFGHIJKLMNOPQRST")
+    }
+
+    /// Os dois sentidos conectam ao mesmo tempo no mesmo Mac: o primeiro aperto de mão vale e o outro é fechado.
+    func testCorridaEntreOsDoisSentidosNaoAbreDuasSessoes() async throws {
+        for rodada in 0..<5 {
+            let mac = MacDeTeste()
+            let radio = RadioFalso(mac)
+            let periferico = PerifericoFalso(mac: mac)
+            let (g, linhas) = gerente(radio, periferico, cofre: CofreEmMemoria(pareado()))
+            periferico.ligarMac()
+            g.iniciar()
+            await esperar({ g.mac != nil }, segundos: 5)
+            XCTAssertNotNil(g.mac, "rodada \(rodada): \(linhas.todas)")
+            await esperar({ mac.fiosAbertos == 1 }, segundos: 3)
+            XCTAssertEqual(mac.fiosAbertos, 1, "rodada \(rodada): duas sessões no Mac para o mesmo iPhone: \(linhas.todas)")
+            try await Task.sleep(nanoseconds: 300_000_000)
+            XCTAssertEqual(mac.fiosAbertos, 1, "rodada \(rodada): uma sessão a mais abriu depois")
+            XCTAssertLessThanOrEqual(radio.conexoes + periferico.conexoes, 2, "rodada \(rodada): com uma conexão de pé ninguém conecta de novo")
+            let r = try await g.enviar(PedidoCanal(metodo: "GET", caminho: "/api/estado"))
+            XCTAssertEqual(r.status, 200)
+            g.parar()
+            periferico.desligarMac()
+        }
+    }
+
+    /// Log do bluetoothd de 12/11/2026: no sentido antigo a cifragem falha sempre (CBError 15), no invertido passa.
+    func testCifragemFalhandoNoSentidoAntigoESucessoNoInvertido() async throws {
+        let mac = MacDeTeste()
+        let radio = RadioComCifragemQuebrada(mac: mac, id: "mac-1")
+        let periferico = PerifericoFalso(mac: mac)
+        let (g, linhas) = gerente(radio, periferico, cofre: CofreEmMemoria(pareado()))
+        let vistas = Linhas()
+        g.aoMudarSituacao { vistas.anotar($0 ?? "nil") }
+        g.iniciar()
+        await esperar({ g.situacao == GerenteBluetooth.textoEsperandoOMac }, segundos: 3)
+        XCTAssertEqual(g.situacao, GerenteBluetooth.textoEsperandoOMac, "\(linhas.todas)")
+        XCTAssertTrue(periferico.anunciando)
+        try await Task.sleep(nanoseconds: 400_000_000)
+        XCTAssertEqual(radio.tentativas, 1, "depois da falha de cifragem o sentido antigo não insiste na mesma rodada")
+        XCTAssertFalse(vistas.todas.contains(ErroCifragemBluetooth.mensagem), "o aviso de cifragem só vem depois de muito tempo sem os dois sentidos")
+
+        periferico.ligarMac()
+        await esperar({ g.mac != nil }, segundos: 5)
+        XCTAssertNotNil(g.mac, "\(linhas.todas)")
+        XCTAssertNil(g.situacao)
+        XCTAssertEqual(radio.tentativas, 1)
+        let r = try await g.enviar(PedidoCanal(metodo: "GET", caminho: "/api/estado"))
+        XCTAssertEqual(r.status, 200)
+    }
+
+    /// Os dois sentidos falhando por tempo demais: aí sim a tela mostra o que fazer, e o sentido antigo volta a ser tentado
+    /// a cada pausa. O pareamento não é esquecido.
+    func testAvisoDeCifragemSoQuandoOsDoisSentidosFalhamPorMuitoTempo() async throws {
+        let mac = MacDeTeste()
+        let radio = RadioComCifragemQuebrada(mac: mac, id: "mac-1")
+        let periferico = PerifericoFalso(mac: mac)
+        let cofre = CofreEmMemoria(pareado())
+        let (g, linhas) = gerente(radio, periferico, cofre: cofre, pausa: 0.3, aviso: 1.2)
+        let esqueceu = Linhas()
+        g.aoNaoReconhecido { esqueceu.anotar("esqueceu") }
+        g.iniciar()
+        await esperar({ g.situacao == GerenteBluetooth.textoEsperandoOMac }, segundos: 3)
+        XCTAssertEqual(g.situacao, GerenteBluetooth.textoEsperandoOMac)
+        await esperar({ g.situacao == ErroCifragemBluetooth.mensagem }, segundos: 4)
+        XCTAssertEqual(g.situacao, ErroCifragemBluetooth.mensagem, "\(linhas.todas)")
+        XCTAssertGreaterThanOrEqual(radio.tentativas, 2, "passada a pausa, o sentido antigo é tentado de novo")
+        XCTAssertTrue(esqueceu.todas.isEmpty)
+        XCTAssertNotNil(cofre.ler())
+
+        periferico.ligarMac()
+        await esperar({ g.mac != nil }, segundos: 5)
+        XCTAssertNil(g.situacao, "conectou: o aviso sai da tela")
+    }
+
+    /// iPhone novo: o sentido antigo falha na cifragem, o Mac conecta no iPhone e o pareamento segue igual (6 dígitos nas
+    /// duas telas, o Mac permitindo).
+    func testPareamentoPeloSentidoInvertidoQuandoOAntigoFalha() async throws {
+        let mac = MacDeTeste()
+        let periferico = PerifericoFalso(mac: mac)
+        let cofre = CofreEmMemoria()
+        let (g, _) = gerente(RadioComCifragemQuebrada(mac: mac, id: "mac-1"), periferico, cofre: cofre)
+        XCTAssertEqual(periferico.pedidosDeAnuncio, 0)
+        periferico.ligarMac()
+        let codigo = try await g.iniciarPareamento(com: MacEncontrado(id: "mac-1", nome: "MacBook Pro de Exemplo", perto: true))
+        XCTAssertEqual(mac.mostrados, [codigo], "o Mac mostra os mesmos 6 dígitos")
+        let feito = try await g.concluirPareamento(aceito: true)
+        XCTAssertEqual(feito.pareado.codigoAcesso, mac.codigoAcesso)
+        await esperar({ g.mac != nil }, segundos: 3)
+        XCTAssertNotNil(g.mac)
+        XCTAssertFalse(periferico.anunciando)
+    }
+
+    /// Sem pareamento e sem pareamento em curso o iPhone não anuncia (e o iOS não pede a permissão por isso), e um Mac que
+    /// conectasse seria fechado.
+    func testSemPareamentoNaoAnuncia() async throws {
+        let mac = MacDeTeste()
+        let periferico = PerifericoFalso(mac: mac)
+        let (g, _) = gerente(RadioSemMac(), periferico, cofre: CofreEmMemoria())
+        g.iniciar()
+        periferico.ligarMac()
+        try await Task.sleep(nanoseconds: 300_000_000)
+        XCTAssertEqual(periferico.pedidosDeAnuncio, 0)
+        XCTAssertEqual(periferico.conexoes, 0)
+        XCTAssertNil(g.mac)
+    }
 }
 #endif
+
+
+final class DiarioBluetoothTestes: XCTestCase {
+    func testAnelGuardaSoAsUltimasLinhasComHorario() {
+        let d = DiarioBluetooth(arquivo: nil, capacidade: 3, relogio: { Date(timeIntervalSince1970: 0) })
+        for i in 1...5 { d.anotar("passo \(i)") }
+        XCTAssertEqual(d.recentes, ["1970-01-01T00:00:00.000Z passo 3", "1970-01-01T00:00:00.000Z passo 4", "1970-01-01T00:00:00.000Z passo 5"])
+    }
+
+    func testArquivoGiraSemCrescerSemLimiteESobreviveAReabrir() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("bt-\(UUID().uuidString).log")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let d = DiarioBluetooth(arquivo: url, capacidade: 10)
+        for i in 1...35 { d.anotar("linha \(i)") }
+        let linhas = try String(contentsOf: url, encoding: .utf8).split(separator: "\n")
+        XCTAssertLessThanOrEqual(linhas.count, 20)
+        XCTAssertTrue(linhas.last!.hasSuffix("linha 35"))
+        let reaberto = DiarioBluetooth(arquivo: url, capacidade: 10)
+        XCTAssertEqual(reaberto.recentes.count, 10)
+        XCTAssertTrue(reaberto.recentes.last!.hasSuffix("linha 35"))
+    }
+
+    func testQuebraDeLinhaNaoViraDuasLinhas() {
+        let d = DiarioBluetooth(arquivo: nil)
+        d.anotar("a\nb")
+        XCTAssertEqual(d.recentes.count, 1)
+    }
+}
+
+final class UltimaListaPorOuvinteTestes: XCTestCase {
+    private let mac = AnuncioBle(id: "333B2CE5", nome: "MacBook Pro de Exemplo", rssi: -44)
+
+    /// Diário do iPhone de 12/11/2026: a procura da reconexão via o Mac a cada segundo (ACEITO) e terminava com "0 Mac(s)".
+    /// A procura anterior já tinha recebido [mac] e saído. A nova entrou com a lista vazia (o anúncio velho venceu) e,
+    /// quando o Mac apareceu de novo, a comparação era com o que a procura ANTERIOR recebeu: igual, ninguém foi avisado.
+    func testProcuraNovaRecebeOMacMesmoQueAAnteriorJaTenhaRecebidoOMesmo() {
+        var u = UltimaListaPorOuvinte()
+        let antiga = UUID()
+        u.entrou(antiga, recebeu: [])
+        XCTAssertEqual(u.quemAvisar([mac], ouvintes: [antiga]), [antiga])
+        u.saiu(antiga)
+        let nova = UUID()
+        u.entrou(nova, recebeu: [])
+        XCTAssertEqual(u.quemAvisar([mac], ouvintes: [nova]), [nova], "a procura nova nunca soube do Mac que estava no ar")
+    }
+
+    func testSinalQueSoOscilaNaoAvisaDeNovo() {
+        var u = UltimaListaPorOuvinte()
+        let o = UUID()
+        u.entrou(o, recebeu: [])
+        XCTAssertEqual(u.quemAvisar([mac], ouvintes: [o]), [o])
+        var oscilou = mac
+        oscilou.rssi = -40
+        XCTAssertEqual(u.quemAvisar([oscilou], ouvintes: [o]), [])
+    }
+
+    /// Dois ouvintes ao mesmo tempo (lista do pareamento e reconexão): o que chegou depois recebe sem tirar do outro.
+    func testCadaOuvinteComparaComOQueEleRecebeu() {
+        var u = UltimaListaPorOuvinte()
+        let a = UUID()
+        u.entrou(a, recebeu: [])
+        XCTAssertEqual(u.quemAvisar([mac], ouvintes: [a]), [a])
+        let b = UUID()
+        u.entrou(b, recebeu: [])
+        XCTAssertEqual(u.quemAvisar([mac], ouvintes: [a, b]), [b])
+    }
+}
+
+final class AvaliacaoDeAnuncioTestes: XCTestCase {
+    private let deck = EnlaceBle.servico
+    private func av(servicos: [String] = [], extras: [String] = [], nome: String? = nil, rssi: Int = -50, conhecidos: Set<String> = [], filtro: Bool) -> AvaliacaoDeAnuncio.Resultado {
+        AvaliacaoDeAnuncio.avaliar(servicos: servicos, extras: extras, nome: nome, rssi: rssi, uuidDoDeck: deck, nomesConhecidos: conhecidos, comFiltro: filtro)
+    }
+
+    func testServicoNoPacoteOuNaAreaExtraAceita() {
+        XCTAssertTrue(av(servicos: [deck.lowercased()], filtro: false).aceito)
+        XCTAssertTrue(av(extras: [deck], filtro: false).aceito)
+    }
+
+    /// Sem filtro, um aparelho qualquer é descartado, mas o Mac pareado (pelo nome) passa mesmo sem o UUID à vista.
+    func testSemFiltroDescartaOutrosEAceitaOMacPareadoPeloNome() {
+        XCTAssertFalse(av(nome: "Fone", filtro: false).aceito)
+        XCTAssertTrue(av(nome: "MacBook Pro de Leonardo Rejani", conhecidos: ["MacBook Pro de Leonardo Rejani"], filtro: false).aceito)
+    }
+
+    func testComFiltroDoIosTudoQueChegaVale() {
+        XCTAssertTrue(av(filtro: true).aceito)
+    }
+
+    func testSinal127SempreDescarta() {
+        XCTAssertFalse(av(servicos: [deck], rssi: 127, filtro: true).aceito)
+    }
+}

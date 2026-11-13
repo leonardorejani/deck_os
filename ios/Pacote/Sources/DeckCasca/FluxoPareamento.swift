@@ -208,6 +208,6 @@ public final class FluxoPareamento {
     }
 
     private static func texto(_ erro: Error) -> String {
-        (erro as? ErroPareamento)?.mensagem ?? "Não consegui parear. Tente de novo."
+        (erro as? ErroPareamento)?.mensagem ?? (erro as? ErroCifragemBluetooth)?.mensagem ?? "Não consegui parear. Tente de novo."
     }
 }

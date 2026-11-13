@@ -70,7 +70,7 @@ final class ModeloApp: ObservableObject {
     var registrar: @Sendable (String) -> Void = { _ in }
     var pastaDoProjeto: String?
     var portaDoCabo: PortaDoCabo?
-    var radio: RadioPeriferico?
+    var radio: RadiosDoBluetooth?
     /// O nome que o iPhone deu ao pedir pareamento por Bluetooth, para o primeiro pedido dele já aparecer com nome.
     var nomeAprovado: String?
     /// Só as fotos: o relógio parado do protótipo (10/11/2026, 12h), para "vence em 2 dias" sair igual.

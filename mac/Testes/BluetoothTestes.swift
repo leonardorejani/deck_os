@@ -638,6 +638,241 @@ final class NomeFalsoTestes: XCTestCase {
         XCTAssertEqual(EnlaceSeguro.nomeLimpo(String(repeating: "x", count: 100)).count, 60)
     }
 }
+
+// MARK: - Sentido invertido (12/11/2026): o Mac central, o iPhone periférico
+
+/// O ar do sentido invertido sem rádio, igual ao de ios/Pacote/Tests: pacotes do MTU nos dois sentidos, a fila do rádio
+/// enchendo a cada 4 envios, o pedido do iPhone chegando como notificação (com o aviso de fechar vazio) e a resposta do
+/// Mac como escrita.
+final class ArInvertido: @unchecked Sendable {
+    let mtu: Int
+    private let trava = NSLock()
+    private var envios = 0
+    private var _subida: [Int] = []
+    private var _descida: [Int] = []
+    private var _cheias = 0
+
+    init(mtu: Int = 20) { self.mtu = mtu }
+
+    var subida: [Int] { trava.withLock { _subida } }
+    var descida: [Int] { trava.withLock { _descida } }
+    var cheias: Int { trava.withLock { _cheias } }
+
+    /// (lado do iPhone, lado do Mac)
+    func par() -> (iphone: FluxoEnlace, mac: FluxoEnlace) {
+        final class Ponta: @unchecked Sendable { var fluxo: FluxoEnlace? }
+        let i = Ponta(), m = Ponta()
+        let portaoI = PortaoDoRadio(), portaoM = PortaoDoRadio()
+        let mtu = mtu
+        let fi = FluxoEnlace(
+            escritor: { [self] dados in
+                Pacotes.escrever(dados, tamanho: mtu, enviar: { p in
+                    passar(p, portaoI, subindo: true) { if let f = m.fluxo { EnlaceInvertido.receber(p, em: f) } }
+                }, aguardar: { portaoI.esperar(2) })
+            },
+            aoFechar: {
+                portaoI.fechar()
+                if let f = m.fluxo { EnlaceInvertido.receber(EnlaceInvertido.avisoDeFechar, em: f) }
+            })
+        let fm = FluxoEnlace(
+            escritor: { [self] dados in
+                Pacotes.escrever(dados, tamanho: mtu, enviar: { p in
+                    passar(p, portaoM, subindo: false) { i.fluxo?.fila.empurrar(p) }
+                }, aguardar: { portaoM.esperar(2) })
+            },
+            aoFechar: { portaoM.fechar(); i.fluxo?.fila.fechar() })
+        i.fluxo = fi
+        m.fluxo = fm
+        return (fi, fm)
+    }
+
+    private func passar(_ p: Data, _ portao: PortaoDoRadio, subindo: Bool, _ entregar: () -> Void) -> Bool {
+        portao.armar()
+        let cheia: Bool = trava.withLock {
+            envios += 1
+            if envios % 4 == 0 { _cheias += 1; return true }
+            if subindo { _subida.append(p.count) } else { _descida.append(p.count) }
+            return false
+        }
+        if cheia {
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.001) { portao.liberar() }
+            return false
+        }
+        entregar()
+        return true
+    }
+}
+
+final class PacotesTestes: XCTestCase {
+    func testPartePeloMtuERepeteOPacoteQuandoAFilaEnche() {
+        var enviados: [Data] = []
+        var recusas = 0
+        var esperas = 0
+        let dados = Data((0..<45).map { UInt8($0) })
+        let ok = Pacotes.escrever(dados, tamanho: 20, enviar: { p in
+            if recusas == 0 { recusas += 1; return false }
+            enviados.append(p)
+            return true
+        }, aguardar: { esperas += 1; return true })
+        XCTAssertTrue(ok)
+        XCTAssertEqual(enviados.map(\.count), [20, 20, 5])
+        XCTAssertEqual(enviados.reduce(Data(), +), dados)
+        XCTAssertEqual(esperas, 1, "o pacote recusado espera o rádio e vai de novo")
+    }
+
+    func testRadioQueNaoLiberaDesisteDaEscrita() {
+        XCTAssertFalse(Pacotes.escrever(Data([1, 2, 3]), tamanho: 20, enviar: { _ in false }, aguardar: { false }))
+    }
+
+    func testPortaoAcordaComOAvisoEFechadoNaoEspera() {
+        let p = PortaoDoRadio()
+        p.armar()
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.05) { p.liberar() }
+        XCTAssertTrue(p.esperar(2))
+        p.armar()
+        XCTAssertFalse(p.esperar(0.05), "sem aviso do rádio, o prazo vence")
+        p.fechar()
+        let t0 = Date()
+        XCTAssertFalse(p.esperar(2))
+        XCTAssertLessThan(Date().timeIntervalSince(t0), 0.5)
+    }
+
+    func testNotificacaoVaziaFechaOFio() {
+        let (a, _) = FluxoEnlace.par()
+        XCTAssertTrue(EnlaceInvertido.receber(Data([1]), em: a))
+        XCTAssertEqual(a.ler(maximo: 4), Data([1]))
+        XCTAssertFalse(EnlaceInvertido.receber(EnlaceInvertido.avisoDeFechar, em: a))
+        XCTAssertNil(a.ler(maximo: 4))
+        let (b, _) = FluxoEnlace.par()
+        XCTAssertFalse(EnlaceInvertido.receber(nil, em: b), "valor nenhum também conta como fechar")
+    }
+
+    /// Os UUIDs do sentido invertido não podem colidir com os do sentido antigo (o DECC0002 de lá é a característica de pedido).
+    func testUuidsDoSentidoInvertidoSaoProprios() {
+        let antigos: Set<String> = [EnlaceBle.servico, EnlaceBle.pedido, EnlaceBle.resposta]
+        let novos: Set<String> = [EnlaceBle.servicoInvertido, EnlaceBle.pedidoInvertido, EnlaceBle.respostaInvertida]
+        XCTAssertEqual(novos.count, 3)
+        XCTAssertTrue(antigos.isDisjoint(with: novos))
+    }
+}
+
+final class AgendaDoMacTestes: XCTestCase {
+    private let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+
+    func testUmEnlacePorIphoneEEsperaDepoisDeCair() {
+        var a = AgendaDoMac()
+        XCTAssertTrue(a.podeConectar("i", agora: t0))
+        a.conectando("i")
+        XCTAssertFalse(a.podeConectar("i", agora: t0), "não conecta duas vezes no mesmo iPhone")
+        XCTAssertTrue(a.podeConectar("outro", agora: t0))
+        a.terminou("i", duracao: nil, agora: t0)
+        XCTAssertFalse(a.podeConectar("i", agora: t0.addingTimeInterval(1)))
+        XCTAssertTrue(a.podeConectar("i", agora: t0.addingTimeInterval(AgendaDoMac.esperaMinima)))
+    }
+
+    /// iPhone que não fecha o aperto de mão (sem pareamento, o outro sentido em uso): o Mac não conecta em laço.
+    func testFalhasSeguidasDobramAEsperaAteOTetoESessaoBoaZera() {
+        var a = AgendaDoMac()
+        var vistas: [TimeInterval] = []
+        for _ in 0..<6 {
+            a.conectando("i")
+            a.terminou("i", duracao: 1, agora: t0)
+            vistas.append(a.espera("i") ?? 0)
+        }
+        XCTAssertEqual(vistas, [2, 4, 8, 16, 30, 30])
+        a.conectando("i")
+        a.terminou("i", duracao: AgendaDoMac.sessaoBoa, agora: t0)
+        XCTAssertEqual(a.espera("i"), AgendaDoMac.esperaMinima)
+    }
+}
+
+/// A sessão inteira pelo sentido invertido, na mesma PortaDoBluetooth do sentido antigo.
+final class PortaDoBluetoothInvertidaTestes: XCTestCase {
+    private func pedir(_ f: FluxoBytes, _ id: Int, _ metodo: String, _ caminho: String, cabecalhos: [String: String] = [:], corpo: Data = Data()) -> RespostaCabo? {
+        let p = PedidoCabo(metodo: metodo, caminho: caminho, query: [:], cabecalhos: cabecalhos, corpo: corpo)
+        _ = f.escrever(Quadros.codificar(MensagemCabo(tipo: "pedido", id: id, pedido: p))!)
+        while let m = Quadros.ler(de: f) {
+            if m.tipo == "resposta", m.id == id { return m.resposta }
+        }
+        return nil
+    }
+
+    private func esperar(_ texto: String, _ ok: () -> Bool) {
+        let limite = Date().addingTimeInterval(3)
+        while !ok() && Date() < limite { Thread.sleep(forTimeInterval: 0.01) }
+        XCTAssertTrue(ok(), texto)
+    }
+
+    func testApertoDeMaoPedidoERespostaPartidosQuedaEVolta() throws {
+        let c = try Cenario()
+        let log = Registro()
+        let porta = PortaDoBluetooth(roteador: c.roteador, nomeMac: { "Mac do Leo" }, decidir: { _, _ in true }, log: { log.anotar($0) })
+        let ar = ArInvertido(mtu: 20)
+        for volta in 0..<2 {
+            let (iphone, mac) = ar.par()
+            Thread { porta.atender(mac, rotulo: "inv-teste") }.start()
+            let entrada = try EnlaceSeguro.entrar(iphone, codigoAcesso: Cenario.codigo)
+            XCTAssertEqual(entrada.nomeMac, "Mac do Leo")
+            XCTAssertEqual(try XCTUnwrap(Quadros.ler(de: entrada.fluxo)).tipo, "ola")
+            let r = try XCTUnwrap(pedir(entrada.fluxo, 1, "GET", "/api/estado", cabecalhos: ["x-deck-codigo": Cenario.codigo]))
+            XCTAssertEqual(r.status, 200, "volta \(volta)")
+            XCTAssertEqual(porta.sessoesAtivas, 1)
+            // queda: o iPhone fecha (aviso vazio) e a sessão do Mac acaba, liberando a vaga
+            entrada.fluxo.fechar()
+            esperar("a sessão do Mac não acabou com o aviso de fechar (volta \(volta))") { porta.sessoesAtivas == 0 }
+        }
+        XCTAssertGreaterThan(ar.subida.count, 10, "o pedido subiu partido")
+        XCTAssertGreaterThan(ar.descida.count, 10, "a resposta desceu partida")
+        XCTAssertLessThanOrEqual((ar.subida + ar.descida).max() ?? 0, 20, "nenhum pacote passa do MTU")
+        XCTAssertGreaterThan(ar.cheias, 0, "a fila do rádio encheu e a escrita esperou")
+        XCTAssertTrue(log.todos.contains { $0.contains("bluetooth/inv-teste GET /api/estado 200") }, "\(log.todos)")
+    }
+
+    /// O mesmo iPhone chega pelos dois sentidos: ele fica com o primeiro e fecha o outro, e o Mac solta a sessão que sobrou.
+    func testCorridaDosDoisSentidosTerminaComUmaSessao() throws {
+        let c = try Cenario()
+        let porta = PortaDoBluetooth(roteador: c.roteador, nomeMac: { "Mac do Leo" }, decidir: { _, _ in true }, log: { _ in })
+        let (antigoMac, antigoIphone) = FluxoEnlace.par()
+        let (invIphone, invMac) = ArInvertido().par()
+        Thread { porta.atender(antigoMac, rotulo: "antigo") }.start()
+        Thread { porta.atender(invMac, rotulo: "inv-teste") }.start()
+        nonisolated(unsafe) var antigo: FluxoCifrado?
+        let fim = expectation(description: "antigo")
+        Thread { antigo = try? EnlaceSeguro.entrar(antigoIphone, codigoAcesso: Cenario.codigo).fluxo; fim.fulfill() }.start()
+        let invertido = try EnlaceSeguro.entrar(invIphone, codigoAcesso: Cenario.codigo).fluxo
+        wait(for: [fim], timeout: 5)
+        XCTAssertNotNil(antigo)
+        esperar("as duas sessões abriram") { porta.sessoesAtivas == 2 }
+        antigo?.fechar()
+        esperar("a sessão que perdeu a corrida não foi solta") { porta.sessoesAtivas == 1 }
+        let r = try XCTUnwrap(pedir(invertido, 1, "GET", "/api/estado", cabecalhos: ["x-deck-codigo": Cenario.codigo]))
+        XCTAssertEqual(r.status, 200)
+        invertido.fechar()
+    }
+
+    /// iPhone novo pelo sentido invertido: o mesmo pareamento, que só chega à tela com Conectar iPhone aberto.
+    func testPareamentoPeloSentidoInvertidoSoComAJanelaAberta() throws {
+        let c = try Cenario()
+        nonisolated(unsafe) var aberta = false
+        let mostrados = Registro()
+        let porta = PortaDoBluetooth(roteador: c.roteador, nomeMac: { "Mac do Leo" }, decidir: { _, cod in mostrados.anotar(cod); return true },
+                                     pareamentoAberto: { aberta }, log: { _ in })
+        let ar = ArInvertido()
+        let (i1, m1) = ar.par()
+        Thread { porta.atender(m1, rotulo: "inv-fora") }.start()
+        let fora = try EnlaceSeguro.iniciarPareamento(i1, nomeDoIphone: "iPhone Exemplo")
+        XCTAssertThrowsError(try EnlaceSeguro.concluir(fora, aceito: true))
+        XCTAssertTrue(mostrados.todos.isEmpty)
+
+        aberta = true
+        let (i2, m2) = ar.par()
+        Thread { porta.atender(m2, rotulo: "inv-novo") }.start()
+        let p = try EnlaceSeguro.iniciarPareamento(i2, nomeDoIphone: "iPhone Exemplo")
+        XCTAssertEqual(try EnlaceSeguro.concluir(p, aceito: true), Cenario.codigo)
+        XCTAssertEqual(mostrados.todos, [p.codigo])
+        p.fluxo.fechar()
+    }
+}
 #endif
 
 /// O Mac parou de anunciar depois de uma queda e nunca voltou (12/11/2026): o log ficou mudo por horas e o iPhone
