@@ -22,6 +22,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"math"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -333,8 +334,15 @@ func (a *ajudante) tratar(ctx context.Context, ev any) {
 		a.marcarSujo()
 		fase("erro", "O aparelho foi desconectado pelo WhatsApp. Gere um QR novo.")
 	case *events.UnarchiveChatsSetting:
-		a.estado.ManterArquivadas(!e.Action.GetUnarchiveChats())
-		a.marcarSujo()
+		if e.Action != nil {
+			a.estado.ManterArquivadas(!e.Action.GetUnarchiveChats())
+			a.marcarSujo()
+		}
+	case *events.Mute:
+		if e.Action != nil {
+			a.estado.Silenciar(e.JID.String(), fimDoSilencio(e.Action.GetMuted(), e.Action.GetMuteEndTimestamp()))
+			a.marcarSujo()
+		}
 	case *events.StreamReplaced:
 		fase("erro", "Outro programa tomou o lugar do Deck nesta conexão.")
 	case *events.Message:
@@ -436,6 +444,21 @@ func (a *ajudante) sincronizarArquivadas(ctx context.Context) {
 	}()
 }
 
+// fimDoSilencio converte o fim do silêncio do WhatsApp (segundos, ms, ou -1 para sempre) em unix ms.
+// Zero quer dizer sem silêncio.
+func fimDoSilencio(silenciada bool, fim int64) int64 {
+	if !silenciada {
+		return 0
+	}
+	if fim <= 0 || fim > math.MaxInt64/1000 {
+		return math.MaxInt64
+	}
+	if fim < 100_000_000_000 {
+		return fim * 1000
+	}
+	return fim
+}
+
 func (a *ajudante) historico(ctx context.Context, e *events.HistorySync) {
 	for _, c := range e.Data.GetConversations() {
 		j, err := types.ParseJID(c.GetID())
@@ -469,6 +492,7 @@ func (a *ajudante) historico(ctx context.Context, e *events.HistorySync) {
 		a.estado.Numero(j.String(), numero)
 		// Arquivada: fica fora de Todas, Contatos e Grupos e só aparece no filtro Arquivadas. Histórico sem o campo
 		// não diz nada (não desarquiva).
+		a.estado.Silenciar(j.String(), fimDoSilencio(c.GetMuteEndTime() > 0, int64(c.GetMuteEndTime())))
 		if c.Archived != nil {
 			ultima := time.Unix(int64(c.GetConversationTimestamp()), 0)
 			a.estado.ArquivarEm(j.String(), c.GetArchived(), ultima)
