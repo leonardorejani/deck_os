@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Compila o Deck.app do Mac em Release (assinatura ad hoc com requisito estável, sem conta paga) e gera dist/Deck-1.0.dmg
+# Compila o Deck.app do Mac em Release (assinatura ad hoc com requisito estável, sem conta paga) e gera dist/Deck-1.1.dmg
 # com o app e um atalho para Aplicativos. Também grava onde está este repo para o Deck renovar o app do iPhone.
 # Uso: ./build.sh [--abrir]    (--abrir abre o app recém-compilado pelo Finder, nunca por "open": ver scripts/abrir-deck.sh)
 set -euo pipefail
@@ -11,7 +11,7 @@ for a in "$@"; do
     *) echo "Uso: ./build.sh [--abrir]" >&2; exit 1 ;;
   esac
 done
-versao="1.0"
+versao="1.1"
 numero="$(git -C "$raiz" rev-list --count HEAD 2>/dev/null || echo 1)"
 dmg="$raiz/dist/Deck-$versao.dmg"
 
