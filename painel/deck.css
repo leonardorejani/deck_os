@@ -813,31 +813,32 @@ button.item-lista.com-capa:active .capa-fila svg, button.item-lista.com-capa:foc
 .ctl-grade[data-n="1"] { grid-template-columns: minmax(0, 1fr) }
 .ctl-grade[data-n="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)) }
 .ctl-grade[data-n="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)) }
-.vertical .ctl-grade { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(150px, auto); min-height: 0 }
+.vertical .ctl-grade { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(220px, 1fr) }
 .vertical .ctl-grade[data-n="1"] { grid-template-columns: minmax(0, 1fr) }
-.ctl-cartao { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: var(--item); padding: var(--pad) var(--icone); border-radius: var(--raio-card); background: var(--superficie-2); min-width: 0; border: 0; font: inherit; text-align: left; color: var(--texto-2); font-variant-numeric: tabular-nums; transition: background-color var(--mov-padrao) var(--curva-move) }
-.ctl-topo { display: flex; align-items: center; gap: var(--item); min-width: 0; color: var(--texto-2); font-size: var(--texto-sm) }
+/* O cartão inteiro é o controle (slider vertical, como o Centro de Controle do iOS). Duas camadas com o mesmo texto: a de baixo escura com texto claro,
+   a de cima branca com texto escuro, recortada de baixo até --nivel. O texto troca de cor exatamente na linha do branco. */
+.ctl-cartao { position: relative; display: block; min-width: 0; min-height: 0; overflow: hidden; border-radius: var(--raio-card); background: var(--superficie-2); border: 0; padding: 0; font: inherit; text-align: left; color: var(--texto-2); font-variant-numeric: tabular-nums; touch-action: none; cursor: grab; -webkit-tap-highlight-color: transparent; --nivel: 0 }
+.ctl-cartao.arrastando { cursor: grabbing }
+.ctl-cartao:focus-visible { outline: 2px solid var(--destaque); outline-offset: 2px }
+.ctl-cam { position: absolute; inset: 0; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: var(--item); padding: var(--pad) var(--icone); pointer-events: none }
+.ctl-cheio { background: var(--texto); color: var(--superficie); clip-path: inset(calc(100% - var(--nivel) * 1%) 0 0 0); transition: clip-path var(--mov-contar) var(--curva-entra), background-color var(--mov-padrao) var(--curva-move) }
+.ctl-cartao.arrastando .ctl-cheio { transition: background-color var(--mov-padrao) var(--curva-move) }
+.ctl-cartao.mudo .ctl-cheio { background: var(--texto-2) }
+.ctl-topo { display: flex; align-items: center; gap: var(--item); min-width: 0; font-size: var(--texto-sm) }
 .ctl-ic { flex: none; display: grid; place-items: center }
-.ctl-ic svg { width: 16px; height: 16px }
+.ctl-ic svg { width: 20px; height: 20px }
 .ctl-rot { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
-.ctl-num { align-self: center; font-size: var(--texto-2xl); font-weight: 700; line-height: 1; color: var(--texto); white-space: nowrap; font-variant-numeric: tabular-nums }
-.ctl-num small { font-size: var(--texto-md); font-weight: 600; color: var(--texto-2); margin-left: var(--micro-gap) }
-.ctl-estado { font-size: var(--texto-xl) }
-.ctl-cartao .trilho { position: relative; height: 10px; margin: var(--item) 0; border-radius: var(--raio-pilula); background: var(--superficie); touch-action: none; cursor: pointer }
-.ctl-cartao .trilho::before { content: ""; position: absolute; inset: -28px -8px } /* área de toque de uns 66 pt de altura, a barra toda é o dedo */
-.ctl-cartao .trilho i { display: block; height: 100%; width: 100%; border-radius: inherit; background: var(--texto); transform: scaleX(0); transform-origin: left; transition: transform var(--mov-contar) var(--curva-entra), background-color var(--mov-padrao) var(--curva-move) }
-.ctl-cartao.arrastando .trilho i { transition: none }
-.ctl-cartao.arrastando { background: var(--superficie-2) }
-.ctl-cartao.mudo .trilho i { background: var(--texto-2) }
-.ctl-mudo { cursor: pointer; -webkit-tap-highlight-color: transparent }
+.ctl-num { align-self: center; font-size: var(--texto-2xl); font-weight: 700; line-height: 1; color: inherit; white-space: nowrap; font-variant-numeric: tabular-nums }
+.ctl-cam:not(.ctl-cheio) .ctl-num { color: var(--texto) }
+.ctl-num small { font-size: var(--texto-md); font-weight: 600; margin-left: var(--micro-gap); opacity: .7 }
+.ctl-mudo { display: grid; place-content: center; justify-items: center; gap: var(--icone); text-align: center; color: var(--texto-2); cursor: pointer; transition: background-color var(--mov-rapido) var(--curva-move), transform var(--mov-rapido) var(--curva-move) }
 .ctl-mudo:active { transform: scale(.98) }
-.ctl-chave { display: block; position: relative; width: 44px; height: 26px; margin: var(--item) 0; border-radius: var(--raio-pilula); background: var(--superficie); transition: background-color var(--mov-rapido) var(--curva-move) }
-.ctl-chave i { position: absolute; left: 3px; top: 3px; width: 20px; height: 20px; border-radius: 50%; background: var(--texto-2); transition: transform var(--mov-rapido) var(--curva-move), background-color var(--mov-rapido) var(--curva-move) }
-.ctl-mudo.ligado { background: var(--destaque-suave) }
-.ctl-mudo.ligado .ctl-chave { background: var(--destaque) }
-.ctl-mudo.ligado .ctl-chave i { transform: translateX(18px); background: var(--texto) }
-.ctl-cartao.esq { align-content: end }
+.ctl-mic svg { width: 44px; height: 44px; display: block }
+.ctl-mudo .ctl-estado { font-size: var(--texto-xl); font-weight: 700; color: inherit; line-height: 1.1 }
+.ctl-mudo.ligado { background: var(--cal-vermelho); color: #fff }
+.ctl-cartao.esq { display: grid; align-content: end; gap: var(--item); padding: var(--pad) var(--icone) }
 .ctl-cartao.esq .barra { display: block; height: 10px }
+@media (prefers-reduced-motion: reduce) { .ctl-cheio, .ctl-mudo { transition: none } .ctl-mudo:active { transform: none } }
 
 /* ---------- Monitor de Atividade (monitor.js): grade de cartões escuros, rótulo cinza em cima, número grande, barra fina embaixo ---------- */
 .mn-grade { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); grid-auto-rows: minmax(104px, 1fr); gap: var(--grade); min-height: 100%; padding-bottom: var(--pad); box-sizing: border-box }
