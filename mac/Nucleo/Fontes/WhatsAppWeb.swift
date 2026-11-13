@@ -215,9 +215,29 @@ final class OrigemWhatsApp: @unchecked Sendable {
         return agora.timeIntervalSince1970 - mudou < Self.janelaAtividade ? .ativo : .parado
     }
 
-    /// Uma aba do WhatsApp Web que já esteja aberta (no navegador escolhido primeiro), venha a leitura de onde vier.
-    /// Sem cache: "Responder no Mac" quer a aba de agora, não a de dois segundos atrás.
-    func abaAberta() -> AbaWeb? { procurar(preferido: navegadorEscolhido()).aba }
+    /// Para onde "Abrir no Mac" e a tecla do WhatsApp vão. Ajuste explícito vale: "app" abre o app, "web" e "qr" (que
+    /// lê pelo WhatsApp Web) abrem o navegador. No "auto" vale a decisão da leitura, e o navegador também quando o app
+    /// do WhatsApp não está instalado.
+    func abreNoWeb() -> Bool {
+        switch config().origem {
+        case "app": return false
+        case "web", "qr": return true
+        default:
+            if decidir().origem == "web" { return true }
+            // Banco em atividade é app instalado e em uso. Parado: confere se o app ainda existe.
+            return bancoAtivo(relogio()) ? false : !appInstalado()
+        }
+    }
+
+    func appInstalado() -> Bool {
+        executor.rodar(#"test -d "/Applications/WhatsApp.app" || test -d "$HOME/Applications/WhatsApp.app""#).status == 0
+    }
+
+    /// Os navegadores na ordem em que se procura a aba: o escolhido na config primeiro.
+    func ordemDeNavegadores() -> [NavegadorWeb] {
+        let preferido = navegadorEscolhido()
+        return (preferido.map { [$0] } ?? []) + NavegadorWeb.todos.filter { $0 != preferido }
+    }
 
     /// A primeira aba do WhatsApp Web, olhando o navegador preferido primeiro. Com várias abas no mesmo
     /// navegador (o WhatsApp Web só deixa uma ativa por perfil), vale a que tem mais não lidas.
@@ -279,53 +299,179 @@ enum AberturaWhatsApp: Equatable, Sendable {
     case falhou(String)
 }
 
-/// "Abrir no Mac", "Responder no Mac" e a tecla do WhatsApp, quando a origem é o WhatsApp Web: traz a aba
-/// que já está aberta, ou abre web.whatsapp.com.
+/// Onde está a aba do WhatsApp Web, e como se chegou a essa resposta.
+enum LocalDaAba: Equatable, Sendable {
+    /// Achada pelo AppleScript (Automação).
+    case porAutomacao(AbaWeb)
+    /// Achada pela árvore de Acessibilidade (a barra de abas do navegador). `janela` conta a partir de 0.
+    case porAcessibilidade(navegador: NavegadorWeb, pid: Int32, janela: Int, titulo: String)
+    /// A leitura deu certo e não há aba do WhatsApp Web: só aqui se pode abrir uma nova.
+    case nenhuma
+    /// Não deu para saber se existe aba (Automação negada e Acessibilidade sem acesso). Nunca abre aba nova.
+    case semSaber(NavegadorWeb)
+}
+
+/// "Abrir no Mac", "Responder no Mac" e a tecla do WhatsApp, quando o destino é o WhatsApp Web: traz a aba
+/// que já está aberta, ou abre web.whatsapp.com. Aba nova só quando a leitura das abas deu certo e não há nenhuma.
 struct AbridorWhatsApp: Sendable {
     var origem: OrigemWhatsApp
     var executor: any Executor
     /// Quem escreve na busca do WhatsApp Web (Acessibilidade). Nil: sem busca, a aba só vem para a frente.
     var busca: (any BuscaNaPagina)? = nil
     var dormir: @Sendable (TimeInterval) -> Void = { Thread.sleep(forTimeInterval: $0) }
+    /// A árvore de Acessibilidade dos navegadores, para achar e escolher a aba quando a Automação falha. Nil: sem ela.
+    var ax: (any AcessibilidadeDoNavegador)? = nil
+    /// Uma linha no deck.log. Nunca leva nome de contato nem número.
+    var registrar: @Sendable (String) -> Void = { _ in }
 
     static let erro = "Não consegui abrir o WhatsApp Web no navegador."
+    static let erroTrazer = "Achei a aba do WhatsApp Web, mas não consegui trazê-la para a frente."
 
     static let avisoDoGrupo = "Abri o WhatsApp Web, mas não consegui buscar o grupo sozinho. Procure o grupo na lista."
     static let avisoSemNumero = "Abri o WhatsApp Web, mas não consegui buscar a conversa sozinho. Procure ela na lista."
     static let avisoSemAcesso = "Abri o WhatsApp Web. Libere a Acessibilidade para o Deck em Ajustes do Mac, Privacidade e Segurança, e ele abre a conversa sozinho. Por enquanto, procure ela na lista."
 
-    /// "Responder no Mac" (13/11/2026): a aba que já está aberta vem para a frente e a conversa abre pela busca do próprio
-    /// WhatsApp Web (Acessibilidade), sem trocar o endereço da aba nem recarregar a página. Só sem aba aberta se abre uma
-    /// nova: contato com número vai direto em /send?phone=, o resto abre o WhatsApp Web e busca depois de carregar.
-    /// Sem a busca (sem acesso, ou o campo não apareceu) a aba fica na frente e o aviso diz para escolher na lista.
-    func abrirConversa(numero: String?, grupo: Bool, nome: String? = nil) -> AberturaDeConversa {
-        let termo = CampoDoWhatsApp.termo(nome: nome, numero: numero)
-        if let aba = origem.abaAberta(), executor.rodar(WhatsAppWeb.comandoTrazer(aba)).status == 0 {
-            dormir(0.3) // o navegador leva um instante para passar a aba para a frente
-            return .aberta(aviso: buscar(termo, em: aba.navegador, aguardar: 2, grupo: grupo))
+    /// Sem saber se a aba existe, o Deck não abre outra (a antiga ficaria com o aviso de "aberto em outra janela").
+    static func avisoSemAutomacao(_ n: NavegadorWeb) -> String {
+        let nome = n.nome.replacingOccurrences(of: "Google ", with: "").replacingOccurrences(of: " Browser", with: "")
+        return "Libere a Automação do \(nome) para o Deck nos Ajustes do Mac (Privacidade e Segurança, Automação)."
+    }
+
+    /// O código do erro do AppleScript ("... (-1743)"), ou o status do processo.
+    static func codigoDoErro(status: Int32, saida: String) -> String {
+        if let r = saida.range(of: #"\((-?\d+)\)\s*$"#, options: .regularExpression) {
+            return saida[r].trimmingCharacters(in: CharacterSet(charactersIn: "() \n"))
         }
-        // Sem aba (ou ela fechou nesse meio tempo): abre uma nova.
+        return "status \(status)"
+    }
+
+    /// "(3) WhatsApp" e "WhatsApp" são a aba do WhatsApp Web. Outro site com WhatsApp no meio do título não é.
+    static func ehTituloDoWhatsApp(_ titulo: String) -> Bool {
+        var t = titulo.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let r = t.range(of: #"^\(\d{1,6}\+?\)\s*"#, options: .regularExpression) { t.removeSubrange(r) }
+        return ["whatsapp", "whatsapp web"].contains(t.lowercased())
+    }
+
+    /// Procura a aba do WhatsApp Web. Cada navegador: AppleScript primeiro, e se a Automação falhar, a Acessibilidade.
+    /// Sem cache: quer a aba de agora.
+    func localizar() -> LocalDaAba {
+        var duvida: NavegadorWeb?
+        for n in origem.ordemDeNavegadores() {
+            let r = executor.rodar(WhatsAppWeb.comandoBusca(n))
+            switch WhatsAppWeb.interpretar(status: r.status, saida: r.saida, navegador: n) {
+            case .fechado:
+                registrar("whatsapp: \(n.nome) fechado")
+            case .abas(let abas):
+                registrar("whatsapp: Automação ok em \(n.nome), abas do WhatsApp=\(abas.count)")
+                if let melhor = abas.max(by: { $0.naoLidas < $1.naoLidas }) { return .porAutomacao(melhor) }
+            case .semPermissao, .falhou:
+                let codigo = Self.codigoDoErro(status: r.status, saida: r.saida)
+                registrar("whatsapp: Automação negada ou sem resposta em \(n.nome) (\(codigo))")
+                switch porAcessibilidade(n) {
+                case .achada(let pid, let janela, let titulo): return .porAcessibilidade(navegador: n, pid: pid, janela: janela, titulo: titulo)
+                case .nenhuma: break
+                case .semSaber: duvida = duvida ?? n
+                }
+            }
+        }
+        if let duvida { return .semSaber(duvida) }
+        return .nenhuma
+    }
+
+    private enum ResultadoAX { case achada(pid: Int32, janela: Int, titulo: String), nenhuma, semSaber }
+
+    /// A barra de abas do navegador na árvore de Acessibilidade. `.nenhuma` só quando a leitura deu certo em todas as janelas.
+    private func porAcessibilidade(_ n: NavegadorWeb) -> ResultadoAX {
+        guard let ax else { registrar("whatsapp: Acessibilidade indisponível para \(n.nome)"); return .semSaber }
+        let pids = LeitorDeMeetAX.pids(n, executor: executor)
+        guard !pids.isEmpty else { registrar("whatsapp: \(n.nome) sem processo para ler"); return .nenhuma }
+        var incerto = false
+        var achadas: [(pid: Int32, janela: Int, titulo: String)] = []
+        for pid in pids {
+            guard let janelas = ax.abasDasJanelas(pid: pid) else { incerto = true; continue }
+            for (i, j) in janelas.enumerated() {
+                if !j.temBarraDeAbas { continue }
+                if j.abas.isEmpty { incerto = true; continue }
+                for t in j.abas where Self.ehTituloDoWhatsApp(t) { achadas.append((pid, i, t)) }
+            }
+        }
+        if let a = achadas.max(by: { WhatsAppWeb.naoLidas(titulo: $0.titulo) < WhatsAppWeb.naoLidas(titulo: $1.titulo) }) {
+            registrar("whatsapp: Acessibilidade achou \(achadas.count) aba(s) do WhatsApp em \(n.nome)")
+            return .achada(pid: a.pid, janela: a.janela, titulo: a.titulo)
+        }
+        if incerto { registrar("whatsapp: Acessibilidade sem acesso ou sem barra de abas em \(n.nome)"); return .semSaber }
+        registrar("whatsapp: Acessibilidade ok em \(n.nome), sem aba do WhatsApp")
+        return .nenhuma
+    }
+
+    /// Traz a aba achada para a frente. Devolve o navegador onde ela está, ou nil se não deu.
+    private func trazer(_ local: LocalDaAba) -> NavegadorWeb? {
+        switch local {
+        case .porAutomacao(let aba):
+            guard executor.rodar(WhatsAppWeb.comandoTrazer(aba)).status == 0 else { registrar("whatsapp: Automação não trouxe a aba"); return nil }
+            registrar("whatsapp: caminho=automação, aba trazida")
+            return aba.navegador
+        case .porAcessibilidade(let n, let pid, let janela, let titulo):
+            guard let ax, ax.pressionarAba(pid: pid, janela: janela, titulo: titulo) else { registrar("whatsapp: Acessibilidade não escolheu a aba"); return nil }
+            _ = ax.elevarJanela(pid: pid, janela: janela)
+            registrar("whatsapp: caminho=acessibilidade, aba escolhida")
+            return n
+        case .nenhuma, .semSaber: return nil
+        }
+    }
+
+    /// "Responder no Mac" (13/11/2026): a aba que já está aberta vem para a frente e a conversa abre pela busca do próprio
+    /// WhatsApp Web (Acessibilidade), sem trocar o endereço da aba nem recarregar a página. Só com a leitura das abas certa
+    /// e nenhuma aba se abre uma nova: contato com número vai direto em /send?phone=, o resto abre o WhatsApp Web e busca
+    /// depois de carregar. Sem saber se há aba (Automação negada e sem Acessibilidade), avisa em vez de abrir.
+    func abrirConversa(numero: String?, grupo: Bool, nome: String? = nil) -> AberturaDeConversa {
+        registrar("whatsapp: responder, \(grupo ? "grupo" : "contato"), número \(numero == nil ? "ausente" : "presente")")
+        let termo = CampoDoWhatsApp.termo(nome: nome, numero: numero)
+        let local = localizar()
+        if case .semSaber(let n) = local {
+            registrar("whatsapp: sem saber se há aba, não abre outra")
+            return .falhou(Self.avisoSemAutomacao(n))
+        }
+        if local != .nenhuma {
+            if let navegador = trazer(local) {
+                dormir(0.3) // o navegador leva um instante para passar a aba para a frente
+                let aviso = buscar(termo, em: navegador, aguardar: 2, grupo: grupo)
+                registrar("whatsapp: resultado=\(aviso == nil ? "aberta" : "aviso")")
+                return .aberta(aviso: aviso)
+            }
+            if case .porAcessibilidade = local { return .falhou(Self.erroTrazer) }
+            // Automação: a aba fechou nesse meio tempo, e a leitura estava certa. Abre uma nova.
+        }
+        // Sem aba: abre uma nova.
+        registrar("whatsapp: caminho=aba nova")
         let link = grupo ? nil : numero.flatMap { WhatsAppWeb.enderecoDaConversa(numero: $0) }
         let r = executor.rodar(WhatsAppWeb.comandoAbrir(endereco: link ?? WhatsAppWeb.endereco, navegador: origem.navegadorEscolhido()))
-        guard r.status == 0 else { return .falhou(Self.erro) }
-        if link != nil { return .aberta(aviso: nil) }
+        guard r.status == 0 else { registrar("whatsapp: resultado=falhou ao abrir"); return .falhou(Self.erro) }
+        if link != nil { registrar("whatsapp: resultado=aberta pelo link direto"); return .aberta(aviso: nil) }
         // Sem link direto: espera a página carregar e busca pelo nome.
         guard let termo else { return .aberta(aviso: grupo ? Self.avisoDoGrupo : Self.avisoSemNumero) }
         var navegador = origem.navegadorEscolhido()
         if navegador == nil {
             for _ in 0..<6 {
                 dormir(1)
-                if let aba = origem.abaAberta() { navegador = aba.navegador; break }
+                switch localizar() {
+                case .porAutomacao(let aba): navegador = aba.navegador
+                case .porAcessibilidade(let n, _, _, _): navegador = n
+                default: continue
+                }
+                break
             }
         }
         guard let navegador else { return .aberta(aviso: grupo ? Self.avisoDoGrupo : Self.avisoSemNumero) }
-        return .aberta(aviso: buscar(termo, em: navegador, aguardar: 10, grupo: grupo))
+        let aviso = buscar(termo, em: navegador, aguardar: 10, grupo: grupo)
+        registrar("whatsapp: resultado=\(aviso == nil ? "aberta" : "aviso")")
+        return .aberta(aviso: aviso)
     }
 
     /// Escreve na busca do WhatsApp Web. nil: abriu. Senão, o aviso do que a pessoa ainda precisa fazer.
     private func buscar(_ termo: String?, em navegador: NavegadorWeb, aguardar: TimeInterval, grupo: Bool) -> String? {
         let procure = grupo ? Self.avisoDoGrupo : Self.avisoSemNumero
-        guard let termo, let busca else { return procure }
+        guard let termo, let busca else { registrar("whatsapp: busca indisponível"); return procure }
         // Pode haver mais de um processo com o nome do navegador (outro perfil, instância de automação): a aba do WhatsApp
         // está em um só. Primeiro uma passada rápida em todos, depois a espera inteira repartida entre eles.
         let pids = LeitorDeMeetAX.pids(navegador, executor: executor)
@@ -337,9 +483,10 @@ struct AbridorWhatsApp: Sendable {
         for tempo in tempos {
             for pid in pids {
                 resultado = busca.pesquisar(pid: pid, texto: termo, aguardar: tempo)
-                if resultado != .semCampo { return resposta(resultado, procure) }
+                if resultado != .semCampo { registrar("whatsapp: busca=\(resultado)"); return resposta(resultado, procure) }
             }
         }
+        registrar("whatsapp: busca=\(resultado)")
         return resposta(resultado, procure)
     }
 
@@ -351,12 +498,24 @@ struct AbridorWhatsApp: Sendable {
         }
     }
 
+    /// "Abrir no Mac" e a tecla do WhatsApp. O destino segue o ajuste (`abreNoWeb`): app ou WhatsApp Web.
     func abrir() -> AberturaWhatsApp {
-        let d = origem.decidir()
-        guard d.origem == "web" else { return .naoEWeb }
-        if let aba = d.aba, executor.rodar(WhatsAppWeb.comandoTrazer(aba)).status == 0 { return .aberto }
-        // Sem aba, ou a aba fechou nesse meio tempo: abre uma nova.
-        let r = executor.rodar(WhatsAppWeb.comandoAbrir(navegador: d.aba?.navegador ?? d.navegadorEscolhido))
+        guard origem.abreNoWeb() else { registrar("whatsapp: abrir, destino=app"); return .naoEWeb }
+        registrar("whatsapp: abrir, destino=web")
+        let local = localizar()
+        switch local {
+        case .semSaber(let n):
+            registrar("whatsapp: sem saber se há aba, não abre outra")
+            return .falhou(Self.avisoSemAutomacao(n))
+        case .nenhuma:
+            break
+        default:
+            if trazer(local) != nil { return .aberto }
+            if case .porAcessibilidade = local { return .falhou(Self.erroTrazer) }
+        }
+        registrar("whatsapp: caminho=aba nova")
+        let navegador: NavegadorWeb? = { if case .porAutomacao(let a) = local { return a.navegador }; return origem.navegadorEscolhido() }()
+        let r = executor.rodar(WhatsAppWeb.comandoAbrir(navegador: navegador))
         return r.status == 0 ? .aberto : .falhou(Self.erro)
     }
 }

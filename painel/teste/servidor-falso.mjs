@@ -169,6 +169,7 @@ const WHATSAPP_RICO = () => {
     { id: 'g1@g.us', nome: 'Louvor', grupo: true, naoLidas: 1, ultima: ha(30), mensagens: [{ de: 'Carla', texto: 'Ensaio confirmado', hora: ha(30) }] },
     { id: 'sn@lid', nome: '', grupo: false, naoLidas: 1, ultima: ha(40), mensagens: [M('Alguém sem nome salvo', 40)] },
     { id: 'arq@s.whatsapp.net', nome: 'Bia Arquivada', grupo: false, naoLidas: 4, ultima: ha(50), arquivada: true, mensagens: [M('Mensagem de conversa arquivada', 50)] },
+    { id: 'garq@g.us', nome: 'Promo Arquivada', grupo: true, naoLidas: 9, ultima: ha(55), arquivada: true, mensagens: [{ de: 'Loja', texto: 'Oferta do dia', hora: ha(55) }] },
     ...Array.from({ length: c.whatsappFotos }, (_, i) => ({ id: 'f' + i + '@s.whatsapp.net', nome: 'Foto ' + (i + 1), grupo: false, naoLidas: 1, ultima: ha(60 + i), foto: i.toString(16).padStart(16, 'a') + '.jpg', mensagens: [M('Oi ' + i, 60 + i)] })),
     ...(c.whatsappExtra ? [{ id: 'novo@s.whatsapp.net', nome: 'Chegou Agora', grupo: false, naoLidas: 1, ultima: ha(0), mensagens: [M('Acabou de chegar', 0)] }] : []),
   ];

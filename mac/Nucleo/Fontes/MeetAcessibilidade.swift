@@ -37,10 +37,27 @@ protocol AcessibilidadeDoNavegador: Sendable {
     func pressionar(pid: Int32, janela: Int, rotulo: String) -> Bool
     /// Seleciona a aba da janela que tem esse título (traz a aba de fundo para a frente da janela dela). Devolve se apertou.
     func pressionarAba(pid: Int32, janela: Int, titulo: String) -> Bool
+    /// As abas de cada janela, lidas na hora. Nil: não deu para olhar.
+    func abasDasJanelas(pid: Int32) -> [AbasDaJanela]?
+    /// Põe a janela (e o navegador) na frente, sem abrir nada. Devolve se conseguiu.
+    func elevarJanela(pid: Int32, janela: Int) -> Bool
+}
+
+/// As abas de uma janela do navegador, lidas na hora (sem o cache do Meet).
+struct AbasDaJanela: Equatable, Sendable {
+    var abas: [String]
+    /// Há barra de abas na janela. Sem ela (Picture-in-Picture, popup) a lista de abas não diz nada.
+    var temBarraDeAbas: Bool
 }
 
 extension AcessibilidadeDoNavegador {
     func pressionarAba(pid: Int32, janela: Int, titulo: String) -> Bool { false }
+    /// Padrão: o que `janelas` já mostra. O leitor de verdade lê sem cache.
+    func abasDasJanelas(pid: Int32) -> [AbasDaJanela]? {
+        janelas(pid: pid)?.map { AbasDaJanela(abas: $0.abas, temBarraDeAbas: !$0.flutuante) }
+    }
+    /// Põe a janela (e o navegador) na frente, sem abrir nada. Devolve se conseguiu.
+    func elevarJanela(pid: Int32, janela: Int) -> Bool { false }
 }
 
 /// O que um botão do Meet quer dizer, pelo nome dele.
@@ -346,6 +363,26 @@ final class AcessibilidadeReal: AcessibilidadeDoNavegador, @unchecked Sendable {
             trava.unlock()
             return janela
         }
+    }
+
+    func abasDasJanelas(pid: Int32) -> [AbasDaJanela]? {
+        guard AXIsProcessTrusted() else { return nil }
+        let app = aplicacao(pid)
+        if liberar(app, pid: pid) { Thread.sleep(forTimeInterval: 0.4) }
+        let teto = Date().addingTimeInterval(Self.limiteDeSegundos * 2)
+        return janelasDe(app).map { j in
+            let v = varrer(j, prazo: min(teto, Date().addingTimeInterval(Self.limiteDeSegundosPorJanela)))
+            return AbasDaJanela(abas: v.abas.map(\.titulo), temBarraDeAbas: v.temBarraDeAbas)
+        }
+    }
+
+    func elevarJanela(pid: Int32, janela: Int) -> Bool {
+        guard AXIsProcessTrusted() else { return false }
+        let app = aplicacao(pid)
+        let todas = janelasDe(app)
+        guard todas.indices.contains(janela) else { return false }
+        _ = AXUIElementSetAttributeValue(app, "AXFrontmost" as CFString, kCFBooleanTrue)
+        return AXUIElementPerformAction(todas[janela], "AXRaise" as CFString) == .success
     }
 
     func pressionarAba(pid: Int32, janela: Int, titulo: String) -> Bool {
