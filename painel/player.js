@@ -115,7 +115,7 @@ async function lerListaPlayer() {
   }
   pintarListaPlayer();
 }
-function pintarListaPlayer() {
+function pintarListaPlayer(rolarPara) {
   const el = $('#pc-lista'), corpo = $('#pc-lista-corpo'); if (!lp.qual) return;
   clearTimeout(lp.saida);
   if (el.hidden) { el.hidden = false; void el.offsetWidth; requestAnimationFrame(() => { if (lp.qual) el.classList.add('aberta') }) } // o quadro de partida (fora da tela) tem de existir antes de deslizar
@@ -127,7 +127,7 @@ function pintarListaPlayer() {
   corpo.setAttribute('aria-busy', String(!lp.dados && !lp.erro));
   if (lp.erro) { corpo.innerHTML = lp.semLogin ? `<div class="vazio-bloco"><strong>Spotify não conectado</strong><span>${esc(lp.erro)}</span></div>` : erroLista(lp.erro, 0); return }
   if (!lp.dados) { if (!corpo.querySelector('.esq-lista')) corpo.innerHTML = esqueletoLinhas(); return }
-  const y = corpo.scrollTop;
+  const y = rolarPara ?? corpo.scrollTop;
   corpo.innerHTML = lp.qual === 'fila' ? (lp.aba === 'recentes' ? recentesHTML(lp.dados) : filaHTML(lp.dados)) : aparelhosHTML(lp.dados);
   corpo.scrollTop = y;
 }
@@ -143,12 +143,15 @@ function pintarTopoFila() {
   const topo = $('#pc-lista-topo'), s = V?.spotify;
   topo.hidden = lp.qual !== 'fila' || lp.aba !== 'fila' || !s; if (topo.hidden) return;
   const html = `<small class="rotulo">Tocando agora</small><div class="linha-agora"><img class="capa-mini"${capaAttr(s)} alt="" referrerpolicy="no-referrer" onerror="this.dataset.erro=1;this.removeAttribute('src')"><span class="tx"><b>${esc(s.faixa)}</b><small>${esc(s.artista || '')}</small></span></div>`;
-  // só a faixa decide se o alto é refeito: quando o Mac confirma a troca (artista e capa de outra fonte), o que está na tela fica como está
+  // a animação é da troca de faixa. Com a mesma faixa (o Mac confirmando a troca) o alto não é refeito: só o artista e a capa que mudaram entram, sem piscar
   const k = s.faixa;
   if (topo.dataset.k !== k) {
     const havia = topo.dataset.k !== undefined; topo.dataset.k = k; topo.innerHTML = html;
     if (havia && !reduzMov()) $('.linha-agora', topo).animate([{ opacity: 0, transform: 'translateY(10px)' }, { opacity: 1, transform: 'none' }], { duration: msCss('--mov-padrao'), easing: curvaCss('--curva-entra') });
-  } else { const img = $('.capa-mini', topo); if (img && !img.getAttribute('src') && capaSrc(s)) img.src = capaSrc(s) }
+  } else {
+    const art = $('.tx small', topo); if (art && art.textContent !== (s.artista || '')) art.textContent = s.artista || '';
+    sincronizarCapa($('.capa-mini', topo), s);
+  }
 }
 const curvaCss = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim() || 'ease';
 /* A saída das faixas de cima. Antes de a lista ser refeita, guarda onde cada linha está e uma cópia das que vão sair. Depois de refeita (a
@@ -190,14 +193,15 @@ function recentesHTML(r) {
 async function pularPara(i) {
   const f = lp.dados, item = f?.proximas?.[i]; if (!item || lp.pulando) return;
   lp.pulando = true;
-  const faixaAntes = lp.faixa, animar = capturarSaidaFila(i);
+  const faixaAntes = lp.faixa, yAntes = $('#pc-lista-corpo').scrollTop, animar = capturarSaidaFila(i);
   lp.dados = { ...f, proximas: f.proximas.slice(i + 1) }; lp.faixa = item.faixa; // lp.faixa já é a nova: a troca do player não manda reler a fila antes da hora
-  otimistaSpotify({ tocando: true }, 0, { faixa: item.faixa, artista: item.artista || '', album: '', capaUrl: item.capa || '', capaId: undefined, duracao: 0 });
-  V = vistaReal(); atualizar(); pintarListaPlayer(); animar?.(); avisar(`Tocando ${item.faixa}`);
+  otimistaSpotify({ tocando: true }, 0, { faixa: item.faixa, artista: item.artista || '', album: '', capaUrl: item.capa || '', capaId: undefined, duracao: 0, aguardando: true });
+  // a lista encolheu: a rolagem volta ao alto, onde a escolhida toma o lugar (as que ficam sobem do lugar em que estavam)
+  V = vistaReal(); atualizar(); pintarListaPlayer(0); animar?.(); avisar(`Tocando ${item.faixa}`);
   try { await enfileirarSpotify(async () => { await canal.pularFila(i + 1, item.uri); await atualizarJa() }); setTimeout(() => { if (lp.qual === 'fila' && lp.aba === 'fila') lerListaPlayer() }, 800) }
   catch (e) {
     lp.faixa = faixaAntes; desfazerSpotify();
-    if (lp.qual === 'fila' && lp.aba === 'fila') { lp.dados = f; pintarListaPlayer(); if (!reduzMov()) $('#pc-lista-corpo').animate([{ opacity: 0 }, { opacity: 1 }], { duration: msCss('--mov-padrao') }) }
+    if (lp.qual === 'fila' && lp.aba === 'fila') { lp.dados = f; pintarListaPlayer(yAntes); if (!reduzMov()) $('#pc-lista-corpo').animate([{ opacity: 0 }, { opacity: 1 }], { duration: msCss('--mov-padrao') }) }
     tratarErro(e);
   }
   finally { lp.pulando = false }

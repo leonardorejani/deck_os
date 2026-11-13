@@ -395,7 +395,7 @@ function pintarProgresso(forcar) {
   $$('.progresso').forEach(pr => {
     const tr = $('.trilho', pr);
     pr.dataset.total = s.duracao || 0;
-    $('.decorrido', pr).textContent = mmss(s.posicao); $('.total', pr).textContent = mmss(s.duracao);
+    $('.decorrido', pr).textContent = mmss(s.posicao); $('.total', pr).textContent = s.aguardando ? '' : mmss(s.duracao); // trocou de faixa e o Mac ainda não disse a duração: sem total até chegar, para não saltar de 0:00
     $('i', tr).style.width = (s.duracao > 0 ? Math.min(100, s.posicao / s.duracao * 100) : 0) + '%';
     tr.setAttribute('aria-valuenow', Math.round(s.posicao || 0)); tr.setAttribute('aria-valuemax', Math.round(s.duracao || 0));
   });
@@ -454,7 +454,8 @@ document.addEventListener('pointerdown', ev => {
 document.addEventListener('pointermove', ev => { if (scrub) moverScrub(ev) });
 document.addEventListener('pointerup', async () => {
   if (!scrub) return;
-  const { pr, f } = scrub, s = Math.round(f * (+pr.dataset.total)), texto = $('.decorrido', pr).textContent;
+  const { pr, f } = scrub, total = +pr.dataset.total; if (!(total > 0)) { pr.classList.remove('arrastando'); scrub = null; pintarProgresso(true); return } // sem duração (faixa recém-trocada) não há onde buscar
+  const s = Math.round(f * total), texto = $('.decorrido', pr).textContent;
   pr.classList.remove('arrastando'); scrub = null; travaProgressoAte = performance.now() + 1500;
   otimistaSpotify({}, s); avisar('Pulou para ' + texto); // a barra já fica onde o dedo soltou: o Mac confirma em seguida
   V = vistaReal(); pintarProgresso(true); // e a do outro player (o pequeno atrás da tela cheia) também, sem esperar a trava
@@ -573,7 +574,7 @@ function pintarPlayerCheio() {
     const velha = $('.capa-grande', f); $('#pc-corpo').innerHTML = playerCheioHTML(s); guardarCapa(velha, $('.capa-grande', f), s); pintarProgresso(true);
   }
   pintarMidia($('.pc', f), s); pintarExtras(s);
-  if (lp.qual === 'fila' && s.faixa !== lp.faixa) { lp.faixa = s.faixa; pintarTopoFila(); lerListaPlayer() } // a fila anda com a música: o alto troca na hora, a lista quando o Mac responder
+  if (lp.qual === 'fila' && s.faixa !== lp.faixa) { lp.faixa = s.faixa; pintarTopoFila(); lerListaPlayer() } else if (lp.qual === 'fila') pintarTopoFila(); // mesma faixa: só o artista e a capa, se mudaram // a fila anda com a música: o alto troca na hora, a lista quando o Mac responder
   sincronizarCapa($('.capa-grande', f), s);
 }
 async function ativarPerfil(id) {
