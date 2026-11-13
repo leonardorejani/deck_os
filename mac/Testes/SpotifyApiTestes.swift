@@ -528,6 +528,21 @@ final class SpotifyApiTestes: XCTestCase {
         XCTAssertTrue(t.pedidos.filter { $0.url.hasSuffix("/me/player/next") }.isEmpty)
     }
 
+    func testPularNaFilaRegistraORastroSemToken() {
+        let t = filaDeLista(contexto: "spotify:artist:z")
+        let (c, _) = logada(t); c.esperaDoPulo = 0
+        let linhas = NSLock(); nonisolated(unsafe) var log: [String] = []
+        c.registrar = { linhas.lock(); log.append($0); linhas.unlock() }
+        XCTAssertNil(c.pularFila(posicao: 2, uri: "u:b"))
+        let tudo = log.joined(separator: "\n")
+        XCTAssertTrue(tudo.contains("pedido posicao=2 uri=u:b"), tudo)
+        XCTAssertTrue(tudo.contains("contexto que toca=spotify:artist:z"), tudo)
+        XCTAssertTrue(tudo.contains("PUT /me/player/play corpo enviado={\"uris\":[\"u:b\",\"u:c\",\"u:d\",\"u:e\"]} -> HTTP 204"), tudo)
+        XCTAssertTrue(tudo.contains("trocou=false"), tudo)
+        XCTAssertTrue(tudo.contains("resultado para o painel: ok"), tudo)
+        XCTAssertFalse(tudo.lowercased().contains("bearer"), "nada de token no log")
+    }
+
     func testPularNaFilaDeArtistaOuSemContextoUsaUris() {
         for contexto in ["spotify:artist:z", nil] {
             let t = filaDeLista(contexto: contexto)

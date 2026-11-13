@@ -135,6 +135,7 @@ final class ModeloApp: ObservableObject {
         if !testando {
             self.registrar = { LogDoDeck.padrao.escrever($0) }
             self.spotify.registrar = { LogDoDeck.padrao.escrever($0) }
+            self.spotify.conta.registrar = { LogDoDeck.padrao.escrever($0) }
         }
         // Hospedeiro de teste não abre o ajudante do WhatsApp (nem a sessão do dono).
         self.whatsappQR = testando ? ModeloWhatsAppQR.semAjudante() : ModeloWhatsAppQR.padrao()

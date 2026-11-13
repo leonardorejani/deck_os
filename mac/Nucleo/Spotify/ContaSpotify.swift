@@ -95,6 +95,13 @@ final class ContaSpotify: @unchecked Sendable {
     private let embutida: String?
     private let travaAviso = NSLock()
     private var _precisaChavePropria = false
+    private var _registrar: @Sendable (String) -> Void = { _ in }
+
+    /// Escreve no log do app (deck.log) o rastro do que a conta fez. Padrão: nada. Nunca recebe token, código nem cabeçalho.
+    var registrar: @Sendable (String) -> Void {
+        get { travaAviso.lock(); defer { travaAviso.unlock() }; return _registrar }
+        set { travaAviso.lock(); _registrar = newValue; travaAviso.unlock() }
+    }
 
     /// O Spotify recusou esta conta na chave embutida (ela não está em User Management do app do Deck). Fica até a pessoa
     /// colar a própria chave ou conectar. Só vale na memória: a tela lê e mostra o passo a passo.
@@ -282,7 +289,13 @@ final class ContaSpotify: @unchecked Sendable {
         }.joined(separator: "&")
     }
 
-    private func chamar(_ metodo: String, _ caminho: String, _ query: [(String, String)] = [], json: [String: Any]? = nil) -> Result<RespostaWeb, ErroSpotify> {
+    /// Corpo enviado, resumido para o log (só uris e ids do Spotify, sem texto longo).
+    private static func resumoDoCorpo(_ json: [String: Any]?) -> String {
+        guard let json, let d = try? JSONSerialization.data(withJSONObject: json, options: [.sortedKeys]), let t = String(data: d, encoding: .utf8) else { return "-" }
+        return t.count > 300 ? String(t.prefix(300)) + "..." : t
+    }
+
+    private func chamar(_ metodo: String, _ caminho: String, _ query: [(String, String)] = [], json: [String: Any]? = nil, rastro: String? = nil) -> Result<RespostaWeb, ErroSpotify> {
         var url = Self.api + caminho
         if !query.isEmpty { url += "?" + Self.formulario(query) }
         let corpo = json.flatMap { try? JSONSerialization.data(withJSONObject: $0) }
@@ -299,7 +312,14 @@ final class ContaSpotify: @unchecked Sendable {
         var resposta = uma(false)
         // O Spotify pode ter invalidado o token antes da hora: uma troca e uma segunda tentativa.
         if case .success(let r) = resposta, r.status == 401 { resposta = uma(true) }
-        guard case .success(let r) = resposta else { return resposta }
+        guard case .success(let r) = resposta else {
+            if let rastro, case .failure(let f) = resposta { registrar("spotify: \(rastro) \(metodo) \(caminho) sem resposta (\(f.texto))") }
+            return resposta
+        }
+        if let rastro {
+            let trecho = (200..<300).contains(r.status) ? "" : " corpo=" + String(String(decoding: r.corpo, as: UTF8.self).prefix(200)).replacingOccurrences(of: "\n", with: " ")
+            registrar("spotify: \(rastro) \(metodo) \(caminho) corpo enviado=\(Self.resumoDoCorpo(json)) -> HTTP \(r.status)\(trecho)")
+        }
         if (200..<300).contains(r.status) { return .success(r) }
         let e = conferirCadastro(Self.traduzir(r))
         // Meio logado não serve: com a chave do Deck e conta fora da lista, sai do login para a tela pedir a chave própria.
@@ -373,8 +393,8 @@ final class ContaSpotify: @unchecked Sendable {
 
     // MARK: Fila e repetição
 
-    func fila(limite: Int = 20) -> Result<FilaSpotify, ErroSpotify> {
-        let r = chamar("GET", "/me/player/queue").map { r in
+    func fila(limite: Int = 20, rastro: String? = nil) -> Result<FilaSpotify, ErroSpotify> {
+        let r = chamar("GET", "/me/player/queue", rastro: rastro).map { r in
             let obj = (json(r) as? [String: Any]) ?? [:]
             let proximas = ((obj["queue"] as? [Any]) ?? []).compactMap(Self.itemDaFila).prefix(limite)
             return FilaSpotify(atual: Self.itemDaFila(obj["currently_playing"]), proximas: Array(proximas))
@@ -433,31 +453,58 @@ final class ContaSpotify: @unchecked Sendable {
             for _ in 0..<posicao { if let e = erro(chamar("POST", "/me/player/next")) { return e } }
             return nil
         }
-        guard case .success(let f) = fila(limite: 50) else { return ErroSpotify(texto: "A fila mudou. Abra a fila de novo.") }
+        let rt = "pular"
+        registrar("spotify: \(rt) pedido posicao=\(posicao) uri=\(uri)")
+        func fim(_ e: ErroSpotify?) -> ErroSpotify? {
+            registrar("spotify: \(rt) resultado para o painel: \(e.map { "erro '\($0.texto)'" } ?? "ok")")
+            return e
+        }
+        guard case .success(let f) = fila(limite: 50, rastro: rt) else {
+            return fim(ErroSpotify(texto: "A fila mudou. Abra a fila de novo."))
+        }
         // A mesma música pode aparecer mais de uma vez: fica com a cópia mais perto da vez que a tela mandou.
         let achadas = f.proximas.indices.filter { f.proximas[$0].uri == uri }
+        registrar("spotify: \(rt) fila tem \(f.proximas.count) próximas, uri achada nos índices \(achadas), primeira da fila=\(f.proximas.first?.uri ?? "-")")
         guard let i = achadas.min(by: { abs($0 + 1 - posicao) < abs($1 + 1 - posicao) }) else {
-            return ErroSpotify(texto: "A fila mudou. Abra a fila de novo.")
+            return fim(ErroSpotify(texto: "A fila mudou. Abra a fila de novo."))
         }
-        guard (1...50).contains(i + 1) else { return .recusou }
+        guard (1...50).contains(i + 1) else { return fim(.recusou) }
         let depois = f.proximas[i...].compactMap { $0.uri }
-        let contexto = contextoQueToca()
+        let contexto = contextoQueToca(rastro: rt)
+        registrar("spotify: \(rt) índice=\(i) (vez \(i + 1)), contexto que toca=\(contexto ?? "nenhum"), uris do fallback=\(depois.count)")
         if let contexto, ["playlist", "album"].contains(contexto.split(separator: ":").dropFirst().first.map(String.init) ?? "") {
-            let r = chamar("PUT", "/me/player/play", json: ["context_uri": contexto, "offset": ["uri": uri]])
-            if case .success = r, tocaAgora(uri) { return nil }
+            let r = chamar("PUT", "/me/player/play", json: ["context_uri": contexto, "offset": ["uri": uri]], rastro: rt)
+            if case .success = r {
+                let ok = tocaAgora(uri, rastro: rt)
+                registrar("spotify: \(rt) play com contexto aceito, tocaAgora=\(ok)")
+                if ok { return fim(nil) }
+            }
+        } else {
+            registrar("spotify: \(rt) contexto não é playlist nem álbum, vai direto no play de uris")
         }
-        return erro(chamar("PUT", "/me/player/play", json: ["uris": depois]))
+        let r = chamar("PUT", "/me/player/play", json: ["uris": depois], rastro: rt)
+        if case .success = r {
+            // só para o log: o play de uris foi aceito, mas o Spotify trocou mesmo? (não muda o resultado)
+            if esperaDoPulo > 0 { Thread.sleep(forTimeInterval: esperaDoPulo) }
+            if case .success(let j) = jogador(rastro: rt) {
+                registrar("spotify: \(rt) depois do play de uris, toca=\(j.uri ?? "-") (pedida \(uri)) trocou=\(j.uri == uri)")
+            }
+        }
+        return fim(erro(r))
     }
 
-    private func contextoQueToca() -> String? {
-        guard case .success(let r) = chamar("GET", "/me/player") else { return nil }
+    private func contextoQueToca(rastro: String? = nil) -> String? {
+        guard case .success(let r) = chamar("GET", "/me/player", rastro: rastro) else { return nil }
         return ((json(r) as? [String: Any])?["context"] as? [String: Any])?["uri"] as? String
     }
 
     /// O Spotify às vezes aceita o `play` com um offset que não é da lista e toca outra coisa. Confere o que tocou.
-    private func tocaAgora(_ uri: String) -> Bool {
+    private func tocaAgora(_ uri: String, rastro: String? = nil) -> Bool {
         for tentativa in 0..<3 {
-            if case .success(let j) = jogador(), j.uri == uri { return true }
+            if case .success(let j) = jogador(rastro: rastro) {
+                if j.uri == uri { return true }
+                registrar("spotify: \(rastro ?? "tocaAgora") tentativa \(tentativa + 1): toca \(j.uri ?? "-"), esperava \(uri)")
+            }
             if tentativa < 2 && esperaDoPulo > 0 { Thread.sleep(forTimeInterval: esperaDoPulo) }
         }
         return false
@@ -477,8 +524,8 @@ final class ContaSpotify: @unchecked Sendable {
         return erro(chamar("PUT", "/me/player/repeat", [("state", estado)]))
     }
 
-    func jogador() -> Result<JogadorSpotify, ErroSpotify> {
-        chamar("GET", "/me/player").map { r in
+    func jogador(rastro: String? = nil) -> Result<JogadorSpotify, ErroSpotify> {
+        chamar("GET", "/me/player", rastro: rastro).map { r in
             guard let obj = json(r) as? [String: Any] else { return JogadorSpotify() }
             let modos = ["track": "faixa", "off": "nao", "context": "contexto"]
             let aparelho = obj["device"] as? [String: Any]
