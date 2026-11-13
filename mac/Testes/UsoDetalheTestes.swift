@@ -8,9 +8,10 @@ final class UsoDetalheTestes: XCTestCase {
     let agora = Date(timeIntervalSince1970: 1_794_582_000)
 
     func claude(_ id: String?, req: String = "r1", quando: String, modelo: String = "claude-opus-5-5", entrada: Int = 10, saida: Int = 20,
-                leitura: Int = 100, c5: Int = 5, c1: Int = 0) -> String {
+                leitura: Int = 100, c5: Int = 5, c1: Int = 0, sessao: String? = nil) -> String {
+        let sessaoTxt = sessao.map { #""sessionId":"\#($0)","# } ?? ""
         let idTxt = id.map { #""id":"\#($0)","# } ?? ""
-        return #"{"type":"assistant","timestamp":"\#(quando)","requestId":"\#(req)","message":{\#(idTxt)"model":"\#(modelo)","usage":{"input_tokens":\#(entrada),"output_tokens":\#(saida),"cache_read_input_tokens":\#(leitura),"cache_creation_input_tokens":\#(c5 + c1),"cache_creation":{"ephemeral_5m_input_tokens":\#(c5),"ephemeral_1h_input_tokens":\#(c1)}}}}"#
+        return #"{"type":"assistant",\#(sessaoTxt)"timestamp":"\#(quando)","requestId":"\#(req)","message":{\#(idTxt)"model":"\#(modelo)","usage":{"input_tokens":\#(entrada),"output_tokens":\#(saida),"cache_read_input_tokens":\#(leitura),"cache_creation_input_tokens":\#(c5 + c1),"cache_creation":{"ephemeral_5m_input_tokens":\#(c5),"ephemeral_1h_input_tokens":\#(c1)}}}}"#
     }
 
     func gravar(_ linhas: [String], em url: URL, anexar: Bool = false) throws {
@@ -59,6 +60,40 @@ final class UsoDetalheTestes: XCTestCase {
         let g = gasto(raiz); g.atualizar(agora: agora)
         let r = g.consultar(.claude, periodo: .dia, agora: agora, calendario: utcCal)
         XCTAssertEqual(r.turnos, 2); XCTAssertEqual(r.sessoes, 2)
+    }
+
+    func testSubagenteContaNaSessaoQueOChamou() throws {
+        let raiz = try pastaTemporaria(); defer { try? FileManager.default.removeItem(at: raiz) }
+        try gravar([claude("m1", quando: "2026-11-13T10:00:00Z", sessao: "sessao-1")], em: raiz.appendingPathComponent("claude/p/sessao-1.jsonl"))
+        try gravar([claude("m2", req: "r2", quando: "2026-11-13T10:05:00Z", sessao: "sessao-1")], em: raiz.appendingPathComponent("claude/p/sessao-1/subagents/agente-x.jsonl"))
+        try gravar([claude("m3", req: "r3", quando: "2026-11-13T10:10:00Z", sessao: "sessao-2")], em: raiz.appendingPathComponent("claude/p/sessao-2.jsonl"))
+        let g = gasto(raiz); g.atualizar(agora: agora)
+        let r = g.consultar(.claude, periodo: .dia, agora: agora, calendario: utcCal)
+        XCTAssertEqual(r.turnos, 3); XCTAssertEqual(r.sessoes, 2, "o subagente não é outra sessão")
+    }
+
+    func testPrecoDoOpus46EmDianteSegueOdo45() {
+        for m in ["claude-opus-4-6", "claude-opus-4-7-20260101", "claude-opus-4-8"] {
+            XCTAssertEqual(PrecosModelos.preco(m)?.entrada, 5, m); XCTAssertEqual(PrecosModelos.preco(m)?.saida, 25, m)
+        }
+        XCTAssertEqual(PrecosModelos.preco("claude-opus-4-1")?.entrada, 15, "o 4 e o 4.1 seguem a 15 e 75")
+    }
+
+    func testPrimeiraVarreduraGravaCacheParcialSemDizerQueTerminou() throws {
+        let raiz = try pastaTemporaria(); defer { try? FileManager.default.removeItem(at: raiz) }
+        let cache = raiz.appendingPathComponent("cache")
+        for i in 0..<12 { try gravar([claude("m\(i)", req: "r\(i)", quando: "2026-11-13T10:00:00Z", sessao: "s\(i)")], em: raiz.appendingPathComponent("claude/p/s\(i).jsonl")) }
+        let g = gasto(raiz, cache: cache); g.intervaloDeGravacao = 0
+        var visto = false
+        g.aoGravarParcial = {
+            guard !visto else { return }; visto = true
+            let outro = self.gasto(raiz, cache: cache); outro.carregarSemVarrer()
+            XCTAssertGreaterThan(outro.consultar(.claude, periodo: .dia, agora: self.agora, calendario: self.utcCal).turnos, 0, "o que já foi lido está no disco")
+            XCTAssertNil(outro.atualizadoEm, "o cache parcial não diz que a varredura terminou")
+        }
+        g.atualizar(agora: agora)
+        XCTAssertTrue(visto, "gravou um cache parcial no meio da varredura")
+        XCTAssertEqual(g.consultar(.claude, periodo: .dia, agora: agora, calendario: utcCal).turnos, 12)
     }
 
     func testLeituraIncrementalSoLeOTrechoNovo() throws {

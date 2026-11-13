@@ -185,7 +185,12 @@ async function lerUso() {
     if (n !== us.seq) return;
     if (e.status === 401) return tratarErro(e);
     us.semRota = e.status === 404; us.erro = us.semRota ? 'sem rota' : msgErro(e);
-    if (!us.dados) pintarUso(); else if (!us.erroAvisado) { us.erroAvisado = true; avisar(us.erro, { erro: true }) } // o aviso dura 4 s uma vez, não a cada leitura
+    if (!us.dados) pintarUso();
+    else { // a troca de período falhou: o filtro volta ao período dos números que ficaram na tela, sem apagá-los
+      $('#us-corpo').classList.remove('us-carregando');
+      if (us.dados.periodo && us.dados.periodo !== us.periodo) { us.periodo = us.dados.periodo; guardar(CHAVE_PERIODO_USO, us.periodo); $$('#us-filtro button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.p === us.periodo))) }
+    }
+    if (us.dados && !us.erroAvisado) { us.erroAvisado = true; avisar(us.erro, { erro: true }) } // o aviso dura 4 s uma vez, não a cada leitura
   } finally { if (n === us.seq) us.lendo = false }
 }
 

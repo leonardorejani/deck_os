@@ -131,5 +131,17 @@ export default async function (h) {
   p = await h.pagina({ ctx }); await pronta(h, p);
   await p.evaluate(() => entrarOrganizar()); await p.click('.cartao.uso', { force: true, position: { x: 200, y: 60 } }); await h.dormir(300);
   h.ok(!(await aberta(p)), 'no modo organizar, tocar no bloco de uso não abre a folha'); await p.close();
+
+  /* ---------- a troca de período falha com dados na tela: nada fica apagado nem com o período errado ---------- */
+  await h.cenario({ usoDetalhe: 'normal' });
+  p = await h.pagina({ ctx }); await pronta(h, p);
+  await p.click('.cartao.uso'); await cheia(h, p); await h.dormir(900);
+  const antes = await p.evaluate(() => document.querySelector('#us-filtro button[aria-pressed="true"]').dataset.p), outro = antes === 'mes' ? 'dia' : 'mes';
+  await h.cenario({ usoDetalhe: 'erro' });
+  await p.click(`#us-filtro button[data-p="${outro}"]`);
+  await h.dormir(900);
+  h.ok(await p.evaluate(() => !document.querySelector('#us-corpo').classList.contains('us-carregando')), 'se a troca de período falha, os números não ficam apagados');
+  h.ok(await p.evaluate(() => document.querySelector('#us-filtro button[aria-pressed="true"]')?.dataset.p) === antes, 'o filtro volta ao período dos números que seguem na tela');
+  await h.cenario({ usoDetalhe: 'normal' }); await p.close();
   await ctx.close();
 }

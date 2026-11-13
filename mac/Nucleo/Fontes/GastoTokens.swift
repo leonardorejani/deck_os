@@ -27,6 +27,8 @@ struct EventoDeUso: Equatable, Sendable {
     var contagem: Contagem
     /// Identifica a resposta (id da mensagem e do pedido) para não somar duas vezes a mesma. nil: sem como identificar.
     var chave: String?
+    /// Sessão a que a resposta pertence (o `sessionId` da linha). Log de subagente traz o da sessão que o chamou. nil: sem como saber.
+    var sessao: String? = nil
 }
 
 /// Lê as linhas dos logs que o Claude Code e o Codex gravam neste Mac. Só números saem daqui:
@@ -65,7 +67,8 @@ enum LeitorDeGasto {
         guard c.total > 0 else { return nil }
         var chave: String?
         if let id = msg["id"] as? String, !id.isEmpty { chave = id + "|" + ((obj["requestId"] as? String) ?? "") }
-        return EventoDeUso(quando: quando, modelo: modelo, contagem: c, chave: chave)
+        let sessao = (obj["sessionId"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+        return EventoDeUso(quando: quando, modelo: modelo, contagem: c, chave: chave, sessao: sessao)
     }
 
     /// O que o Codex precisa lembrar de uma linha para a outra do mesmo arquivo.
@@ -171,6 +174,10 @@ private struct ArquivoDeCache: Codable {
 final class GastoTokens: @unchecked Sendable {
     static let diasGuardados = 31
     static let intervaloMinimo: TimeInterval = 60
+    /// De quanto em quanto tempo a primeira varredura grava o cache parcial (os testes baixam para 0).
+    var intervaloDeGravacao: TimeInterval = 5
+    /// Avisa que um cache parcial acabou de ir para o disco (só os testes usam).
+    var aoGravarParcial: (() -> Void)?
 
     private let raizClaude: URL
     private let raizCodex: URL
@@ -225,7 +232,7 @@ final class GastoTokens: @unchecked Sendable {
             }
         }
         trava.lock(); concluidaUmaVez = true; ultimaVarredura = agora; trava.unlock()
-        gravarNoDisco(agora: agora)
+        gravarNoDisco(agora: agora, completa: true)
     }
 
     private func varrer(_ fonte: FonteDeGasto, raiz: URL, banco: inout BancoDeGasto, corte: Int, publicar: (BancoDeGasto) -> Void) {
@@ -240,52 +247,84 @@ final class GastoTokens: @unchecked Sendable {
         }
         banco.arquivos = banco.arquivos.filter { presentes[$0.key] != nil }
         // ordem fixa: quando duas sessões trazem a mesma resposta, quem a conta é sempre o mesmo arquivo
+        var pendentes: [(chave: String, url: URL, tamanho: Int64, estado: EstadoDeArquivo)] = []
         for (chave, (url, tamanho)) in presentes.sorted(by: { $0.value.0.path < $1.value.0.path }) {
             var est = banco.arquivos[chave] ?? EstadoDeArquivo(tamanho: 0, offset: 0, id: UInt32(truncatingIfNeeded: LeitorDeGasto.hash(url.path)))
             if tamanho < est.offset { est = EstadoDeArquivo(tamanho: 0, offset: 0, id: est.id) } // arquivo recomeçou
-            guard tamanho > est.offset else { banco.arquivos[chave] = est; continue }
-            lerArquivo(url, fonte: fonte, estado: &est, banco: &banco, corte: corte)
-            est.tamanho = tamanho
-            banco.arquivos[chave] = est
+            if tamanho > est.offset { pendentes.append((chave, url, tamanho, est)) } else { banco.arquivos[chave] = est }
+        }
+        // A leitura (o JSON de cada linha é o custo) roda em paralelo, em lotes. Cada lote é somado na ordem fixa,
+        // publicado, e o cache é gravado de tempos em tempos: fechar o app no meio da primeira varredura não perde tudo.
+        let lote = max(4, ProcessInfo.processInfo.activeProcessorCount * 2)
+        var ultimaGravacao = Date()
+        var i = 0
+        while i < pendentes.count {
+            let fatia = Array(pendentes[i..<min(i + lote, pendentes.count)]); i += lote
+            let lidos = Resultados(fatia.count)
+            DispatchQueue.concurrentPerform(iterations: fatia.count) { k in
+                let f = fatia[k]
+                lidos.guardar(k, lerArquivo(f.url, fonte: fonte, estado: f.estado))
+            }
+            for (k, f) in fatia.enumerated() {
+                guard let (est, eventos) = lidos.valor(k) else { continue }
+                var novo = est; novo.tamanho = f.tamanho
+                for e in eventos { somarEvento(e, estado: novo, banco: &banco, corte: corte) }
+                banco.arquivos[f.chave] = novo
+            }
             publicar(banco)
+            if Date().timeIntervalSince(ultimaGravacao) >= intervaloDeGravacao { gravarNoDisco(agora: Date(), completa: false); ultimaGravacao = Date(); aoGravarParcial?() }
         }
         banco.podar(antesDaHora: corte)
         publicar(banco)
     }
 
+    private func somarEvento(_ e: EventoDeUso, estado: EstadoDeArquivo, banco: inout BancoDeGasto, corte: Int) {
+        let hora = Int(e.quando.timeIntervalSince1970 / 3600)
+        guard hora >= corte else { return }
+        if let k = e.chave {
+            let hk = LeitorDeGasto.hash(k)
+            if banco.vistos[hk] != nil { return }
+            banco.vistos[hk] = hora
+        }
+        // a sessão é a do log (subagente e sessão retomada somam na mesma), e na falta dela vale o arquivo
+        let sessao = e.sessao.map { UInt32(truncatingIfNeeded: LeitorDeGasto.hash($0)) } ?? estado.id
+        banco.somar(e, hora: hora, arquivo: sessao)
+    }
+
+    /// Guarda o resultado de cada arquivo lido em paralelo, cada um na sua posição.
+    private final class Resultados: @unchecked Sendable {
+        private let trava = NSLock()
+        private var itens: [(EstadoDeArquivo, [EventoDeUso])?]
+        init(_ n: Int) { itens = Array(repeating: nil, count: n) }
+        func guardar(_ k: Int, _ v: (EstadoDeArquivo, [EventoDeUso])?) { trava.lock(); itens[k] = v; trava.unlock() }
+        func valor(_ k: Int) -> (EstadoDeArquivo, [EventoDeUso])? { trava.lock(); defer { trava.unlock() }; return itens[k] }
+    }
+
     /// Lê do offset até o fim, em blocos, e só avança até a última linha inteira (linha pela metade fica para a próxima vez).
-    private func lerArquivo(_ url: URL, fonte: FonteDeGasto, estado: inout EstadoDeArquivo, banco: inout BancoDeGasto, corte: Int) {
-        guard let h = try? FileHandle(forReadingFrom: url) else { return }
+    private func lerArquivo(_ url: URL, fonte: FonteDeGasto, estado: EstadoDeArquivo) -> (EstadoDeArquivo, [EventoDeUso])? {
+        guard let h = try? FileHandle(forReadingFrom: url) else { return nil }
         defer { try? h.close() }
-        guard (try? h.seek(toOffset: UInt64(estado.offset))) != nil else { return }
+        guard (try? h.seek(toOffset: UInt64(estado.offset))) != nil else { return nil }
+        var est = estado
         var memoria = LeitorDeGasto.MemoriaCodex(modelo: estado.modelo, totalVisto: estado.totalVisto)
+        var eventos: [EventoDeUso] = []
         var pendente = Data()
         var posicao = estado.offset
-        func tratar(_ linha: Data) {
-            let evento = fonte == .claude ? LeitorDeGasto.linhaClaude(linha) : LeitorDeGasto.linhaCodex(linha, memoria: &memoria)
-            guard let e = evento else { return }
-            let hora = Int(e.quando.timeIntervalSince1970 / 3600)
-            guard hora >= corte else { return }
-            if let k = e.chave {
-                let hk = LeitorDeGasto.hash(k)
-                if banco.vistos[hk] != nil { return }
-                banco.vistos[hk] = hora
-            }
-            banco.somar(e, hora: hora, arquivo: estado.id)
-        }
         while let bloco = try? h.read(upToCount: 4 << 20), !bloco.isEmpty {
             pendente.append(bloco)
             var ini = pendente.startIndex
             while let fim = pendente[ini...].firstIndex(of: 10) {
-                tratar(pendente[ini..<fim])
+                let linha = pendente[ini..<fim]
+                if let e = fonte == .claude ? LeitorDeGasto.linhaClaude(linha) : LeitorDeGasto.linhaCodex(linha, memoria: &memoria) { eventos.append(e) }
                 posicao += Int64(fim - ini + 1)
                 ini = fim + 1
             }
             pendente = Data(pendente[ini...])
         }
-        estado.offset = posicao
-        estado.modelo = memoria.modelo
-        estado.totalVisto = memoria.totalVisto
+        est.offset = posicao
+        est.modelo = memoria.modelo
+        est.totalVisto = memoria.totalVisto
+        return (est, eventos)
     }
 
     // MARK: Disco
@@ -304,10 +343,11 @@ final class GastoTokens: @unchecked Sendable {
     /// Para quem só consulta: traz o que ficou no disco da última vez, sem varrer nada.
     func carregarSemVarrer() { carregarDoDisco() }
 
-    private func gravarNoDisco(agora: Date) {
+    /// `completa: false` é o cache parcial da primeira varredura: guarda o que já foi lido, mas não diz que terminou.
+    private func gravarNoDisco(agora: Date, completa: Bool) {
         guard let url = arquivoDeCache else { return }
         trava.lock()
-        let a = ArquivoDeCache(atualizadoEm: agora.timeIntervalSince1970, claude: BancoGravado(claude), codex: BancoGravado(codex))
+        let a = ArquivoDeCache(atualizadoEm: completa ? agora.timeIntervalSince1970 : ultimaVarredura?.timeIntervalSince1970, claude: BancoGravado(claude), codex: BancoGravado(codex))
         trava.unlock()
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         if let dados = try? JSONEncoder().encode(a) { try? dados.write(to: url, options: .atomic) }
