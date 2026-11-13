@@ -275,6 +275,9 @@ struct Estado: Codable, Equatable, Sendable {
     /// Por id de tecla de microfone ou de câmera da reunião: ligado, desligado, desconhecido ou sem-reuniao.
     /// Ausente em Mac antigo e quando o perfil não tem tecla dessas: o painel trata como "não sabe" e desenha a tecla de sempre.
     var reuniao: [String: EstadoDeReuniao]? = nil
+    /// Por id de tecla de comando que está rodando solta (ligando, desligando, rodando) ou que falhou há pouco.
+    /// Ausente quando nenhuma está: o painel só mostra "Ligando..." enquanto o Mac roda o comando, e não espera o pedido.
+    var andamento: [String: AndamentoDeTecla]? = nil
 }
 
 /// Medidas do Mac. Cada uma é nil quando o item está escondido nos Ajustes ou o Mac não tem a medida

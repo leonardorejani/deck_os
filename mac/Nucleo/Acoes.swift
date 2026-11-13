@@ -22,6 +22,16 @@ struct ExecutorAcoes: Sendable {
     let memoria: MemoriaLigaDesliga
     /// A árvore de acessibilidade dos navegadores (o Meet). Nil: só o executor de verdade, no Mac, consulta o sistema.
     let ax: (any AcessibilidadeDoNavegador)?
+    /// Quanto o pedido da tecla de comando espera o comando acabar antes de responder "rodando" e deixá-lo seguir solto.
+    let graca: TimeInterval
+    /// Teto do comando solto, só para um comando travado para sempre não deixar a tecla em "ligando" eternamente.
+    let tetoSegundos: Int
+    /// Quem está rodando solto agora (o estado da tecla no painel).
+    let andamento: ComandosEmAndamento
+
+    /// Espera padrão do pedido: abaixo do prazo de 5 s que o painel dá ao Mac.
+    static let gracaPadrao: TimeInterval = 2
+    static let tetoPadrao = 600
 
     init(shell: Executor,
          temAcessibilidade: @escaping @Sendable () -> Bool = { AcoesSistema.temAcessibilidade() },
@@ -30,7 +40,13 @@ struct ExecutorAcoes: Sendable {
          whatsappWeb: (@Sendable () -> AberturaWhatsApp)? = nil,
          shellDoUsuario: @escaping @Sendable () -> String = { Shell.doUsuario() },
          memoria: MemoriaLigaDesliga = .compartilhada,
-         ax: (any AcessibilidadeDoNavegador)? = nil) {
+         ax: (any AcessibilidadeDoNavegador)? = nil,
+         graca: TimeInterval = ExecutorAcoes.gracaPadrao,
+         tetoSegundos: Int = ExecutorAcoes.tetoPadrao,
+         andamento: ComandosEmAndamento = .compartilhado) {
+        self.graca = graca
+        self.tetoSegundos = tetoSegundos
+        self.andamento = andamento
         self.ax = ax ?? AcessibilidadePadrao.para(shell)
         self.memoria = memoria
         self.shellDoUsuario = shellDoUsuario
@@ -48,7 +64,7 @@ struct ExecutorAcoes: Sendable {
         case "app":
             if let acao = tecla.acao { return abrirComAcao(tecla, acao) }
             return abrirApp(valor)
-        case "comando": return tecla.ligaEDesliga ? alternar(tecla, ligar: valor) : rodarComando(valor)
+        case "comando": return rodarSolto(tecla, ligar: valor)
         case "atalho": return rodarAtalho(valor)
         // O contrato (Modelos.swift) chama o tipo de "tecla". "teclado" fica por compatibilidade.
         case "tecla", "teclado": return teclar(valor)
@@ -74,11 +90,12 @@ struct ExecutorAcoes: Sendable {
         return r.status == 0 ? nil : "Não achei o app \(nome) neste Mac"
     }
 
-    func rodarComando(_ linha: String) -> String? {
-        let r = shell.rodar(Shell.limitadoNoPerfil(linha, segundos: limiteSegundos, shell: shellDoUsuario()))
+    func rodarComando(_ linha: String, segundos: Int? = nil) -> String? {
+        let limite = segundos ?? limiteSegundos
+        let r = shell.rodar(Shell.limitadoNoPerfil(linha, segundos: limite, shell: shellDoUsuario()))
         if r.status == 0 { return nil }
         if r.status == 127 { return Self.erroComandoInexistente(r.saida) }
-        if r.status == Self.statusTempoEsgotado { return "O comando demorou mais de \(limiteSegundos) segundos e foi interrompido" }
+        if r.status == Self.statusTempoEsgotado { return "O comando demorou mais de \(limite >= 120 ? "\(limite / 60) minutos" : "\(limite) segundos") e foi interrompido" }
         let ultima = Self.ultimaLinha(r.saida)
         return ultima.isEmpty ? "O comando falhou" : "O comando falhou: \(ultima)"
     }

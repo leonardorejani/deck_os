@@ -16,7 +16,7 @@ const fotos = process.env.DECK_FOTOS || path.join(principal, '.teste');
 fs.mkdirSync(fotos, { recursive: true });
 
 const servidor = await iniciar(porta);
-const navegador = await chromium.launch({ channel: 'chrome' });
+const navegador = await chromium.launch({ channel: 'chrome', headless: true });
 const falhas = [], paginasComErro = [];
 const h = {
   base, CODIGO, CODIGO_NOVO, falhas,
@@ -43,7 +43,7 @@ const h = {
   espera: (p, fn, arg, timeout = 6000) => p.waitForFunction(fn, arg, { timeout, polling: 50 }).then(() => true, () => false),
 };
 
-const arquivos = ['canal.teste.mjs', 'estados.teste.mjs', 'composicoes.teste.mjs', 'laco.teste.mjs', 'robustez.teste.mjs', 'organizar.teste.mjs', 'menu.teste.mjs', 'corrigidos.teste.mjs', 'paineis.teste.mjs', 'ux.teste.mjs', 'leva2.teste.mjs', 'agenda-criar.teste.mjs', 'verificacao.teste.mjs', 'correcoes.teste.mjs', 'home-extras.teste.mjs', 'pwa.teste.mjs', 'iphone-bugs.teste.mjs', 'fechar-puxando.teste.mjs', 'controles.teste.mjs', 'monitor-e-mes.teste.mjs', 'monitor-painel.teste.mjs', 'ajustes-teclas.teste.mjs', 'whatsapp-conexoes.teste.mjs', 'whatsapp-bluetooth.teste.mjs', 'whatsapp-fotos.teste.mjs', 'iphone-telas.teste.mjs', 'reuniao-estado.teste.mjs', 'meet-app.teste.mjs', 'comando-toggle.teste.mjs', 'uso-ias.teste.mjs', 'fila-sem-rolagem-lateral.teste.mjs'];
+const arquivos = ['canal.teste.mjs', 'estados.teste.mjs', 'composicoes.teste.mjs', 'laco.teste.mjs', 'robustez.teste.mjs', 'organizar.teste.mjs', 'menu.teste.mjs', 'corrigidos.teste.mjs', 'paineis.teste.mjs', 'ux.teste.mjs', 'leva2.teste.mjs', 'agenda-criar.teste.mjs', 'verificacao.teste.mjs', 'correcoes.teste.mjs', 'home-extras.teste.mjs', 'pwa.teste.mjs', 'iphone-bugs.teste.mjs', 'fechar-puxando.teste.mjs', 'controles.teste.mjs', 'monitor-e-mes.teste.mjs', 'monitor-painel.teste.mjs', 'ajustes-teclas.teste.mjs', 'whatsapp-conexoes.teste.mjs', 'whatsapp-bluetooth.teste.mjs', 'whatsapp-fotos.teste.mjs', 'iphone-telas.teste.mjs', 'reuniao-estado.teste.mjs', 'meet-app.teste.mjs', 'comando-toggle.teste.mjs', 'uso-ias.teste.mjs', 'fila-sem-rolagem-lateral.teste.mjs', 'comando-solto.teste.mjs'];
 const so = process.argv[2];
 for (const a of arquivos) {
   if (so && !a.startsWith(so)) continue;
