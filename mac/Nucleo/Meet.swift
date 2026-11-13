@@ -50,10 +50,20 @@ struct MeetReal: MeetDoMac {
         if let sala = l.salaDoMeet(NavegadorWeb.todos) {
             return EstadoMeet(aberta: true, naChamada: sala.naChamada, microfone: sala.microfone, camera: sala.camera)
         }
-        // Reserva: a aba da sala por JavaScript. Também dá "?" quando a sala existe e não dá para ler.
-        let r = l.lerMeet(NavegadorWeb.todos)
-        guard r.microfone != .semReuniao || r.camera != .semReuniao else { return .semReuniao }
-        return EstadoMeet(aberta: true, naChamada: nil, microfone: r.microfone, camera: r.camera, aviso: r.aviso?.texto)
+        // Reserva: a aba da sala por JavaScript. Também dá "?" quando a sala existe e não dá para ler. Sem a permissão de
+        // Automação não se sabe se há sala: não é motivo para dizer "Reunião aberta" nem para avisar, a Acessibilidade é o caminho.
+        var javascriptDesligado = false
+        for n in NavegadorWeb.todos {
+            switch LeituraDeMeet.ler(n, executor: executor) {
+            case .sala(let r):
+                guard r.microfone != .semReuniao || r.camera != .semReuniao else { continue }
+                return EstadoMeet(aberta: true, naChamada: nil, microfone: r.microfone, camera: r.camera, aviso: r.aviso?.texto)
+            case .javascriptDesligado: javascriptDesligado = true
+            case .fechado, .semSala, .falhou, .semPermissao: continue
+            }
+        }
+        guard javascriptDesligado else { return .semReuniao }
+        return EstadoMeet(aberta: true, naChamada: nil, microfone: .desconhecido, camera: .desconhecido, aviso: LeituraDeMeet.avisoJavascript.texto)
     }
 
     func agir(_ acao: AcaoMeet) -> String? {
@@ -73,8 +83,11 @@ struct MeetReal: MeetDoMac {
 
     private func sair() -> String? {
         guard acoes.temAcessibilidade() else { return Self.semAcessibilidade }
-        guard acoes.apertarNoMeet(.meetNoNavegador, .sair) else { return Self.naoAchouAChamada }
-        return nil
+        if acoes.apertarNoMeet(.meetNoNavegador, .sair) { return nil }
+        // A aba da reunião pode estar atrás de outra: traz para a frente e tenta de novo, como o microfone e a câmera fazem.
+        if let erro = acoes.trazerSalaDoMeet() { return erro == ExecutorAcoes.erroSemSalaDoMeet ? Self.naoAchouAChamada : erro }
+        _ = executor.rodar(ExecutorAcoes.esperaDoFoco)
+        return acoes.apertarNoMeet(.meetNoNavegador, .sair) ? nil : Self.naoAchouAChamada
     }
 
     /// As ações de microfone e câmera usam a tecla do Meet em qualquer navegador.

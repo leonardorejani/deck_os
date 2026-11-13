@@ -13,11 +13,13 @@ private final class ArvoreFalsa: AcessibilidadeDoNavegador, @unchecked Sendable 
 
 /// Chrome aberto com o pid 4242. O `osascript` responde o que o teste mandar (nada, por padrão).
 private final class ShellDoMeet: Executor, @unchecked Sendable {
+    var aoTrazer: (() -> Void)?
     var comandos: [String] = []
     var chromeAberto = true
     var osascript: [(trecho: String, saida: SaidaShell)] = []
     func rodar(_ comando: String) -> SaidaShell {
         comandos.append(comando)
+        if comando.contains("set active tab index") { aoTrazer?() }
         if comando == "pgrep -x 'Google Chrome'" { return chromeAberto ? SaidaShell(status: 0, saida: "4242\n") : SaidaShell(status: 1, saida: "") }
         if comando.hasPrefix("pgrep -x ") { return SaidaShell(status: 1, saida: "") }
         // A busca é "if pgrep -x '<navegador>' ...; then osascript ...; else echo fechado; fi" (dentro do vigia de tempo):
@@ -196,6 +198,26 @@ final class MeetTestes: XCTestCase {
         XCTAssertTrue(e.aberta)
         XCTAssertEqual(e.microfone, .desconhecido)
         XCTAssertEqual(e.aviso, LeituraDeMeet.avisoJavascript.texto)
+    }
+
+    func testEstadoSemReuniaoESemAutomacaoNaoDizReuniaoAbertaNemAvisa() {
+        let sh = ShellDoMeet(), ax = ArvoreFalsa()
+        ax.porPid[4242] = [janela("Pesquisar")]
+        sh.osascript = [("execute t javascript", SaidaShell(status: 1, saida: "Not authorized to send Apple events to Google Chrome. (-1743)"))]
+        XCTAssertEqual(MeetReal(executor: sh, acoes: acoes(sh, ax)).estado(), .semReuniao)
+    }
+
+    func testSairComAAbaDaReuniaoAtrasDeOutraTrazEAperta() {
+        let sh = ShellDoMeet(), ax = ArvoreFalsa()
+        ax.porPid[4242] = [janela("Pesquisar")]
+        sh.osascript = [("starts with \"https://meet.google.com/\"", SaidaShell(status: 0, saida: "1\t2\t\(sala)\n"))]
+        // Depois de trazer a aba, a árvore passa a mostrar a chamada.
+        let a = acoes(sh, ax)
+        let real = MeetReal(executor: sh, acoes: a)
+        sh.aoTrazer = { ax.porPid[4242] = [janela("Desativar microfone", "Sair da chamada")] }
+        XCTAssertNil(real.agir(.sair))
+        XCTAssertTrue(sh.comandos.contains { $0.contains("set active tab index of window 1 to 2") })
+        XCTAssertEqual(ax.apertados, ["4242/0/Sair da chamada"])
     }
 
     // MARK: - Rotas
