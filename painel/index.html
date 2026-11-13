@@ -84,6 +84,13 @@
         <div class="corpo" id="mn-corpo" aria-live="off"></div>
       </section>
 
+      <section class="folha cheia" id="f-uso" role="dialog" aria-modal="true" aria-labelledby="us-titulo">
+        <header><h2 id="us-titulo">Uso das IAs</h2>
+          <div class="segmentos" id="us-filtro"><button type="button" data-p="dia" aria-pressed="false">Dia</button><button type="button" data-p="semana" aria-pressed="true">Semana</button><button type="button" data-p="mes" aria-pressed="false">Mês</button></div>
+          <button class="fechar" data-fechar aria-label="Fechar"></button></header>
+        <div class="corpo" id="us-corpo" aria-live="off" aria-busy="true"></div>
+      </section>
+
       <section class="folha cheia player-cheio" id="f-player" role="dialog" aria-modal="true" aria-label="Tocando agora">
         <button class="fechar fechar-cal" data-fechar aria-label="Fechar"></button>
         <div class="pc-corpo" id="pc-corpo"></div>
@@ -132,6 +139,7 @@
 <script src="player.js"></script>
 <script src="controles.js"></script>
 <script src="monitor.js"></script>
+<script src="uso.js"></script>
 <script src="apps.js"></script>
 <script src="deck.js"></script>
 <script src="pwa.js"></script>

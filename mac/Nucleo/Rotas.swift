@@ -67,9 +67,12 @@ protocol ProvedorPaineis: Sendable {
     func agenda(de: String, dias: Int) -> [Evento]
     func sessoes() -> [Sessao]
     func capa() -> CapaAtual?
+    /// O detalhe do uso das IAs (janelas de limite e gasto de tokens). nil: este provedor não sabe (a rota responde 404).
+    func usoDetalhe(periodo: PeriodoUso) -> DetalheUso?
 }
 
 extension ProvedorPaineis {
+    func usoDetalhe(periodo: PeriodoUso) -> DetalheUso? { nil }
     func fotoWhatsApp(arquivo: String) -> MidiaBaixada? { nil }
     func midiaWhatsApp(chat: String, id: String) -> ResultadoMidia { .erro("Essa mídia não abre aqui.") }
     func abrirConversaWhatsApp(id: String) -> AberturaDeConversa { .falhou("Não consegui abrir a conversa.") }
@@ -233,6 +236,10 @@ struct Roteador: Sendable {
             return somente(["POST"], r) ?? abrirConversaDoWhatsApp(r)
         case "/api/sessoes":
             return somente(["GET"], r) ?? .codificar(200, paineis.sessoes())
+        case "/api/uso/detalhe":
+            // periodo desconhecido cai em semana, que é o que o bloco de uso mostra
+            return somente(["GET"], r) ?? paineis.usoDetalhe(periodo: PeriodoUso(rawValue: r.query["periodo"] ?? "") ?? .semana)
+                .map { .codificar(200, $0) } ?? .erro(404, "Essa rota não existe.")
         case "/api/agenda":
             return somente(["GET"], r) ?? agenda(r)
         default:
