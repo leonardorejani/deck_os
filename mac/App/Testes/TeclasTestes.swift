@@ -248,6 +248,13 @@ final class ModeloTeclasTestes: XCTestCase {
         XCTAssertNil(AjusteDeApp.de("Safari"))
     }
 
+    /// O perfil "ensaio" do cenário tem a tecla "e1" vazia de propósito, então a validação olha só o resto.
+    private func semEnsaio(_ config: Config) -> Config {
+        var c = config
+        c.perfis.removeAll { $0.id == "ensaio" }
+        return c
+    }
+
     func testEscolherOMeetDaListaDaNomeCurtoIconeEAcaoLimpaAoTrocarDeApp() {
         let m = modelo()
         let tl = tela(m)
@@ -257,7 +264,7 @@ final class ModeloTeclasTestes: XCTestCase {
         XCTAssertEqual(k.valor, "Google Meet")
         XCTAssertEqual(k.icone, "svg:video")
         XCTAssertEqual(k.acao?.id, "reuniao-microfone")
-        XCTAssertNil(Config.validar(m.config))
+        XCTAssertNil(Config.validar(semEnsaio(m.config)))
         tl.escolherApp(AppDoMac(nome: "Safari", valor: "Safari", caminhoDoIcone: nil))
         k = m.config.perfis[0].teclas[0]
         XCTAssertNil(k.acao, "a ação era do Meet")
@@ -274,7 +281,7 @@ final class ModeloTeclasTestes: XCTestCase {
         tl.escolherConferir("checar-foco")
         var k = m.config.perfis[0].teclas[0]
         XCTAssertEqual([k.valor, k.desligar, k.estado], ["foco jogo", "foco trabalho", "checar-foco"])
-        XCTAssertNil(Config.validar(m.config))
+        XCTAssertNil(Config.validar(semEnsaio(m.config)))
         tl.escolherConferir("  ")
         XCTAssertNil(m.config.perfis[0].teclas[0].estado, "campo vazio apaga o comando de conferir")
         tl.definirLigaEDesliga(false)

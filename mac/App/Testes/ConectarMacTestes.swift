@@ -105,7 +105,8 @@ final class AcessosTestes: XCTestCase {
 
     func testAcessoNuncaPedidoNaoContaComoRecusado() {
         let defaults = defaultsNovos()
-        let v = VerificadorVivo(defaults: defaults)
+        // Detectores falsos e não liberados: com os de verdade o resultado dependeria do Mac em que o teste roda.
+        let v = VerificadorVivo(defaults: defaults, detectores: DetectoresFalsos())
         XCTAssertFalse(v.recusado(.acessibilidade))
         XCTAssertFalse(v.recusado(.discoTotal))
         defaults.set(true, forKey: VerificadorVivo.chaveRecusado(.discoTotal))
