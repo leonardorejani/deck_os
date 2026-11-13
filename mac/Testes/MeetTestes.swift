@@ -7,6 +7,10 @@ private final class ArvoreFalsa: AcessibilidadeDoNavegador, @unchecked Sendable 
     var porPid: [Int32: [JanelaDoNavegador]] = [:]
     var apertados: [String] = []
     var apertaCom = true
+    var abasApertadas: [String] = []
+    /// O que aparece depois de apertar a aba (a aba de fundo vem para a frente e mostra a chamada).
+    var aoApertarAba: (() -> Void)?
+    func pressionarAba(pid: Int32, janela: Int, titulo: String) -> Bool { abasApertadas.append("\(pid)/\(janela)/\(titulo)"); aoApertarAba?(); return true }
     func janelas(pid: Int32) -> [JanelaDoNavegador]? { porPid[pid] }
     func pressionar(pid: Int32, janela: Int, rotulo: String) -> Bool { apertados.append("\(pid)/\(janela)/\(rotulo)"); return apertaCom }
 }
@@ -16,11 +20,12 @@ private final class ShellDoMeet: Executor, @unchecked Sendable {
     var aoTrazer: (() -> Void)?
     var comandos: [String] = []
     var chromeAberto = true
+    var pidsDoChrome = "4242\n"
     var osascript: [(trecho: String, saida: SaidaShell)] = []
     func rodar(_ comando: String) -> SaidaShell {
         comandos.append(comando)
         if comando.contains("set active tab index") { aoTrazer?() }
-        if comando == "pgrep -x 'Google Chrome'" { return chromeAberto ? SaidaShell(status: 0, saida: "4242\n") : SaidaShell(status: 1, saida: "") }
+        if comando == "pgrep -x 'Google Chrome'" { return chromeAberto ? SaidaShell(status: 0, saida: pidsDoChrome) : SaidaShell(status: 1, saida: "") }
         if comando.hasPrefix("pgrep -x ") { return SaidaShell(status: 1, saida: "") }
         // A busca é "if pgrep -x '<navegador>' ...; then osascript ...; else echo fechado; fi" (dentro do vigia de tempo):
         // só o Chrome está aberto.
@@ -70,7 +75,7 @@ final class MeetTestes: XCTestCase {
         let sh = ShellDoMeet(), ax = ArvoreFalsa()
         ax.porPid[4242] = [janela("Início"), janela("Mais opções", "Desativar microfone (ctrl + d)", "Ativar câmera (ctrl + e)", "Sair da chamada")]
         let r = LeitorDeMeetAX.ler(chrome, executor: sh, ax: ax, confiavel: true)
-        XCTAssertEqual(r, .sala(SalaMeet(navegador: chrome, janela: 1, microfone: .ligado, camera: .desligado, naChamada: true)))
+        XCTAssertEqual(r, .sala(SalaMeet(navegador: chrome, janela: 1, microfone: .ligado, camera: .desligado, naChamada: true, pid: 4242)))
     }
 
     func testTelaDeEntradaNaoTemSair() {
@@ -108,6 +113,154 @@ final class MeetTestes: XCTestCase {
         sh.osascript = [("execute t javascript", SaidaShell(status: 0, saida: "\(sala)\tmic=false;cam=true\n"))]
         let l = LeitorDeReuniao(executor: sh, acessibilidade: ax, temAcessibilidade: { true }).lerMeet([chrome])
         XCTAssertEqual(l, LeituraDeReuniao(microfone: .ligado, camera: .desligado))
+    }
+
+    // MARK: - Reunião em Picture-in-Picture ou em aba de fundo (13/11/2026: "não tá identificando a chamada aberta no meet")
+
+    private let abaDeFundo = "Meet: abc-defg-hij"
+
+    /// A janela principal do Chrome mostra o Deck na frente e a aba do Meet escondida na barra de abas. A janela flutuante
+    /// (sem barra de abas) tem os botões da chamada.
+    private func comPiP(_ ax: ArvoreFalsa) {
+        ax.porPid[4242] = [
+            JanelaDoNavegador(titulo: "Deck", botoes: [BotaoWeb(rotulos: ["Nova guia"])], abas: ["Deck", abaDeFundo]),
+            JanelaDoNavegador(titulo: abaDeFundo, botoes: ["Voltar à guia", "Desativar microfone (ctrl + d)", "Desativar câmera (ctrl + e)", "Sair da chamada"].map { BotaoWeb(rotulos: [$0]) }, flutuante: true),
+        ]
+    }
+
+    func testChamadaSoNaJanelaFlutuanteEhLidaComOEstadoDela() {
+        let sh = ShellDoMeet(), ax = ArvoreFalsa()
+        comPiP(ax)
+        let e = MeetReal(executor: sh, acoes: acoes(sh, ax)).estado()
+        XCTAssertEqual(e, EstadoMeet(aberta: true, naChamada: true, microfone: .ligado, camera: .ligado))
+        XCTAssertFalse(sh.rodouOsascript, "sem AppleScript: não precisa de Automação")
+    }
+
+    func testMicrofoneEmChamadaFlutuanteApertaNaJanelaFlutuante() {
+        let sh = ShellDoMeet(), ax = ArvoreFalsa(), t = Teclou()
+        comPiP(ax)
+        XCTAssertNil(MeetReal(executor: sh, acoes: acoes(sh, ax, t)).agir(.microfone))
+        XCTAssertEqual(ax.apertados, ["4242/1/Desativar microfone (ctrl + d)"])
+        XCTAssertTrue(ax.abasApertadas.isEmpty, "a aba de fundo não precisa vir para a frente")
+        XCTAssertTrue(t.lista.isEmpty)
+    }
+
+    func testSairEmChamadaFlutuanteApertaNaJanelaFlutuante() {
+        let sh = ShellDoMeet(), ax = ArvoreFalsa()
+        comPiP(ax)
+        XCTAssertNil(MeetReal(executor: sh, acoes: acoes(sh, ax)).agir(.sair))
+        XCTAssertEqual(ax.apertados, ["4242/1/Sair da chamada"])
+    }
+
+    func testJanelaFlutuanteGanhaDaAbaDaFrenteQuandoAsDuasMostramAChamada() {
+        let sh = ShellDoMeet(), ax = ArvoreFalsa()
+        let botoes = ["Desativar microfone", "Sair da chamada"].map { BotaoWeb(rotulos: [$0]) }
+        ax.porPid[4242] = [JanelaDoNavegador(titulo: "Meet", botoes: botoes, abas: [abaDeFundo]), JanelaDoNavegador(titulo: abaDeFundo, botoes: botoes, flutuante: true)]
+        guard case .sala(let s) = LeitorDeMeetAX.ler(chrome, executor: sh, ax: ax, confiavel: true) else { return XCTFail("achou") }
+        XCTAssertEqual(s.janela, 1)
+        XCTAssertTrue(s.flutuante)
+    }
+
+    func testReuniaoSoComAAbaDeFundoDizReuniaoAbertaSemAutomacao() {
+        let sh = ShellDoMeet(), ax = ArvoreFalsa()
+        ax.porPid[4242] = [JanelaDoNavegador(titulo: "Deck", botoes: [BotaoWeb(rotulos: ["Nova guia"])], abas: ["Uso da memória em Deck: 20 MB", "Uso da memória em \(abaDeFundo): 90 MB"])]
+        sh.osascript = [("execute t javascript", SaidaShell(status: 1, saida: "Not authorized to send Apple events to Google Chrome. (-1743)"))]
+        let e = MeetReal(executor: sh, acoes: acoes(sh, ax)).estado()
+        XCTAssertTrue(e.aberta)
+        XCTAssertNil(e.naChamada)
+        XCTAssertEqual(e.microfone, .desconhecido)
+        XCTAssertEqual(e.camera, .desconhecido)
+        XCTAssertEqual(e.aviso, MeetReal.avisoSoAba)
+    }
+
+    func testReuniaoSoComAAbaTitulosQueNaoSaoSalaNaoContam() {
+        for t in ["Meet", "Meet - Google Meet", "Google Meet", "Reunião de equipe", "meet.google.com", "Meet: ab-defg-hij"] {
+            XCTAssertFalse(LeitorDeMeetAX.ehTituloDeSala(t), t)
+        }
+        for t in ["Meet: abc-defg-hij", "Meet - abc-defg-hij", "Uso da memória em Meet: abc-defg-hij: 90 MB", "Meet – abc-defg-hij - Google Chrome"] {
+            XCTAssertTrue(LeitorDeMeetAX.ehTituloDeSala(t), t)
+        }
+    }
+
+    func testEstadoDaTeclaComSoAAbaNaoViraSemReuniao() {
+        let sh = ShellDoMeet(), ax = ArvoreFalsa()
+        ax.porPid[4242] = [JanelaDoNavegador(titulo: "Deck", botoes: [], abas: ["Deck", abaDeFundo])]
+        let l = LeitorDeReuniao(executor: sh, acessibilidade: ax, temAcessibilidade: { true }).lerMeet([chrome])
+        XCTAssertEqual(l.microfone, .desconhecido)
+    }
+
+    func testSoAAbaComJavaScriptLiberadoLeOEstadoDeVerdade() {
+        let sh = ShellDoMeet(), ax = ArvoreFalsa()
+        ax.porPid[4242] = [JanelaDoNavegador(titulo: "Deck", botoes: [], abas: ["Deck", abaDeFundo])]
+        sh.osascript = [("execute t javascript", SaidaShell(status: 0, saida: "\(sala)\tmic=true;cam=false\n"))]
+        let e = MeetReal(executor: sh, acoes: acoes(sh, ax)).estado()
+        XCTAssertEqual(e, EstadoMeet(aberta: true, naChamada: nil, microfone: .desligado, camera: .ligado))
+    }
+
+    func testMicrofoneComSoAAbaSelecionaAAbaPelaAcessibilidadeEApertaOBotao() {
+        let sh = ShellDoMeet(), ax = ArvoreFalsa(), t = Teclou()
+        ax.porPid[4242] = [JanelaDoNavegador(titulo: "Deck", botoes: [], abas: ["Deck", abaDeFundo])]
+        ax.aoApertarAba = { ax.porPid[4242] = [JanelaDoNavegador(titulo: self.abaDeFundo, botoes: ["Desativar microfone", "Sair da chamada"].map { BotaoWeb(rotulos: [$0]) }, abas: ["Deck", self.abaDeFundo])] }
+        XCTAssertNil(MeetReal(executor: sh, acoes: acoes(sh, ax, t)).agir(.microfone))
+        XCTAssertEqual(ax.abasApertadas, ["4242/0/Meet: abc-defg-hij"])
+        XCTAssertEqual(ax.apertados, ["4242/0/Desativar microfone"])
+        XCTAssertTrue(t.lista.isEmpty)
+    }
+
+    func testEntrarComSoAAbaSelecionaAAbaEmVezDeAbrirOutra() {
+        let sh = ShellDoMeet(), ax = ArvoreFalsa()
+        ax.porPid[4242] = [JanelaDoNavegador(titulo: "Deck", botoes: [], abas: ["Deck", abaDeFundo])]
+        XCTAssertNil(MeetReal(executor: sh, acoes: acoes(sh, ax)).agir(.entrar))
+        XCTAssertEqual(ax.abasApertadas, ["4242/0/Meet: abc-defg-hij"])
+        XCTAssertFalse(sh.comandos.contains("open 'https://meet.google.com'"))
+    }
+
+    func testDoisProcessosComOMesmoNomeALigacaoPodeEstarNoSegundo() {
+        let sh = ShellDoMeet(), ax = ArvoreFalsa()
+        sh.pidsDoChrome = "100\n4242\n"
+        ax.porPid[100] = [janela("Pesquisar")]
+        ax.porPid[4242] = [janela("Desativar microfone", "Sair da chamada")]
+        let e = MeetReal(executor: sh, acoes: acoes(sh, ax)).estado()
+        XCTAssertEqual(e.naChamada, true)
+        XCTAssertNil(MeetReal(executor: sh, acoes: acoes(sh, ax)).agir(.sair))
+        XCTAssertEqual(ax.apertados, ["4242/0/Sair da chamada"])
+    }
+
+    // MARK: - Correções da verificação (13/11/2026)
+
+    private func telaDeSaida(_ ax: ArvoreFalsa) {
+        ax.porPid[4242] = [JanelaDoNavegador(titulo: "Meet - abc-defg-hij - Google Chrome", botoes: ["Entrar novamente", "Voltar à tela inicial"].map { BotaoWeb(rotulos: [$0]) }, abas: ["Meet - abc-defg-hij"])]
+    }
+
+    func testDepoisDeSairDaChamadaATelaDeSaidaNaoEhReuniao() {
+        let sh = ShellDoMeet(), ax = ArvoreFalsa()
+        telaDeSaida(ax)
+        XCTAssertEqual(LeitorDeMeetAX.ler(chrome, executor: sh, ax: ax, confiavel: true), .semSala)
+        XCTAssertEqual(MeetReal(executor: sh, acoes: acoes(sh, ax)).estado(), .semReuniao)
+    }
+
+    func testTelaDeSaidaNaFrenteNaoEscondeOutraAbaDeReuniaoDeFundo() {
+        let sh = ShellDoMeet(), ax = ArvoreFalsa()
+        ax.porPid[4242] = [JanelaDoNavegador(titulo: "Meet - abc-defg-hij - Google Chrome", botoes: [BotaoWeb(rotulos: ["Entrar novamente"])], abas: ["Meet - abc-defg-hij", "Meet - xyz-wxyz-abc"])]
+        guard case .sala(let s) = LeitorDeMeetAX.ler(chrome, executor: sh, ax: ax, confiavel: true) else { return XCTFail("achou") }
+        XCTAssertEqual(s.abaDaReuniao, "Meet - xyz-wxyz-abc")
+    }
+
+    func testEntrarComAChamadaSoNaPiPSemAutomacaoSelecionaAAbaDeFundo() {
+        let sh = ShellDoMeet(), ax = ArvoreFalsa()
+        comPiP(ax)
+        sh.osascript = [("osascript", SaidaShell(status: 1, saida: "Not authorized to send Apple events to Google Chrome. (-1743)"))]
+        XCTAssertNil(MeetReal(executor: sh, acoes: acoes(sh, ax)).agir(.entrar))
+        XCTAssertEqual(ax.abasApertadas, ["4242/0/Meet: abc-defg-hij"])
+        XCTAssertFalse(sh.comandos.contains("open 'https://meet.google.com'"))
+    }
+
+    func testEntrarComAChamadaSoNaPiPSemAbaParaTrazerNaoFingeSucesso() {
+        let sh = ShellDoMeet(), ax = ArvoreFalsa()
+        ax.porPid[4242] = [JanelaDoNavegador(titulo: "Meet", botoes: ["Desativar microfone", "Sair da chamada"].map { BotaoWeb(rotulos: [$0]) }, flutuante: true)]
+        sh.osascript = [("osascript", SaidaShell(status: 1, saida: "Not authorized to send Apple events to Google Chrome. (-1743)"))]
+        _ = MeetReal(executor: sh, acoes: acoes(sh, ax)).agir(.entrar)
+        XCTAssertTrue(sh.comandos.contains("open 'https://meet.google.com'"), "sem aba para trazer, cai no open de antes")
     }
 
     // MARK: - Ação
