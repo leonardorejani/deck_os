@@ -35,6 +35,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"go.mau.fi/whatsmeow"
+	"go.mau.fi/whatsmeow/appstate"
 	"go.mau.fi/whatsmeow/proto/waCompanionReg"
 	"go.mau.fi/whatsmeow/proto/waHistorySync"
 	"go.mau.fi/whatsmeow/store"
@@ -94,9 +95,10 @@ type ajudante struct {
 	tentadas  map[string]time.Time
 	filaFotos chan string
 	// completando evita duas rodadas de completar ao mesmo tempo. completarFn existe para o teste trocar a rede.
-	completando bool
-	refazer     bool
-	completarFn func(context.Context) bool
+	completando   bool
+	sincronizando bool
+	refazer       bool
+	completarFn   func(context.Context) bool
 }
 
 // Como o aparelho aparece em "Aparelhos conectados" no WhatsApp do celular. Com o tipo "desconhecido" (o padrão da
@@ -382,6 +384,7 @@ func (a *ajudante) tratar(ctx context.Context, ev any) {
 	switch e := ev.(type) {
 	case *events.Connected:
 		fase("conectado", "")
+		a.sincronizarArquivadas(ctx)
 	case *events.Disconnected:
 		fase("desconectado", "")
 	case *events.PairSuccess:
@@ -409,6 +412,9 @@ func (a *ajudante) tratar(ctx context.Context, ev any) {
 		// Nome novo no celular ou na conta: as conversas sem nome tentam de novo.
 		a.marcarSujo()
 	case *events.MarkChatAsRead:
+		if e.FromFullSync {
+			break // o retrato inteiro do app state pode ser mais velho que as mensagens que chegaram desde então
+		}
 		if e.Action != nil && e.Action.GetRead() {
 			a.estado.Lida(e.JID.String())
 		} else {
@@ -462,6 +468,36 @@ func (a *ajudante) mensagemDe(c Conteudo, de, id string, quando time.Time) Msg {
 	return m
 }
 
+// sincronizarArquivadas pede uma vez ao WhatsApp o retrato inteiro das conversas arquivadas (app state regular_low).
+// A whatsmeow não emite esses eventos na sincronização completa a não ser que se peça, e o histórico só traz o
+// campo das conversas recentes: o resto aparecia em Todas. Só marca como feito depois de dar certo.
+func (a *ajudante) sincronizarArquivadas(ctx context.Context) {
+	if a.cli == nil || a.pasta == "" {
+		return
+	}
+	marca := filepath.Join(a.pasta, "arquivadas-sincronizadas")
+	if _, err := os.Stat(marca); err == nil {
+		return
+	}
+	a.mu.Lock()
+	if a.sincronizando {
+		a.mu.Unlock()
+		return
+	}
+	a.sincronizando = true
+	a.mu.Unlock()
+	go func() {
+		err := a.cli.FetchAppState(ctx, appstate.WAPatchRegularLow, true, false)
+		a.mu.Lock()
+		a.sincronizando = false
+		a.mu.Unlock()
+		if err == nil {
+			_ = os.WriteFile(marca, nil, 0o600)
+			a.marcarSujo()
+		}
+	}()
+}
+
 func (a *ajudante) historico(ctx context.Context, e *events.HistorySync) {
 	for _, c := range e.Data.GetConversations() {
 		j, err := types.ParseJID(c.GetID())
@@ -493,8 +529,11 @@ func (a *ajudante) historico(ctx context.Context, e *events.HistorySync) {
 		}
 		a.estado.Historico(j.String(), nome, grupo, nao, time.Unix(int64(c.GetConversationTimestamp()), 0), msgs)
 		a.estado.Numero(j.String(), numero)
-		// Arquivada: fica fora de Todas, Contatos e Grupos e só aparece no filtro Arquivadas.
-		a.estado.Arquivar(j.String(), c.GetArchived())
+		// Arquivada: fica fora de Todas, Contatos e Grupos e só aparece no filtro Arquivadas. Histórico sem o campo
+		// não diz nada (não desarquiva).
+		if c.Archived != nil {
+			a.estado.Arquivar(j.String(), c.GetArchived())
+		}
 	}
 	a.marcarSujo()
 }
@@ -627,6 +666,8 @@ func main() {
 	_ = os.RemoveAll(filepath.Join(*pasta, "midia"))
 
 	cli := whatsmeow.NewClient(dev, waLog.Noop)
+	// Sem isto a sincronização completa do app state (a primeira, e a de arquivadas) não emite os eventos Archive.
+	cli.EmitAppStateEventsOnFullSync = true
 	a := &ajudante{cli: cli, estado: NovoEstado(filepath.Join(*pasta, "conversas.json")), pasta: *pasta,
 		sujo: make(chan struct{}, 1), grupos: map[string]string{},
 		tentadas: map[string]time.Time{}, filaFotos: make(chan string, 64)}

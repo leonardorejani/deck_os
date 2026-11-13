@@ -996,3 +996,14 @@ final class AvaliacaoDeAnuncioTestes: XCTestCase {
         XCTAssertFalse(av(servicos: [deck], rssi: 127, filtro: true).aceito)
     }
 }
+
+final class PrazoBluetoothTestes: XCTestCase {
+    /// A página espera 25 s pela lista do WhatsApp (ponte.js). Com os 10 s do cabo o pedido estourava antes, mesmo com o Mac ainda enviando.
+    func testConexaoBluetoothEsperaMaisQueOCaboEQueAPagina() {
+        let (a, _) = FluxoEnlace.par()
+        let c = ConexaoCabo.bluetooth(fluxo: a)
+        XCTAssertGreaterThanOrEqual(c.prazoDoPedido, 25)
+        XCTAssertGreaterThan(c.prazoDoPedido, ConexaoCabo.prazoDoPedidoPadrao)
+        XCTAssertTrue(c.autenticada)
+    }
+}

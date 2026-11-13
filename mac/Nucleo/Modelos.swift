@@ -57,8 +57,11 @@ struct Blocos: Codable, Equatable, Sendable {
     var whatsapp = true
     var sessoes = true
     var uso = true
-    /// O monitor do Mac nasce desligado: ligar é escolha de quem usa (SPEC, seção 13, 12/11/2026).
-    var monitor = false
+    /// O monitor do Mac vem ligado de fábrica (SPEC, seção 13, 13/11/2026). A pessoa desliga na tecla do Monitor de Atividade.
+    var monitor = true
+    /// Se a pessoa mexeu na chave do monitor. Config gravada antes da V1.1.1 trazia `monitor: false` sem ninguém ter escolhido
+    /// (era o padrão antigo), então só vale o `false` de quem escolheu.
+    var monitorEscolhido = false
 }
 
 /// Quais itens o monitor do Mac mostra no iPhone ("não tem mais espaço": quem usa escolhe o que fica na tela).

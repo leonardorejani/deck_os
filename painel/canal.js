@@ -17,7 +17,7 @@
      repetirModo(modo)         -> {ok: true}     faixa (só a música), contexto (a lista) ou nao (só conectado)
      config()                  -> Config sem o codigoAcesso
      gravarConfig(config)      -> Config
-     whatsapp()                -> [ConversaWhatsApp]
+     whatsapp(versao?)         -> [ConversaWhatsApp] | {v, conversas} | {v, igual}   com a versão que a tela já tem, o Mac (QR) responde só "igual" se nada mudou
      whatsappFoto(arquivo)     -> {tipo, dados}    a foto de perfil de uma conversa (dados em base64, 404 sem foto)
      whatsappMidia(chat, id)   -> {tipo, dados}    a foto ou o áudio de uma mensagem, baixado agora (só aparelho conectado, até 8 MB, nunca visualização única)
      abrirConversa(id)         -> {ok, aviso?}     "Responder no Mac": abre a conversa no WhatsApp Web do Mac (404 em Mac antigo)
@@ -41,6 +41,9 @@
    seguidas E esse tempo desde a última resposta boa. Com o Mac pendurado (cada pedido espera o tempo limite inteiro),
    falhasTravado e msTravado fecham mais cedo, senão a tela ficaria uns 16 s com cara de ao vivo. Um tropeço (pedido lento, Mac reiniciando) não pisca a tela. */
 const AJUSTES = Object.assign({ tempoLimite: 5000, intervalo: 1000, deslocamento: 180000, falhasParaOffline: 3, msParaOffline: 5000, falhasTravado: 2, msTravado: 10000 }, window.DECK_AJUSTES);
+
+/* a lista do WhatsApp pelo Bluetooth (uns 25 KB/s) leva mais que os 5 s dos outros pedidos: com 5 s ela nunca chegava */
+const TEMPO_WHATSAPP = AJUSTES.tempoLimite * 5;
 
 function erroDeCanal(mensagem, status = 0, rede = false) {
   return Object.assign(new Error(mensagem), { status, rede });
@@ -95,7 +98,7 @@ function criarCanalHttps() {
     repetirModo: modo => pedir('POST', '/api/spotify/repetir?modo=' + encodeURIComponent(modo)),
     config: () => pedir('GET', '/api/config'),
     gravarConfig: config => pedir('PUT', '/api/config', config),
-    whatsapp: () => pedir('GET', '/api/whatsapp'),
+    whatsapp: versao => pedir('GET', '/api/whatsapp' + (versao != null ? '?v=' + encodeURIComponent(versao) : ''), undefined, TEMPO_WHATSAPP),
     whatsappFoto: arquivo => pedir('GET', '/api/whatsapp/foto/' + encodeURIComponent(arquivo)),
     whatsappMidia: (chat, id) => pedir('GET', `/api/whatsapp/midia?chat=${encodeURIComponent(chat)}&id=${encodeURIComponent(id)}`, undefined, 45000), // o Mac baixa da internet antes de responder
     abrirConversa: id => pedir('POST', '/api/whatsapp/abrir', { id }),

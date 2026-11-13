@@ -154,13 +154,36 @@ final class MonitorTestes: XCTestCase {
 
     // MARK: - Config e estado
 
-    func testMonitorNasceDesligadoEComTodosOsItensEConfigAntigaContinuaIgual() throws {
+    func testMonitorVemLigadoDeFabricaComTodosOsItens() throws {
+        // Relato de 13/11/2026: "monitor aparece que tá desligado". Config nova e config sem a chave mostram o Monitor ligado.
+        XCTAssertTrue(Config.padrao(nomeMac: "M").blocos.monitor, "config nova nasce com o monitor ligado")
         let antiga = #"{"perfis":[{"id":"p","nome":"P","teclas":[]}],"perfilAtivo":"p","comp":"a","contas":[],"blocos":{"spotify":true},"nomeMac":"M","porta":4777,"codigoAcesso":"abcdefghjkmnpqrstuvw"}"#
         let c = try JSONDecoder().decode(Config.self, from: Data(antiga.utf8))
-        XCTAssertFalse(c.blocos.monitor, "quem já usa o Deck não ganha um bloco novo na tela")
+        XCTAssertTrue(c.blocos.monitor, "config sem a chave também mostra o monitor")
         XCTAssertEqual(c.monitor, ConfigMonitor())
         XCTAssertTrue(c.monitor.cpu && c.monitor.memoria && c.monitor.bateria && c.monitor.rede)
         XCTAssertNil(Config.validar(c))
+    }
+
+    func testFalseGravadoSemEscolhaDaPessoaVoltaLigadoEOQueElaDesligouFica() throws {
+        // A V1.1 gravava `monitor: false` sozinha. Sem `monitorEscolhido` esse false não é escolha de ninguém.
+        let v11 = try JSONDecoder().decode(Blocos.self, from: Data(#"{"spotify":true,"monitor":false}"#.utf8))
+        XCTAssertTrue(v11.monitor, "false gravado pelo padrão antigo vira ligado")
+        let desligou = try JSONDecoder().decode(Blocos.self, from: Data(#"{"monitor":false,"monitorEscolhido":true}"#.utf8))
+        XCTAssertFalse(desligou.monitor, "quem desligou de propósito continua desligado")
+        var b = Blocos(); b.monitor = false; b.monitorEscolhido = true
+        XCTAssertEqual(try JSONDecoder().decode(Blocos.self, from: JSONEncoder().encode(b)), b)
+    }
+
+    func testPutDePainelVelhoNaoDesligaOMonitorNemApagaAEscolha() throws {
+        var atual = config(perfil: [])
+        atual.blocos.monitor = false; atual.blocos.monitorEscolhido = true
+        var json = try JSONSerialization.jsonObject(with: JSONEncoder().encode(atual)) as! [String: Any]
+        json.removeValue(forKey: "codigoAcesso")
+        json["blocos"] = ["spotify": true, "agenda": true, "whatsapp": true, "sessoes": true, "uso": true, "monitor": true]
+        guard case .success(let nova) = Config.receber(corpo: try JSONSerialization.data(withJSONObject: json), sobre: atual) else { return XCTFail("PUT recusado") }
+        XCTAssertFalse(nova.blocos.monitor, "painel que não sabe da escolha não religa o que a pessoa desligou")
+        XCTAssertTrue(nova.blocos.monitorEscolhido)
     }
 
     func testItemQueFaltaFicaLigadoEOQueFoiDesligadoVolta() throws {
@@ -203,7 +226,8 @@ final class MonitorTestes: XCTestCase {
         let chamadas = Contador()
         let ag = Agregador(fontes: fontesComMonitor(chamadas))
         var c = config(perfil: [])
-        XCTAssertNil(ag.estado(config: c, agora: t0).monitor, "padrão: desligado")
+        c.blocos.monitor = false; c.blocos.monitorEscolhido = true
+        XCTAssertNil(ag.estado(config: c, agora: t0).monitor, "desligado pela pessoa: nada")
         c.blocos.monitor = true
         c.monitor = ConfigMonitor.antigos(cpu: false, memoria: false, bateria: false, rede: false)
         XCTAssertNil(ag.estado(config: c, agora: t0).monitor, "ligado sem nenhum item: nada a mostrar")

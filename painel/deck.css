@@ -776,23 +776,36 @@ button.item-lista:disabled { opacity: .5; cursor: default }
 .volume-aparelho { padding: 0 0 var(--item) }
 .vertical .pc-corpo { padding-top: calc(var(--seguro-cima) + var(--alvo-sm)) }
 
-/* ---------- Controles do Mac (controles.js): uma linha por controle, barra arrastável como a do volume do player ---------- */
-.ctl-linha { display: flex; align-items: center; gap: var(--item); padding: var(--pad) 0; color: var(--texto-2); font-size: var(--texto-sm); font-variant-numeric: tabular-nums }
-.ctl-linha + .ctl-linha { border-top: 1px solid var(--superficie-2) }
-.ctl-ic { flex: none; display: grid; place-items: center; width: var(--alvo); height: var(--alvo) }
-.ctl-ic svg { width: 24px; height: 24px }
-.ctl-meio { flex: 1; min-width: 0; display: grid; gap: var(--item) }
-.ctl-topo { display: flex; align-items: center; justify-content: space-between; gap: var(--item); min-height: var(--alvo) }
-.ctl-nome { color: var(--texto) }
-.ctl-linha .trilho { position: relative; height: 6px; border-radius: var(--raio-pilula); background: var(--superficie-2); touch-action: none; cursor: pointer }
-.ctl-linha .trilho::before { content: ""; position: absolute; left: 0; right: 0; top: calc(-1 * (var(--pad) + var(--item))); bottom: calc(-1 * (var(--pad) + var(--item))) } /* área de toque de 54 pt de altura */
-.ctl-linha .trilho i { position: relative; display: block; height: 100%; width: 0; border-radius: inherit; background: var(--texto) }
-.ctl-linha.arrastando .trilho { height: 8px }
-.ctl-linha.arrastando .trilho i::after { content: ""; position: absolute; right: calc(-1 * var(--item) + 1px); top: 50%; width: 14px; height: 14px; translate: 0 -50%; border-radius: 50%; background: var(--texto); box-shadow: var(--sombra-2) }
-.ctl-linha.mudo .trilho i { background: var(--texto-2) }
-.ctl-num { flex: none; min-width: 3ch; text-align: right }
-.ctl-linha .btn[aria-pressed="true"] { background: var(--destaque-suave); color: var(--texto) }
-.ctl-linha.esq .barra { display: block; height: 10px }
+/* ---------- Controles do Mac (controles.js): cartões escuros como os do Monitor, valor grande e a barra que é o próprio controle ---------- */
+.ctl-grade { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-rows: minmax(120px, 1fr); gap: var(--grade); min-height: 100%; padding-bottom: var(--pad); box-sizing: border-box }
+.ctl-grade[data-n="1"] { grid-template-columns: minmax(0, 1fr) }
+.ctl-grade[data-n="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)) }
+.ctl-grade[data-n="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)) }
+.vertical .ctl-grade { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(150px, auto); min-height: 0 }
+.vertical .ctl-grade[data-n="1"] { grid-template-columns: minmax(0, 1fr) }
+.ctl-cartao { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: var(--item); padding: var(--pad) var(--icone); border-radius: var(--raio-card); background: var(--superficie-2); min-width: 0; border: 0; font: inherit; text-align: left; color: var(--texto-2); font-variant-numeric: tabular-nums; transition: background-color var(--mov-padrao) var(--curva-move) }
+.ctl-topo { display: flex; align-items: center; gap: var(--item); min-width: 0; color: var(--texto-2); font-size: var(--texto-sm) }
+.ctl-ic { flex: none; display: grid; place-items: center }
+.ctl-ic svg { width: 16px; height: 16px }
+.ctl-rot { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.ctl-num { align-self: center; font-size: var(--texto-2xl); font-weight: 700; line-height: 1; color: var(--texto); white-space: nowrap; font-variant-numeric: tabular-nums }
+.ctl-num small { font-size: var(--texto-md); font-weight: 600; color: var(--texto-2); margin-left: var(--micro-gap) }
+.ctl-estado { font-size: var(--texto-xl) }
+.ctl-cartao .trilho { position: relative; height: 10px; margin: var(--item) 0; border-radius: var(--raio-pilula); background: var(--superficie); touch-action: none; cursor: pointer }
+.ctl-cartao .trilho::before { content: ""; position: absolute; inset: -28px -8px } /* área de toque de uns 66 pt de altura, a barra toda é o dedo */
+.ctl-cartao .trilho i { display: block; height: 100%; width: 100%; border-radius: inherit; background: var(--texto); transform: scaleX(0); transform-origin: left; transition: transform var(--mov-contar) var(--curva-entra), background-color var(--mov-padrao) var(--curva-move) }
+.ctl-cartao.arrastando .trilho i { transition: none }
+.ctl-cartao.arrastando { background: var(--superficie-2) }
+.ctl-cartao.mudo .trilho i { background: var(--texto-2) }
+.ctl-mudo { cursor: pointer; -webkit-tap-highlight-color: transparent }
+.ctl-mudo:active { transform: scale(.98) }
+.ctl-chave { display: block; position: relative; width: 44px; height: 26px; margin: var(--item) 0; border-radius: var(--raio-pilula); background: var(--superficie); transition: background-color var(--mov-rapido) var(--curva-move) }
+.ctl-chave i { position: absolute; left: 3px; top: 3px; width: 20px; height: 20px; border-radius: 50%; background: var(--texto-2); transition: transform var(--mov-rapido) var(--curva-move), background-color var(--mov-rapido) var(--curva-move) }
+.ctl-mudo.ligado { background: var(--destaque-suave) }
+.ctl-mudo.ligado .ctl-chave { background: var(--destaque) }
+.ctl-mudo.ligado .ctl-chave i { transform: translateX(18px); background: var(--texto) }
+.ctl-cartao.esq { align-content: end }
+.ctl-cartao.esq .barra { display: block; height: 10px }
 
 /* ---------- Monitor de Atividade (monitor.js): grade de cartões escuros, rótulo cinza em cima, número grande, barra fina embaixo ---------- */
 .mn-grade { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); grid-auto-rows: minmax(104px, 1fr); gap: var(--grade); min-height: 100%; padding-bottom: var(--pad); box-sizing: border-box }

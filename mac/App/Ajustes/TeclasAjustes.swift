@@ -143,7 +143,7 @@ struct AjustesDaAgenda: View {
 // MARK: - Monitor
 
 /// Um bloco pequeno no iPhone com processador, memória, bateria e rede, e a tela do Monitor de Atividade, que ainda mostra GPU, disco,
-/// energia, ventoinhas e dispositivos (só o que este Mac conseguir ler). Nasce desligado, e cada item se liga ou desliga aqui,
+/// energia, ventoinhas e dispositivos (só o que este Mac conseguir ler). Vem ligado de fábrica, e cada item se liga ou desliga aqui,
 /// porque a tela do iPhone não tem muito espaço. De fábrica, ligado o bloco, todos os itens aparecem.
 struct AjustesDoMonitor: View {
     @ObservedObject var modelo: ModeloApp
@@ -152,7 +152,7 @@ struct AjustesDoMonitor: View {
         let c = modelo.config
         CartaoDeAjustes(titulo: "Monitor", nota: c.blocos.monitor ? nil : "Um bloco pequeno no iPhone com o que o Mac está usando agora") {
             LinhaComChave(titulo: "Mostrar na tela do iPhone", apoio: "Só aparece o que você deixar ligado abaixo", ligada: c.blocos.monitor) { v in
-                modelo.gravar { $0.blocos.monitor = v }
+                modelo.gravar { $0.blocos.monitor = v; $0.blocos.monitorEscolhido = true }
             }
             if c.blocos.monitor {
                 item("Processador", "Quanto do processador está em uso", c.monitor.cpu) { $0.monitor.cpu = $1 }

@@ -9,12 +9,14 @@ final class ConexaoCabo: @unchecked Sendable {
     /// Sem ouvir o Mac por este tempo, o fio é dado como morto (o Mac manda um ping a cada 5 s).
     static let silencioMaximo: TimeInterval = 15
     static let prazoDoPedidoPadrao: TimeInterval = 10
+    /// O Bluetooth leva uns 25 KB/s: a lista do WhatsApp de uma conversa cheia passa dos 10 s do cabo. A página espera 25 s (ios/Web/ponte.js), então este prazo não pode ser menor.
+    static let prazoDoPedidoBluetooth: TimeInterval = 30
     /// Quem conecta e não se apresenta (ou não prova quem é) nesse tempo é largado.
     static let prazoDaApresentacao: TimeInterval = 5
     static let prazoDaProva: TimeInterval = 3
 
     private let fluxo: FluxoBytes
-    private let prazoDoPedido: TimeInterval
+    let prazoDoPedido: TimeInterval
     private let trava = NSLock()
     private let escrita = NSLock()
     private var pendentes: [Int: CheckedContinuation<RespostaCanal, Error>] = [:]
@@ -30,6 +32,10 @@ final class ConexaoCabo: @unchecked Sendable {
     private let segredo: @Sendable () -> String?
     /// Como o erro chama este fio ("O cabo", "O Bluetooth").
     private let nomeDoCanal: String
+    /// O fio do Bluetooth: já provou quem é o Mac no aperto de mão cifrado e tem o prazo de canal lento.
+    static func bluetooth(fluxo: FluxoBytes) -> ConexaoCabo {
+        ConexaoCabo(fluxo: fluxo, prazoDoPedido: prazoDoPedidoBluetooth, segredo: { nil }, confiavel: true, nomeDoCanal: "O Bluetooth")
+    }
     var nomeMac: String? { trava.withLock { _nomeMac } }
     var autenticada: Bool { trava.withLock { _autenticada } }
 
