@@ -6,6 +6,12 @@ import CoreGraphics
 import UniformTypeIdentifiers
 #endif
 
+final class Pedidos: @unchecked Sendable {
+    private let trava = NSLock(); private var _t: [String] = []
+    func anotar(_ u: String) { trava.lock(); _t.append(u); trava.unlock() }
+    var todos: [String] { trava.lock(); defer { trava.unlock() }; return _t }
+}
+
 final class FontesSpotifyTestes: XCTestCase {
     func testParseDaSaidaDoAppleScript() throws {
         let f = try XCTUnwrap(FonteSpotify.parse("playing\tAmazing Grace\tCoral\t12,5\t215000\thttps://i.scdn.co/image/abc\n"))
@@ -131,6 +137,17 @@ final class FontesSpotifyTestes: XCTestCase {
         XCTAssertEqual(a.cores, ["#c80a0a", "#0a0ac8"])
         XCTAssertEqual(a.capaId, FonteSpotify.capaId("https://x/capa1"))
         XCTAssertEqual(fonte.capa(), Data([1, 2, 3]))
+    }
+
+    func testPedeACapaDe640ECaiParaAde300SeNaoHouver() throws {
+        let pedidos = Pedidos()
+        let arte = "https://i.scdn.co/image/ab67616d00001e02abc"
+        let ex = ExecutorFalso([("osascript", SaidaShell(status: 0, saida: "playing\tA\tB\t1\t100000\t\(arte)"))])
+        let fonte = FonteSpotify(executor: ex, baixar: { u in pedidos.anotar(u); return u.contains("b273") ? nil : Data([7]) },
+                                 pixels: { _ in Array(repeating: Pixel(r: 1, g: 2, b: 3), count: 10) })
+        _ = fonte.ler()
+        XCTAssertEqual(pedidos.todos, ["https://i.scdn.co/image/ab67616d0000b273abc", arte])
+        XCTAssertEqual(fonte.capa(), Data([7]))
     }
 
     func testFalhaNoDownloadNaoDerrubaOEstadoETentaDepoisDe30s() throws {

@@ -92,10 +92,10 @@ document.addEventListener('pointerup', () => {
 document.addEventListener('pointercancel', () => { if (!arrVol) return; arrVol.el.classList.remove('arrastando'); arrVol = null; if (V?.spotify) pintarExtras(V.spotify) });
 
 /* ---------- aparelhos e fila: uma lista por cima do player, lida do Spotify pelo Mac ---------- */
-const lp = { qual: null, dados: null, erro: '', semLogin: false, seq: 0, faixa: '' };
+const lp = { qual: null, aba: 'fila', dados: null, erro: '', semLogin: false, seq: 0, faixa: '', pulando: false };
 const TIPOS_APARELHO = { computer: 'Computador', smartphone: 'Celular', tablet: 'Tablet', speaker: 'Caixa de som', tv: 'TV', castaudio: 'Caixa de som', castvideo: 'TV', audiodongle: 'Caixa de som', avr: 'Receiver', stb: 'Decodificador', gameconsole: 'Videogame', automobile: 'Carro' };
 const esqueletoLinhas = () => '<div class="esq-lista" aria-hidden="true">' + '<div class="item-lista esq"><span class="tx"><i class="barra" style="width:50%"></i><i class="barra" style="width:30%"></i></span></div>'.repeat(4) + '</div>';
-function abrirListaPlayer(qual) { lp.qual = qual; lp.dados = null; lp.erro = ''; lp.semLogin = false; lp.faixa = V.spotify?.faixa || ''; pintarListaPlayer(); lerListaPlayer() }
+function abrirListaPlayer(qual) { lp.qual = qual; lp.aba = 'fila'; lp.dados = null; lp.erro = ''; lp.semLogin = false; lp.faixa = V.spotify?.faixa || ''; pintarListaPlayer(); lerListaPlayer() }
 /* A lista entra deslizando da direita para a esquerda e sai de volta para a direita. O `hidden` só vale depois da saída (a lista precisa
    estar na tela para animar), e `aberta` é o que a move. */
 function fecharListaPlayer() {
@@ -106,7 +106,7 @@ function fecharListaPlayer() {
 async function lerListaPlayer() {
   const n = ++lp.seq, qual = lp.qual; if (!qual) return;
   try {
-    const d = await (qual === 'fila' ? canal.fila() : canal.aparelhos());
+    const d = await (qual === 'fila' ? (lp.aba === 'recentes' ? canal.recentes() : canal.fila()) : canal.aparelhos());
     if (n !== lp.seq) return; lp.dados = d; lp.erro = ''; lp.semLogin = false;
   } catch (e) {
     if (n !== lp.seq) return;
@@ -121,25 +121,50 @@ function pintarListaPlayer() {
   if (el.hidden) { el.hidden = false; void el.offsetWidth; requestAnimationFrame(() => { if (lp.qual) el.classList.add('aberta') }) } // o quadro de partida (fora da tela) tem de existir antes de deslizar
   else el.classList.add('aberta');
   $('#pc-lista-titulo').textContent = lp.qual === 'fila' ? 'Na fila' : 'Tocar em';
+  $('#pc-lista-titulo').hidden = lp.qual === 'fila'; $('#pc-lista-abas').hidden = lp.qual !== 'fila'; // na fila, as abas tomam o lugar do título
+  $$('#pc-lista-abas [data-aba]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.aba === lp.aba)));
   pintarTopoFila();
   corpo.setAttribute('aria-busy', String(!lp.dados && !lp.erro));
   if (lp.erro) { corpo.innerHTML = lp.semLogin ? `<div class="vazio-bloco"><strong>Spotify não conectado</strong><span>${esc(lp.erro)}</span></div>` : erroLista(lp.erro, 0); return }
   if (!lp.dados) { if (!corpo.querySelector('.esq-lista')) corpo.innerHTML = esqueletoLinhas(); return }
   const y = corpo.scrollTop;
-  corpo.innerHTML = lp.qual === 'fila' ? filaHTML(lp.dados) : aparelhosHTML(lp.dados);
+  corpo.innerHTML = lp.qual === 'fila' ? (lp.aba === 'recentes' ? recentesHTML(lp.dados) : filaHTML(lp.dados)) : aparelhosHTML(lp.dados);
   corpo.scrollTop = y;
 }
-const linhaFila = i => `<div class="item-lista"><span class="tx"><b>${esc(i.faixa)}</b><small>${esc(i.artista || '')}</small></span></div>`;
-/* No alto da fila, fixa: a capa e o nome do que toca agora (o que o estado do Spotify diz, que anda junto com a música). A lista das
-   próximas rola embaixo. Na lista de aparelhos o alto não existe. */
+/* A capa da linha é a pequena do Spotify (a de 300 px, que não borra na miniatura). No toque (estado pressionado) ou com o mouse em cima,
+   a linha clareia e um play aparece sobre a capa, como no Spotify. */
+const capaLinha = (i, play) => `<span class="capa-fila"><img class="capa-mini"${i.capa ? ` src="${esc(i.capa)}"` : ''} alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.removeAttribute('src')">${play ? SVG.tocar : ''}</span>`;
+const textoLinha = i => `<span class="tx"><b>${esc(i.faixa)}</b><small>${esc(i.artista || '')}</small></span>`;
+const linhaFila = (i, n) => `<button class="item-lista com-capa" data-pular="${n}" aria-label="Tocar ${esc(i.faixa)}">${capaLinha(i, true)}${textoLinha(i)}</button>`;
+const linhaRecente = i => `<div class="item-lista com-capa">${capaLinha(i, false)}${textoLinha(i)}</div>`;
+/* No alto da fila, fixo: o que toca agora (o que o estado do Spotify diz, que anda junto com a música), com o nome em verde. A lista das
+   próximas rola embaixo. Na lista de aparelhos e na aba dos recentes o alto não existe. */
 function pintarTopoFila() {
   const topo = $('#pc-lista-topo'), s = V?.spotify;
-  topo.hidden = lp.qual !== 'fila' || !s; if (topo.hidden) return;
-  const html = `<img class="capa-mini"${s.capaId ? ` src="${esc(canal.capaUrl(s.capaId))}"` : ''} alt="" onerror="this.dataset.erro=1;this.removeAttribute('src')"><span class="tx"><small class="rotulo">Tocando agora</small><b>${esc(s.faixa)}</b><small>${esc(s.artista || '')}</small></span>`;
+  topo.hidden = lp.qual !== 'fila' || lp.aba !== 'fila' || !s; if (topo.hidden) return;
+  const capa = s.capaId ? ` src="${esc(canal.capaUrl(s.capaId))}"` : '';
+  const html = `<small class="rotulo">Tocando agora</small><div class="linha-agora"><img class="capa-mini"${capa} alt="" onerror="this.dataset.erro=1;this.removeAttribute('src')"><span class="tx"><b>${esc(s.faixa)}</b><small>${esc(s.artista || '')}</small></span></div>`;
   if (topo.dataset.k !== html) { topo.dataset.k = html; topo.innerHTML = html }
 }
 function filaHTML(f) {
-  return (f.proximas || []).length ? `<section class="grupo-data"><h3>Próximas</h3>${f.proximas.map(linhaFila).join('')}</section>` : '<div class="vazio-bloco" style="min-height:120px"><strong>A fila está vazia</strong><span>Quando você pôr músicas na fila, elas aparecem aqui.</span></div>';
+  const prox = f.proximas || [];
+  return prox.length ? `<section class="grupo-data"><h3>${f.contexto ? 'Próximas de: ' + esc(f.contexto) : 'Próximas'}</h3>${prox.map((i, n) => linhaFila(i, n)).join('')}</section>` : '<div class="vazio-bloco" style="min-height:120px"><strong>A fila está vazia</strong><span>Quando você pôr músicas na fila, elas aparecem aqui.</span></div>';
+}
+function recentesHTML(r) {
+  const itens = r.itens || [];
+  return itens.length ? `<section class="grupo-data"><h3>Tocado recentemente</h3>${itens.map(linhaRecente).join('')}</section>` : '<div class="vazio-bloco" style="min-height:120px"><strong>Nada tocado ainda</strong><span>O que você ouvir no Spotify aparece aqui.</span></div>';
+}
+/* tocar uma música da fila: o Spotify pula até ela. A lista já corta as de antes no toque e volta se o Mac recusar */
+async function pularPara(i) {
+  const f = lp.dados, item = f?.proximas?.[i]; if (!item || lp.pulando) return;
+  lp.pulando = true; lp.dados = { ...f, proximas: f.proximas.slice(i + 1) }; pintarListaPlayer(); avisar(`Tocando ${item.faixa}`);
+  try { await canal.pularFila(i + 1, item.uri); await atualizarJa(); setTimeout(() => { if (lp.qual === 'fila' && lp.aba === 'fila') lerListaPlayer() }, 800) }
+  catch (e) { if (lp.qual === 'fila' && lp.aba === 'fila') { lp.dados = f; pintarListaPlayer() } tratarErro(e) }
+  finally { lp.pulando = false }
+}
+function trocarAba(aba) {
+  if (lp.qual !== 'fila' || lp.aba === aba) return;
+  lp.aba = aba; lp.dados = null; lp.erro = ''; lp.semLogin = false; pintarListaPlayer(); lerListaPlayer();
 }
 function aparelhosHTML(lista) {
   if (!lista.length) return '<div class="vazio-bloco"><strong>Nenhum aparelho achado</strong><span>Abra o Spotify no aparelho em que quer ouvir, e ele aparece aqui.</span></div>';
@@ -163,6 +188,8 @@ $('#f-player').addEventListener('click', ev => {
   if (ev.target.closest('[data-aparelhos]')) return abrirListaPlayer('aparelhos');
   if (ev.target.closest('[data-fila]')) return abrirListaPlayer('fila');
   if (ev.target.closest('[data-pc-voltar]')) return fecharListaPlayer();
+  const ab = ev.target.closest('[data-aba]'); if (ab) return trocarAba(ab.dataset.aba);
+  const pu = ev.target.closest('[data-pular]'); if (pu) return pularPara(+pu.dataset.pular);
   if (ev.target.closest('[data-tentar]')) { lp.erro = ''; lp.dados = null; pintarListaPlayer(); return lerListaPlayer() }
   const a = ev.target.closest('[data-aparelho]'); if (a) return trocarAparelho(a.dataset.aparelho);
   if (ev.target.closest('[data-vol-alvo]')) {

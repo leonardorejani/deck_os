@@ -48,6 +48,7 @@ const SVG = {
   cameraCortada: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 3 18 18M15 15v1a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h1M9.5 6H13a2 2 0 0 1 2 2v3.5M15 10l6-3v10"/></svg>',
   desligar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.6 15.2C2.6 14 2 13 2 12c0-3 4.5-5 10-5s10 2 10 5c0 1-.6 2-1.6 3.2l-2.6-1.3a1.2 1.2 0 0 1-.7-1.1V10.5a14 14 0 0 0-10.2 0v2.3c0 .5-.3.9-.7 1.1z"/></svg>',
   repetir: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4M3 11v-1a4 4 0 0 1 4-4h14M7 22l-4-4 4-4M21 13v1a4 4 0 0 1-4 4H3"/></svg>',
+  repetirFaixa: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4M3 11v-1a4 4 0 0 1 4-4h14M7 22l-4-4 4-4M21 13v1a4 4 0 0 1-4 4H3M11 10h1v4"/></svg>',
 };
 
 // ícones dos apps que o Mac pode ter em uma tecla (o nome vem em tecla.icone)
