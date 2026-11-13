@@ -25,11 +25,29 @@ function conferirSobrepor(e) {
   for (const [b, v] of Object.entries(sobrepor.blocos || {})) if ((e.blocos?.[b] ?? BLOCOS_PADRAO[b]) === v) delete sobrepor.blocos[b];
   if (sobrepor.perfilAtivo === e.perfilAtivo) delete sobrepor.perfilAtivo;
 }
+/* a capa que a tela mostra: a do Mac (capaId) ou, na troca otimista de faixa, a miniatura que a fila já tinha (capaUrl) */
+const capaSrc = s => s.capaUrl || (s.capaId ? canal.capaUrl(s.capaId) : '');
+const capaAttr = s => { const u = capaSrc(s); return u ? ` src="${esc(u)}"` : '' };
+const reduzMov = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+/* troca a imagem só depois de a nova estar baixada: a capa não pisca em branco quando o Mac confirma a faixa. A que falhou ao baixar é pedida de novo no próximo passo */
+function sincronizarCapa(img, s) {
+  const quer = capaSrc(s); if (!img || !quer) return;
+  if (img.dataset.erro) { delete img.dataset.erro; img.dataset.quer = quer; img.src = quer; return }
+  if (img.getAttribute('src') === quer || img.dataset.quer === quer) return;
+  img.dataset.quer = quer;
+  const nova = new Image(); nova.onload = () => { if (img.dataset.quer === quer) img.src = quer }; nova.onerror = () => { if (img.dataset.quer === quer) delete img.dataset.quer }; nova.src = quer;
+}
+/* refazer o player não refaz a capa quando a faixa é a mesma (o Mac confirmando a troca otimista): a imagem que já está na tela fica */
+function guardarCapa(velha, nova, s) {
+  if (!nova) return; nova.dataset.faixa = s.faixa;
+  if (velha && velha.dataset.faixa === s.faixa && velha.getAttribute('src')) nova.replaceWith(velha);
+}
 const posEsperada = (p, agora) => p.p0 + (p.andando ? (agora - p.t0) / 1000 : 0);
 /* o Spotify como a tela deve mostrar: o que o Mac mandou, com por cima o que o toque já mudou e ele ainda não confirmou */
 function spotifyOtimista(s) {
   const o = otmSpotify; if (!o || !s) return s;
-  const agora = performance.now();
+  const agora = performance.now(), troca = o.troca;
+  if (troca && s.faixa === troca.faixa) { otmSpotify = null; return s } // o Mac já está na faixa que o toque escolheu: vale o dele
   if ((agora > o.ate && !pendSpotify) || s.faixa !== o.faixa) { otmSpotify = null; return s } // passou o prazo (sem comando a caminho), ou a faixa já é outra: vale o Mac
   // "ele já confirmou" só vale com a fila vazia: com comandos a caminho, o valor que o Mac mostra ainda é o do toque anterior
   // (play, pausa, play seguidos: o 2º volta ao que o Mac mostra, e a tela piscaria pausada até o 2º chegar)
@@ -37,11 +55,14 @@ function spotifyOtimista(s) {
   let posicao = null;
   if (o.pos) { const esperada = posEsperada(o.pos, agora); if (!pendSpotify && Math.abs((s.posicao || 0) - esperada) < 3) o.pos = null; else posicao = esperada }
   if (!Object.keys(o.campos).length && !o.pos) { otmSpotify = null; return s }
-  return { ...s, ...o.campos, ...(posicao == null ? {} : { posicao: Math.min(posicao, s.duracao || posicao) }) };
+  const vista = { ...s, ...troca, ...o.campos };
+  return posicao == null ? vista : { ...vista, posicao: Math.min(posicao, vista.duracao || posicao) };
 }
-function otimistaSpotify(campos, posicao) {
+/* troca: a faixa que o toque escolheu, antes de o Mac responder (tocar numa da fila). Fica em cima do estado do Mac até ele chegar na mesma faixa */
+function otimistaSpotify(campos, posicao, troca) {
   const agora = performance.now(), s = V.spotify, antes = otmSpotify && agora < otmSpotify.ate ? otmSpotify : null;
-  const novo = { campos: { ...(antes?.campos || {}), ...campos }, pos: antes?.pos ? { ...antes.pos, p0: posEsperada(antes.pos, agora), t0: agora } : null, faixa: s?.faixa, ate: agora + JANELA_OTM };
+  const novo = { campos: { ...(antes?.campos || {}), ...campos }, pos: antes?.pos ? { ...antes.pos, p0: posEsperada(antes.pos, agora), t0: agora } : null, faixa: antes?.faixa ?? s?.faixa, ate: agora + (troca || antes?.troca ? 8000 : JANELA_OTM) };
+  if (troca || antes?.troca) novo.troca = troca || antes.troca;
   if (posicao != null) novo.pos = { p0: posicao, t0: agora, andando: false };
   if (novo.pos) novo.pos.andando = !!(novo.campos.tocando ?? s?.tocando);
   otmSpotify = novo;
@@ -175,7 +196,7 @@ const capaEstilo = s => { const c1 = corCapa(s.cores?.[0], .55), c2 = corCapa(s.
 function playerHTML() {
   const s = V.spotify || { tocando: false, faixa: '', artista: '', posicao: 0, duracao: 0, cores: [] }, t = !!s.tocando;
   // cores da capa: o Mac tira as duas cores dominantes da arte e manda junto
-  const capa = s.capaId ? ` src="${esc(canal.capaUrl(s.capaId))}"` : '';
+  const capa = capaAttr(s);
   const modos = temModos(s);
   return `<div class="cartao player depende ${t ? '' : 'pausado'}"${capaEstilo(s)}>${esconder('spotify')}
     <img class="capa" data-abrir-spotify${capa} alt="${V.carregando ? '' : 'Capa: ' + esc(s.faixa)}" onerror="this.dataset.erro=1;this.removeAttribute('src')">
@@ -315,11 +336,9 @@ function atualizar() {
   const sem = semMusica();
   if (V.spotify && V.comp !== 'c') { // a C não tem o player pequeno
     const kp = chavePlayer();
-    if (kp !== ultima.player) { $('.player').outerHTML = playerHTML(); ultima.player = kp }
+    if (kp !== ultima.player) { const velha = $('.player .capa'); $('.player').outerHTML = playerHTML(); guardarCapa(velha, $('.player .capa'), V.spotify); ultima.player = kp }
     const pl = $('.player');
-    // a capa que falhou ao baixar (Mac ocupado, rede) é pedida de novo no próximo passo
-    const img = $('.capa', pl);
-    if (img?.dataset.erro && V.spotify.capaId) { delete img.dataset.erro; img.src = canal.capaUrl(V.spotify.capaId) }
+    sincronizarCapa($('.capa', pl), V.spotify);
     pintarMidia(pl, V.spotify);
   }
   if (folhaAberta?.id === 'f-player') pintarPlayerCheio();
@@ -376,7 +395,7 @@ function pintarProgresso(forcar) {
   $$('.progresso').forEach(pr => {
     const tr = $('.trilho', pr);
     pr.dataset.total = s.duracao || 0;
-    $('.decorrido', pr).textContent = mmss(s.posicao); $('.total', pr).textContent = mmss(s.duracao);
+    $('.decorrido', pr).textContent = mmss(s.posicao); $('.total', pr).textContent = s.aguardando ? '' : mmss(s.duracao); // trocou de faixa e o Mac ainda não disse a duração: sem total até chegar, para não saltar de 0:00
     $('i', tr).style.width = (s.duracao > 0 ? Math.min(100, s.posicao / s.duracao * 100) : 0) + '%';
     tr.setAttribute('aria-valuenow', Math.round(s.posicao || 0)); tr.setAttribute('aria-valuemax', Math.round(s.duracao || 0));
   });
@@ -435,7 +454,8 @@ document.addEventListener('pointerdown', ev => {
 document.addEventListener('pointermove', ev => { if (scrub) moverScrub(ev) });
 document.addEventListener('pointerup', async () => {
   if (!scrub) return;
-  const { pr, f } = scrub, s = Math.round(f * (+pr.dataset.total)), texto = $('.decorrido', pr).textContent;
+  const { pr, f } = scrub, total = +pr.dataset.total; if (!(total > 0)) { pr.classList.remove('arrastando'); scrub = null; pintarProgresso(true); return } // sem duração (faixa recém-trocada) não há onde buscar
+  const s = Math.round(f * total), texto = $('.decorrido', pr).textContent;
   pr.classList.remove('arrastando'); scrub = null; travaProgressoAte = performance.now() + 1500;
   otimistaSpotify({}, s); avisar('Pulou para ' + texto); // a barra já fica onde o dedo soltou: o Mac confirma em seguida
   V = vistaReal(); pintarProgresso(true); // e a do outro player (o pequeno atrás da tela cheia) também, sem esperar a trava
@@ -534,7 +554,7 @@ function midia(acao) {
    na API do Spotify), então não aparecem. */
 let cheioChave = '';
 function playerCheioHTML(s) {
-  const t = !!s.tocando, modos = temModos(s), capa = s.capaId ? ` src="${esc(canal.capaUrl(s.capaId))}"` : '';
+  const t = !!s.tocando, modos = temModos(s), capa = capaAttr(s);
   return `<div class="pc ${t ? '' : 'pausado'}">
     <img class="capa-grande"${capa} alt="Capa: ${esc(s.faixa)}" onerror="this.dataset.erro=1;this.removeAttribute('src')">
     <div class="pc-info">
@@ -551,11 +571,11 @@ function pintarPlayerCheio() {
   if (k !== cheioChave) {
     cheioChave = k;
     f.style.setProperty('--capa-1', corCapa(s.cores?.[0], .55) || 'transparent'); f.style.setProperty('--capa-2', corCapa(s.cores?.[1] || s.cores?.[0], .35) || 'transparent');
-    $('#pc-corpo').innerHTML = playerCheioHTML(s); pintarProgresso(true);
+    const velha = $('.capa-grande', f); $('#pc-corpo').innerHTML = playerCheioHTML(s); guardarCapa(velha, $('.capa-grande', f), s); pintarProgresso(true);
   }
   pintarMidia($('.pc', f), s); pintarExtras(s);
-  if (lp.qual === 'fila' && s.faixa !== lp.faixa) { lp.faixa = s.faixa; pintarTopoFila(); lerListaPlayer() } // a fila anda com a música: o alto troca na hora, a lista quando o Mac responder
-  const img = $('.capa-grande', f); if (img?.dataset.erro && s.capaId) { delete img.dataset.erro; img.src = canal.capaUrl(s.capaId) }
+  if (lp.qual === 'fila' && s.faixa !== lp.faixa) { lp.faixa = s.faixa; pintarTopoFila(); lerListaPlayer() } else if (lp.qual === 'fila') pintarTopoFila(); // mesma faixa: só o artista e a capa, se mudaram // a fila anda com a música: o alto troca na hora, a lista quando o Mac responder
+  sincronizarCapa($('.capa-grande', f), s);
 }
 async function ativarPerfil(id) {
   $('#lista-perfis').hidden = true;
