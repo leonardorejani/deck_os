@@ -81,6 +81,7 @@
     abrirConversa: id => pedir('POST', '/api/whatsapp/abrir', undefined, { id }),
     agenda: (de, dias) => pedir('GET', '/api/agenda', { de: String(de), dias: String(dias) }),
     sessoes: () => pedir('GET', '/api/sessoes'),
+    usoDetalhe: periodo => pedir('GET', '/api/uso/detalhe', { periodo: String(periodo) }),
     abrirSessao: id => pedir('POST', '/api/sessoes/' + encodeURIComponent(id) + '/abrir'),
     entrarNaReuniao: link => pedir('POST', '/api/reuniao/entrar', undefined, { link }),
     controles: () => pedir('GET', '/api/controles'),

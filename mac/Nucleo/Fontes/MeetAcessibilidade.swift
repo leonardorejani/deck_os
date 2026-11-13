@@ -253,7 +253,7 @@ final class AcessibilidadeReal: AcessibilidadeDoNavegador, @unchecked Sendable {
     private var semMeet: [String: Date] = [:]
     static let validadeDoNegativo = 8.0
 
-    private func aplicacao(_ pid: Int32) -> AXUIElement {
+    func aplicacao(_ pid: Int32) -> AXUIElement {
         let app = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(app, 1.0)
         return app
@@ -263,6 +263,8 @@ final class AcessibilidadeReal: AcessibilidadeDoNavegador, @unchecked Sendable {
     /// o pedido que vale é o AXEnhancedUserInterface (o AXManualAccessibility, dos apps Electron, ele recusa com
     /// "atributo não suportado", provado no Chrome em 13/11/2026). Se já está ligado, nada a fazer. O AXManualAccessibility
     /// fica de tentativa para quem o aceita, e o outro entra se ele falhar. Devolve se pediu agora (a página leva um instante).
+    func liberarArvore(_ app: AXUIElement, pid: Int32) -> Bool { liberar(app, pid: pid) }
+
     private func liberar(_ app: AXUIElement, pid: Int32) -> Bool {
         trava.lock(); defer { trava.unlock() }
         if liberados.contains(pid) { return false }
@@ -273,19 +275,19 @@ final class AcessibilidadeReal: AcessibilidadeDoNavegador, @unchecked Sendable {
         return AXUIElementSetAttributeValue(app, "AXEnhancedUserInterface" as CFString, kCFBooleanTrue) == .success
     }
 
-    private func filhos(_ el: AXUIElement) -> [AXUIElement] {
+    func filhos(_ el: AXUIElement) -> [AXUIElement] {
         var v: CFTypeRef?
         guard AXUIElementCopyAttributeValue(el, "AXChildren" as CFString, &v) == .success, let lista = v as? [AnyObject] else { return [] }
         return lista.filter { CFGetTypeID($0) == AXUIElementGetTypeID() }.map { $0 as! AXUIElement }
     }
 
-    private func texto(_ el: AXUIElement, _ atributo: String) -> String? {
+    func texto(_ el: AXUIElement, _ atributo: String) -> String? {
         var v: CFTypeRef?
         guard AXUIElementCopyAttributeValue(el, atributo as CFString, &v) == .success, let s = v as? String, !s.isEmpty else { return nil }
         return s
     }
 
-    private func janelasDe(_ app: AXUIElement) -> [AXUIElement] {
+    func janelasDe(_ app: AXUIElement) -> [AXUIElement] {
         var v: CFTypeRef?
         guard AXUIElementCopyAttributeValue(app, "AXWindows" as CFString, &v) == .success, let lista = v as? [AnyObject] else { return [] }
         return lista.filter { CFGetTypeID($0) == AXUIElementGetTypeID() }.map { $0 as! AXUIElement }

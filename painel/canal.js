@@ -25,6 +25,7 @@
      abrirConversa(id)         -> {ok, aviso?}     "Responder no Mac": abre a conversa no WhatsApp Web do Mac (404 em Mac antigo)
      agenda(de, dias)          -> [Evento]
      sessoes()                 -> [Sessao]
+     usoDetalhe(periodo)       -> {periodo, atualizadoEm?, calculando?, ate, contas, claudeMac?}  o detalhe do uso das IAs, periodo: dia, semana ou mes (404 em Mac antigo)
      abrirSessao(id)           -> {ok, como, app}  traz o terminal da sessão para a frente no Mac (como: "terminal" ou "pasta")
      entrarNaReuniao(link)     -> {ok: true}       abre no Mac o link de reunião do evento (Meet, Zoom ou Teams)
      agendaDestinos(pedir?)    -> {calendarios, listas, permissaoCalendario, permissaoLembretes, padrao}  onde dá para salvar um compromisso (404 em Mac antigo). pedir=true abre no Mac o pedido de acesso aos Lembretes
@@ -105,9 +106,10 @@ function criarCanalHttps() {
     whatsapp: versao => pedir('GET', '/api/whatsapp' + (versao != null ? '?v=' + encodeURIComponent(versao) : ''), undefined, TEMPO_WHATSAPP),
     whatsappFoto: arquivo => pedir('GET', '/api/whatsapp/foto/' + encodeURIComponent(arquivo)),
     whatsappMidia: (chat, id) => pedir('GET', `/api/whatsapp/midia?chat=${encodeURIComponent(chat)}&id=${encodeURIComponent(id)}`, undefined, 45000), // o Mac baixa da internet antes de responder
-    abrirConversa: id => pedir('POST', '/api/whatsapp/abrir', { id }),
+    abrirConversa: id => pedir('POST', '/api/whatsapp/abrir', { id }, AJUSTES.tempoLimite * 6), // o Mac traz a aba, acha a busca e digita (e, sem aba, espera o navegador e a página abrirem): passa de 5 s
     agenda: (de, dias) => pedir('GET', `/api/agenda?de=${encodeURIComponent(de)}&dias=${encodeURIComponent(dias)}`),
     sessoes: () => pedir('GET', '/api/sessoes'),
+    usoDetalhe: periodo => pedir('GET', '/api/uso/detalhe?periodo=' + encodeURIComponent(periodo)),
     abrirSessao: id => pedir('POST', '/api/sessoes/' + encodeURIComponent(id) + '/abrir'),
     entrarNaReuniao: link => pedir('POST', '/api/reuniao/entrar', { link }),
     controles: () => pedir('GET', '/api/controles'),

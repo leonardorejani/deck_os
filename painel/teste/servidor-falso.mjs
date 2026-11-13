@@ -23,11 +23,16 @@ const padrao = () => ({
   sessoes: 5,                // 0 a 12
   sessaoMuda: false,         // a primeira sessão chega com outra pergunta (ela mudou)
   whatsapp: 'normal',        // normal | vazio | muitas (30 conversas) | erro (a rota falha)
+  whatsappFotos: 0,          // quantas conversas extras com foto de perfil (para medir o pico de pedidos juntos)
+  fotoFalhaPrimeira: false,  // o 1o pedido de cada foto de perfil dá erro 500 (rede ruim)
+  abrirAtraso: 0,            // espera, em ms, antes de responder o Responder no Mac (abre a conversa pela busca da página)
+  fotoAtraso: 0,             // espera, em ms, antes de responder cada foto de perfil
   whatsappRico: false,       // lista do aparelho conectado com foto, áudio, visualização única, arquivada e conversa sem nome (precisa de whatsappOrigem 'qr')
   whatsappVersao: null,      // número: o Mac por QR dá versão à lista (?v=<versão> igual responde só {igual}). null: Mac sem versão, a lista vai sempre inteira
   whatsappExtra: false,      // chega uma conversa nova na lista (mede a velocidade com que a folha aberta a mostra)
   whatsappOrigem: 'app',     // app | web (só o total, pelo título da aba) | web-fechado (sem aba aberta) | qr (aparelho conectado, com lista) | qr-caido | qr-reconectando (subindo ou queda curta, sem lista) | qr-reconectando-lista (queda curta com a lista de antes)
   uso: 'normal',             // normal | sem-medicao
+  usoDetalhe: 'normal',      // normal | calculando (a primeira varredura ainda roda) | vazio (sem contas) | erro (500) | antigo (Mac sem a rota: 404) | xss (nomes com HTML)
   relogioMs: 0,              // adianta o relógio do Mac (o "há X min" das sessões anda)
   atrasoListas: 0,           // ms de espera nas listas de WhatsApp e Agenda
   textoLongo: false,         // URL e caminho de arquivo sem espaço nas mensagens e nas perguntas
@@ -80,14 +85,14 @@ const padrao = () => ({
 });
 let c = padrao();
 let T0 = Date.now(); // as sessões esperam desde um instante fixo (o Mac real manda sempre o mesmo `desde` até a sessão mudar)
-let cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, whatsapp: 0, whatsappV: [], whatsappIguais: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], criados: [], destinosPedidos: 0, controles: [], whatsappAbertas: [], midias: [], fotos: [], meetAcoes: [], meetLeituras: 0 };
+let cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, whatsapp: 0, whatsappV: [], whatsappIguais: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], criados: [], destinosPedidos: 0, controles: [], whatsappAbertas: [], midias: [], fotos: [], meetAcoes: [], meetLeituras: 0, usoDetalhe: [] };
 let posicaoBase = { s: 132, desde: Date.now() };
 let perfilAtivo = 'trabalho';
 let criadosAgenda = [], padraoAgenda = null, lembretesAcesso = null, liberarEm = 0; // o que o iPhone criou na agenda, o destino padrão e o acesso aos Lembretes
 let codigoAtual = CODIGO, codigoAnterior = null; // rodízio: o atual, e o anterior que ainda vale (a folga de 10 min)
 let parearGasto = false, parearErros = 0; // o código de 6 dígitos serve uma vez e aguenta 5 erros
 let gravada = null; // o que o iPhone gravou: perfis e blocos, como o Mac guardaria no config.json
-const zerar = () => { parearGasto = false; parearErros = 0; codigoAtual = CODIGO; codigoAnterior = null; T0 = Date.now(); gravada = null; c = padrao(); cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, whatsapp: 0, whatsappV: [], whatsappIguais: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], criados: [], destinosPedidos: 0, controles: [], whatsappAbertas: [], midias: [], fotos: [], meetAcoes: [], meetLeituras: 0 }; posicaoBase = { s: 132, desde: Date.now() }; perfilAtivo = 'trabalho'; criadosAgenda = []; padraoAgenda = null; lembretesAcesso = null };
+const zerar = () => { parearGasto = false; parearErros = 0; codigoAtual = CODIGO; codigoAnterior = null; T0 = Date.now(); gravada = null; c = padrao(); cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, whatsapp: 0, whatsappV: [], whatsappIguais: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], criados: [], destinosPedidos: 0, controles: [], whatsappAbertas: [], midias: [], fotos: [], meetAcoes: [], meetLeituras: 0, usoDetalhe: [] }; posicaoBase = { s: 132, desde: Date.now() }; perfilAtivo = 'trabalho'; criadosAgenda = []; padraoAgenda = null; lembretesAcesso = null };
 
 // com xss ligado, todo texto que a página mostra chega como HTML que tenta executar código
 const X = t => c.xss ? `"><img src=x onerror="window.__xss=(window.__xss||0)+1">${t}` : t;
@@ -118,6 +123,28 @@ const contas = () => [
 const configCompleta = () => ({ versao: 1, perfis: perfisConfig(), perfilAtivo: perfilAtivo === 'ensaio' && c.perfis === 'dois' ? 'ensaio' : 'trabalho', comp: c.comp, contas: contas(), blocos: c.blocos, monitor: c.monitorItens, nomeMac: X(c.nomeMac), porta: 4777 });
 
 const emDias = (dias, h, m = 0) => { const d = new Date(); d.setDate(d.getDate() + dias); d.setHours(h, m, 0, 0); return d.toISOString() };
+/* O detalhe do uso das IAs (GET /api/uso/detalhe). Números inventados, no formato do Mac. O mês inteiro de tokens só para dar volume ao gráfico */
+function detalheUso(periodo) {
+  const n = { dia: 24, semana: 7, mes: 30 }[periodo] || 7, k = { dia: 1, semana: 7, mes: 30 }[periodo] || 7;
+  const serie = Array.from({ length: n }, (_, i) => periodo === 'dia' && i > new Date().getHours() ? 0 : Math.round((i % 5 + 1) * 1.8e6 * (periodo === 'dia' ? 1 : 3)));
+  const soma = serie.reduce((a, b) => a + b, 0);
+  const gasto = (rot, mult) => ({ entrada: Math.round(soma * .02 * mult), saida: Math.round(soma * .03 * mult), cacheLeitura: Math.round(soma * .85 * mult), cacheEscrita: Math.round(soma * .1 * mult), total: Math.round(soma * mult), turnos: 40 * k, sessoes: 3 * k > 9 ? 9 : 3 * k,
+    custo: Math.round(soma * mult / 1e6 * 2.1 * 100) / 100, custoParcial: true, serie: serie.map(v => Math.round(v * mult)),
+    modelos: [{ nome: 'Opus 5.5', tokens: Math.round(soma * mult * .6), custo: Math.round(soma * mult / 1e6 * 1.5 * 100) / 100, parte: 60 }, { nome: 'Sonnet 5.5', tokens: Math.round(soma * mult * .3), custo: Math.round(soma * mult / 1e6 * .6 * 100) / 100, parte: 30 }, { nome: 'modelo-a', tokens: Math.round(soma * mult * .1), parte: 10 }] });
+  if (c.usoDetalhe === 'vazio') return { periodo, ate: ateHoje(), contas: [] };
+  const semMed = c.uso === 'sem-medicao', ritmo = { esperado: 50, projecao: 140, situacao: 'rapido' };
+  const nome = t => c.usoDetalhe === 'xss' ? '<img src=x onerror=window.__xss=1>' : t;
+  return { periodo, atualizadoEm: new Date(Date.now() - 90000).toISOString(), ...(c.usoDetalhe === 'calculando' ? { calculando: true } : {}), ate: ateHoje(),
+    contas: [
+      { id: 'claude-leo', nome: 'Claude', conta: nome('leo'), janelas: semMed ? [] : [{ rotulo: 'Semana', percentual: 61, renova: emDias(3, 14), medidoEm: new Date(Date.now() - 180000).toISOString(), ritmo: { esperado: 55, projecao: 111, situacao: 'rapido' } }] },
+      { id: 'claude-equipe', nome: 'Claude', conta: 'equipe', janelas: semMed ? [] : [{ rotulo: 'Semana', percentual: 94, renova: emDias(1, 9), ritmo }] },
+      { id: 'codex', nome: 'Codex', conta: 'pro', janelas: semMed ? [] : [{ rotulo: '5 horas', percentual: 20, renova: emDias(0, 23), medidoEm: new Date(Date.now() - 600000).toISOString(), ritmo: { esperado: 30, projecao: 66 } }, { rotulo: 'Semana', percentual: 4, renova: emDias(0, 23), ritmo: { esperado: 90, projecao: 5, situacao: 'sobra' } }],
+        gasto: c.usoDetalhe === 'calculando' ? { ...gasto('c', 0), modelos: [] } : { ...gasto('c', .4), modelos: [{ nome: 'GPT-5.5-codex', tokens: Math.round(soma * .4), custo: 3.2, parte: 100 }] } },
+    ],
+    claudeMac: gasto('mac', c.usoDetalhe === 'calculando' ? 0 : 1) };
+}
+const ateHoje = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` };
+
 const SESSOES = () => [...SESSOES_BASE(), ...Array.from({ length: 7 }, (_, i) => ({ id: 's' + (6 + i), nome: 'sessão extra ' + (i + 1), projeto: 'projeto_' + (i + 1), pergunta: 'Pergunta longa da sessão extra ' + (i + 1) + ', com bastante texto para passar de duas linhas na lista e mostrar inteira só quando a pessoa tocar em Responder, sem cortar nada. '.repeat(4), desde: new Date(T0 - (5 + i) * 86400000).toISOString() }))];
 const SESSOES_BASE = () => [
   { id: 's1', nome: X('convite novos usuarios'), projeto: X('app_web'), pergunta: c.perguntaGigante ? Array.from({ length: 40 }, (_, i) => `Linha ${i + 1} da pergunta: posso seguir com o plano e abrir o PR agora?`).join('\n') : c.textoLongo ? 'Posso editar /Users/exemplo/projeto/painel/paineis.js agora?' : X(c.sessaoMuda ? 'Agora pode salvar o TXT no DNS?' : 'Salvar o TXT de verificação do domínio no DNS?'), desde: new Date(T0 - 5 * 60000).toISOString() },
@@ -140,6 +167,7 @@ const WHATSAPP_RICO = () => {
     { id: 'g1@g.us', nome: 'Louvor', grupo: true, naoLidas: 1, ultima: ha(30), mensagens: [{ de: 'Carla', texto: 'Ensaio confirmado', hora: ha(30) }] },
     { id: 'sn@lid', nome: '', grupo: false, naoLidas: 1, ultima: ha(40), mensagens: [M('Alguém sem nome salvo', 40)] },
     { id: 'arq@s.whatsapp.net', nome: 'Bia Arquivada', grupo: false, naoLidas: 4, ultima: ha(50), arquivada: true, mensagens: [M('Mensagem de conversa arquivada', 50)] },
+    ...Array.from({ length: c.whatsappFotos }, (_, i) => ({ id: 'f' + i + '@s.whatsapp.net', nome: 'Foto ' + (i + 1), grupo: false, naoLidas: 1, ultima: ha(60 + i), foto: i.toString(16).padStart(16, 'a') + '.jpg', mensagens: [M('Oi ' + i, 60 + i)] })),
     ...(c.whatsappExtra ? [{ id: 'novo@s.whatsapp.net', nome: 'Chegou Agora', grupo: false, naoLidas: 1, ultima: ha(0), mensagens: [M('Acabou de chegar', 0)] }] : []),
   ];
 };
@@ -454,15 +482,29 @@ async function api(req, res, url) {
     return json(res, 404, { erro: 'Essa rota não existe.' });
   }
   if (rota === '/api/capa') { cont.capas++; res.writeHead(200, { 'Content-Type': 'image/png' }); return res.end(fs.readFileSync(path.join(RAIZ, 'icones/deck.png'))) }
+  if (rota === '/api/uso/detalhe') {
+    const periodo = url.searchParams.get('periodo'); cont.usoDetalhe.push(periodo);
+    if (c.usoDetalhe === 'antigo') return json(res, 404, { erro: 'Essa rota não existe.' });
+    if (c.usoDetalhe === 'erro') return json(res, 500, { erro: 'O Mac não conseguiu ler o uso.' });
+    return json(res, 200, detalheUso(['dia', 'semana', 'mes'].includes(periodo) ? periodo : 'semana'));
+  }
   if (rota === '/api/sessoes') { cont.sessoes++; return json(res, 200, SESSOES().slice(0, c.sessoes)) }
   if ((rota === '/api/whatsapp' || rota === '/api/agenda') && c.atrasoListas) await new Promise(r => setTimeout(r, c.atrasoListas));
-  if (c.whatsappRico && rota.startsWith('/api/whatsapp/foto/') && m === 'GET') { cont.fotos.push(rota.split('/').pop()); return json(res, 200, { tipo: 'image/png', dados: PNG_B64 }) }
+  if (c.whatsappRico && rota.startsWith('/api/whatsapp/foto/') && m === 'GET') {
+    const arq = rota.split('/').pop(); cont.fotos.push(arq);
+    cont.fotoAgora = (cont.fotoAgora || 0) + 1; cont.fotoPico = Math.max(cont.fotoPico || 0, cont.fotoAgora);
+    if (c.fotoAtraso) await new Promise(r => setTimeout(r, c.fotoAtraso));
+    cont.fotoAgora--;
+    if (c.fotoFalhaPrimeira && cont.fotos.filter(x => x === arq).length === 1) return json(res, 500, { erro: 'O Mac não conseguiu.' });
+    return json(res, 200, { tipo: 'image/png', dados: PNG_B64 });
+  }
   if (c.whatsappRico && rota === '/api/whatsapp/midia' && m === 'GET') {
     const id = url.searchParams.get('id'); cont.midias.push(id);
     return json(res, 200, id === 'A1' ? { tipo: 'audio/wav', dados: WAV_B64 } : { tipo: 'image/png', dados: PNG_B64 });
   }
   if (c.whatsappRico && rota === '/api/whatsapp/abrir' && m === 'POST') {
     const id = String((await lerCorpo(req)).id || ''); cont.whatsappAbertas.push(id);
+    if (c.abrirAtraso) await new Promise(r => setTimeout(r, c.abrirAtraso));
     return json(res, 200, id.endsWith('@g.us') ? { ok: true, aviso: 'Abri o WhatsApp Web. Grupo não tem link direto: procure o grupo na lista.' } : { ok: true });
   }
   if (rota === '/api/whatsapp') {

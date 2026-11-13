@@ -154,25 +154,70 @@ async function baixarMidiaWa(chat, id) {
   try { return guardarBlob(chave, blobDoMac(await canal.whatsappMidia(chat, id))) } finally { baixando.delete(chave) }
 }
 let lendoFotos = 0;
-/* depois de pintar: as fotos de perfil que faltam e as fotos da conversa aberta (uma por vez, para não entupir o cabo nem o Bluetooth) */
-async function carregarMidiasWa() {
-  for (const el of $$('#wa-lista [data-foto]')) {
-    const arq = el.dataset.foto; if (waBlobs.has('foto:' + arq) || baixando.has('foto:' + arq)) continue;
-    baixando.add('foto:' + arq);
-    canal.whatsappFoto(arq).then(r => guardarBlob('foto:' + arq, blobDoMac(r)), () => guardarBlob('foto:' + arq, null))
-      .then(url => { if (url) $$('#wa-lista [data-foto]').forEach(a => { if (a.dataset.foto === arq) { a.innerHTML = `<img alt="" src="${esc(url)}">`; a.removeAttribute('data-foto') } }) })
-      .finally(() => baixando.delete('foto:' + arq));
-  }
-  if (lendoFotos) return; lendoFotos = 1;
+/* Fotos de perfil. Antes todas saíam ao mesmo tempo (as do fim da lista estouravam o prazo do cabo e do Bluetooth) e qualquer
+   falha ficava guardada como "sem foto" até recarregar a página. Agora: no máximo 3 pedidos juntos, a da primeira conversa
+   na frente, só o 404 do Mac vale como "sem foto" (fica a inicial) e falha de rede tenta de novo em 3 s, 10 s e 30 s.
+   As miniaturas (poucos KB) também ficam no aparelho por 24 h, então a lista já abre com elas. */
+const FOTOS_JUNTAS = 3, ESPERAS_FOTO = [3000, 10000, 30000], VALE_FOTO = 24 * 3600 * 1000, MAX_FOTOS_GUARDADAS = 80;
+const fotosFila = [], fotoFalhas = new Map();
+let fotosAndando = 0;
+function fotoGuardada(arq) {
   try {
-    for (const el of $$('#wa-lista [data-foto-msg]')) {
-      const [chat, id] = el.dataset.fotoMsg.split('|'); if (!el.querySelector('.foto-espera')) continue;
+    const m = JSON.parse(localStorage.getItem('deck-wa-foto:' + arq) || 'null');
+    return m && Date.now() - m.t < VALE_FOTO && typeof m.u === 'string' && m.u.startsWith('data:image/') ? m.u : null;
+  } catch { return null }
+}
+function guardarFotoNoAparelho(arq, tipo, dados) {
+  try {
+    const chaves = [];
+    for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.startsWith('deck-wa-foto:')) chaves.push(k) }
+    if (chaves.length >= MAX_FOTOS_GUARDADAS) localStorage.removeItem(chaves[0]);
+    localStorage.setItem('deck-wa-foto:' + arq, JSON.stringify({ t: Date.now(), u: `data:${tipo};base64,${dados}` }));
+  } catch {}
+}
+function pintarFoto(arq, url) {
+  $$('#wa-lista [data-foto]').forEach(a => { if (a.dataset.foto === arq) { a.innerHTML = `<img alt="" src="${esc(url)}">`; a.removeAttribute('data-foto') } });
+}
+function andarFotos() {
+  while (fotosAndando < FOTOS_JUNTAS && fotosFila.length) {
+    const arq = fotosFila.shift(); fotosAndando++;
+    let tentarDeNovo = false;
+    canal.whatsappFoto(arq).then(r => {
+      guardarBlob('foto:' + arq, blobDoMac(r)); fotoFalhas.delete(arq); guardarFotoNoAparelho(arq, r.tipo, r.dados); pintarFoto(arq, waBlobs.get('foto:' + arq));
+    }, e => {
+      if (e?.status === 404) { guardarBlob('foto:' + arq, null); return } // o Mac não tem foto dela: fica a inicial
+      const n = fotoFalhas.get(arq) || 0; fotoFalhas.set(arq, n + 1);
+      if (n < ESPERAS_FOTO.length) { tentarDeNovo = true; setTimeout(() => { baixando.delete('foto:' + arq); carregarMidiasWa() }, ESPERAS_FOTO[n]) }
+      else guardarBlob('foto:' + arq, null);
+    }).finally(() => { fotosAndando--; if (!tentarDeNovo) baixando.delete('foto:' + arq); andarFotos() });
+  }
+}
+/* fotos da conversa aberta: 3 por vez (o Mac baixa cada uma da internet antes de responder) */
+async function lerFotosDasMensagens() {
+  const alvos = $$('#wa-lista [data-foto-msg]').filter(el => el.querySelector('.foto-espera'));
+  let i = 0;
+  const trabalhador = async () => {
+    while (i < alvos.length) {
+      const el = alvos[i++], [chat, id] = el.dataset.fotoMsg.split('|');
       try {
         const url = await baixarMidiaWa(chat, id); if (!url) continue;
         $$('#wa-lista [data-foto-msg]').forEach(a => { if (a.dataset.fotoMsg === el.dataset.fotoMsg) a.innerHTML = `<img alt="Foto" src="${esc(url)}">` });
       } catch (e) { $$('#wa-lista [data-foto-msg]').forEach(a => { if (a.dataset.fotoMsg === el.dataset.fotoMsg) a.innerHTML = `<span class="foto-espera">${esc(e.message || 'Não deu para abrir a foto.')}</span>` }) }
     }
-  } finally { lendoFotos = 0 }
+  };
+  await Promise.all(Array.from({ length: Math.min(FOTOS_JUNTAS, alvos.length) }, trabalhador));
+}
+/* depois de pintar: as fotos de perfil que faltam e as fotos da conversa aberta */
+async function carregarMidiasWa() {
+  for (const el of $$('#wa-lista [data-foto]')) {
+    const arq = el.dataset.foto; if (waBlobs.has('foto:' + arq) || baixando.has('foto:' + arq)) continue;
+    const guardada = fotoGuardada(arq);
+    if (guardada) { guardarBlob('foto:' + arq, guardada); pintarFoto(arq, guardada); continue }
+    baixando.add('foto:' + arq); fotosFila.push(arq);
+  }
+  andarFotos();
+  if (lendoFotos) return; lendoFotos = 1;
+  try { await lerFotosDasMensagens() } finally { lendoFotos = 0 }
 }
 async function ouvirAudioWa(botao) {
   const [chat, id] = botao.dataset.ouvir.split('|'); if (botao.disabled) return;
