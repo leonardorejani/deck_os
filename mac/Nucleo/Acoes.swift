@@ -20,6 +20,8 @@ struct ExecutorAcoes: Sendable {
     let shellDoUsuario: @Sendable () -> String
     /// O que o Deck guardou das teclas liga e desliga sem comando de conferir.
     let memoria: MemoriaLigaDesliga
+    /// A árvore de acessibilidade dos navegadores (o Meet). Nil: só o executor de verdade, no Mac, consulta o sistema.
+    let ax: (any AcessibilidadeDoNavegador)?
 
     init(shell: Executor,
          temAcessibilidade: @escaping @Sendable () -> Bool = { AcoesSistema.temAcessibilidade() },
@@ -27,7 +29,9 @@ struct ExecutorAcoes: Sendable {
          limiteSegundos: Int = ExecutorAcoes.limitePadrao,
          whatsappWeb: (@Sendable () -> AberturaWhatsApp)? = nil,
          shellDoUsuario: @escaping @Sendable () -> String = { Shell.doUsuario() },
-         memoria: MemoriaLigaDesliga = .compartilhada) {
+         memoria: MemoriaLigaDesliga = .compartilhada,
+         ax: (any AcessibilidadeDoNavegador)? = nil) {
+        self.ax = ax ?? AcessibilidadePadrao.para(shell)
         self.memoria = memoria
         self.shellDoUsuario = shellDoUsuario
         self.limiteSegundos = limiteSegundos
