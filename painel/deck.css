@@ -483,6 +483,10 @@ button.cartao { font: inherit; color: inherit; text-align: left; border: 0; curs
 .modo svg { width: 18px; height: 18px }
 .modo:active { transform: scale(.94) }
 .modo[aria-pressed="true"] { background: var(--sucesso-suave); color: var(--sucesso) }
+/* repetir, como no Spotify: ligado fica verde com um pontinho embaixo (sem fundo), desligado fica cinza sem ponto */
+.modo[data-midia="repetir"] { position: relative }
+.modo[data-midia="repetir"][aria-pressed="true"] { background: none }
+.modo[data-midia="repetir"][aria-pressed="true"]::after { content: ""; position: absolute; left: 50%; bottom: 2px; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: currentColor }
 
 /* ---------- Sem música: o player sai, as sessões ocupam o lugar ---------- */
 .sem-musica .player { display: none }
@@ -729,6 +733,7 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; text
 .midia.grande .tocar svg { width: 30px; height: 30px }
 .midia.grande .modo { width: var(--alvo); height: var(--alvo); background: none }
 .midia.grande .modo[aria-pressed="true"] { background: var(--sucesso-suave) }
+.midia.grande .modo[data-midia="repetir"][aria-pressed="true"] { background: none }
 .midia.grande .modo svg { width: 22px; height: 22px }
 .vertical .pc { grid-template-columns: minmax(0, 1fr); justify-items: center; align-content: center }
 .vertical .capa-grande { --lado: 350px }
@@ -757,13 +762,14 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; text
 .pc-lista.aberta { translate: 0 0; visibility: visible; transition: translate var(--mov-padrao) var(--curva-entra) } /* desliza da direita para a esquerda, e sai de volta para a direita */
 .pc-lista[hidden] { display: none }
 .pc-lista > header { grid-row: 1 }
-.pc-lista-topo { grid-row: 2; display: flex; align-items: center; gap: var(--icone); padding: var(--item) 0 var(--icone); border-bottom: 1px solid var(--borda) }
+.pc-lista-topo { grid-row: 2; display: grid; gap: var(--item); padding: var(--item) 0 var(--icone); border-bottom: 1px solid var(--borda) }
 .pc-lista-topo[hidden] { display: none }
-.pc-lista-topo .capa-mini { flex: none; width: 72px; height: 72px; border-radius: var(--raio); object-fit: cover; background: var(--superficie-2); box-shadow: var(--sombra-2) }
+.pc-lista-topo .linha-agora { display: flex; align-items: center; gap: var(--icone) }
+.pc-lista-topo .capa-mini { flex: none; width: 56px; height: 56px; border-radius: var(--raio-sm); object-fit: cover; background: var(--superficie-2); box-shadow: var(--sombra-2) }
 .pc-lista-topo .tx { min-width: 0; display: grid }
-.pc-lista-topo b { font-size: var(--texto-md); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.pc-lista-topo b { font-size: var(--texto-md); font-weight: 600; color: var(--sucesso); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
 .pc-lista-topo small { color: var(--texto-2); font-size: var(--texto-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
-.pc-lista-topo .rotulo { color: var(--sucesso); font-size: var(--texto-xs) }
+.pc-lista-topo .rotulo { color: var(--texto); font-size: var(--texto-md); font-weight: 700 }
 .pc-lista > .corpo { grid-row: 3 }
 .pc-lista > header { display: flex; align-items: center; gap: var(--icone); padding: var(--pad) 0 var(--item); min-height: var(--linha) }
 .pc-lista > header h2 { margin: 0; flex: 1; font-size: var(--texto-md) }
@@ -776,6 +782,20 @@ button.item-lista:disabled { opacity: .5; cursor: default }
 .item-lista .tx { flex: 1; min-width: 0; display: grid }
 .item-lista b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
 .item-lista small { color: var(--texto-2); font-size: var(--texto-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.pc-lista .grupo-data h3 { font-size: var(--texto-md); font-weight: 700; color: var(--texto) }
+/* abas da fila: a ativa em branco com um traço verde embaixo */
+.abas { flex: 1; min-width: 0; display: flex; gap: var(--pad) }
+.abas button { position: relative; flex: none; padding: var(--item) 0; border: 0; background: none; color: var(--texto-2); font: inherit; font-weight: 700; cursor: pointer }
+.abas button[aria-selected="true"] { color: var(--texto) }
+.abas button[aria-selected="true"]::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; border-radius: var(--raio-pilula); background: var(--sucesso) }
+/* linha com capa: no toque (pressionada) ou com o mouse em cima, o fundo clareia e o play aparece sobre a capa */
+.item-lista.com-capa { padding: var(--micro-gap) var(--item); margin: 0 calc(-1 * var(--item)); width: calc(100% + 2 * var(--item)); border-top: 0; border-radius: var(--raio) }
+.capa-fila { position: relative; flex: none; width: 48px; height: 48px; display: block }
+.capa-fila .capa-mini { width: 100%; height: 100%; border-radius: var(--raio-sm); object-fit: cover; background: var(--superficie-2); display: block }
+.capa-fila svg { position: absolute; inset: 0; margin: auto; width: 24px; height: 24px; color: #fff; opacity: 0; filter: drop-shadow(0 1px 3px rgba(0, 0, 0, .6)); transition: opacity var(--mov-rapido) var(--curva-move) }
+button.item-lista.com-capa:active, button.item-lista.com-capa:focus-visible { background: var(--superficie-2) }
+button.item-lista.com-capa:active .capa-fila svg, button.item-lista.com-capa:focus-visible .capa-fila svg { opacity: 1 }
+@media (hover: hover) { button.item-lista.com-capa:hover { background: var(--superficie-2) } button.item-lista.com-capa:hover .capa-fila svg { opacity: 1 } }
 .item-lista .tag { flex: none; font-size: var(--texto-xs); color: var(--sucesso); background: var(--sucesso-suave); border-radius: var(--raio-pilula); padding: var(--micro-gap) var(--icone) }
 .volume-aparelho { padding: 0 0 var(--item) }
 .vertical .pc-corpo { padding-top: calc(var(--seguro-cima) + var(--alvo-sm)) }

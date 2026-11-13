@@ -234,6 +234,22 @@ final class RotasTestes: XCTestCase {
         XCTAssertEqual(c.registro.todos, ["transferir d1", "curtir true", "curtir false", "repetirModo faixa", "repetirModo nao"])
     }
 
+    func testPularNaFilaEOsRecentes() throws {
+        let c = try Cenario()
+        XCTAssertEqual(c.pedir("POST", "/api/spotify/pular?n=3&uri=spotify:track:x").status, 200)
+        XCTAssertEqual(c.pedir("POST", "/api/spotify/pular?n=1").status, 200)
+        XCTAssertEqual(c.registro.todos, ["pularFila 3 spotify:track:x", "pularFila 1 -"])
+        XCTAssertEqual(c.pedir("POST", "/api/spotify/pular").status, 400)
+        XCTAssertEqual(c.pedir("POST", "/api/spotify/pular?n=0").status, 400)
+        XCTAssertEqual(c.pedir("POST", "/api/spotify/pular?n=99").status, 400)
+        XCTAssertEqual(c.pedir("GET", "/api/spotify/pular?n=1").status, 405)
+        XCTAssertEqual(c.pedir("GET", "/api/spotify/recentes").status, 200)
+        XCTAssertEqual(c.pedir("POST", "/api/spotify/recentes").status, 405)
+        let sem = try Cenario(spotifyConectado: false)
+        XCTAssertEqual(sem.pedir("POST", "/api/spotify/pular?n=1").status, 409)
+        XCTAssertEqual(sem.pedir("GET", "/api/spotify/recentes").status, 409)
+    }
+
     func testSpotifyRotasNovasRecusamPedidoMalFeito() throws {
         let c = try Cenario()
         XCTAssertEqual(c.pedir("POST", "/api/spotify/dispositivo").status, 400)

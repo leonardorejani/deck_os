@@ -281,7 +281,7 @@ a API do Spotify soma o resto.
 | `GET /api/spotify/dispositivos` | lista os aparelhos do Spotify Connect (id, nome, tipo, ativo, volume, restrito) | 409 |
 | `POST /api/spotify/dispositivo?id=<id>` | passa a reprodução para o aparelho, sem mudar se estava tocando ou pausado | 409 |
 | `POST /api/spotify/curtir?v=1\|0` | curte ou tira a curtida da faixa que toca (o Mac pergunta ao Spotify qual é, na hora do toque) | 409 |
-| `GET /api/spotify/fila` | a faixa atual e as próximas 20 | 409 |
+| `GET /api/spotify/fila` | a faixa atual, as próximas 20 (com uri e capa) e o nome da lista | 409 |
 | `POST /api/spotify/repetir?modo=faixa\|nao\|contexto` | repete só a música, nada ou a lista, pela API. Sem `modo`, `repetir[?v=1\|0]` é o do AppleScript e funciona sem login | 409 |
 
 O `GET /api/estado` ganha em `spotify`: `volume` e `volumeMac` (0 a 100, ausentes se o Spotify ou a saída de som não
@@ -1432,3 +1432,5 @@ tecla escolhida, setas andam na grade, ⌘F foca a busca de apps.
 **14.19 Volume do Mac no player.** Arrastar na vertical sobre o player (ou uma faixa fina ao lado)
 muda o volume do Mac, com o número aparecendo enquanto arrasta. Útil no palco, sem tirar a mão do
 iPhone.
+
+Fila do Spotify no molde do original e capa nítida (13/11/2026, frente spotify-fila). Palavras dele: "o ícone de repetir a música deve ter um número 1 assim como o original", "quero a fila das próximas músicas mais parecida com isso (faixa em destaque é hover do mouse). deve ser clicável pra pular as músicas", "parece que a capa está com qualidade baixa quando abro o spotify". Repetir ligado vira ícone verde sem fundo com um pontinho embaixo, desligado fica cinza sem pontinho, e repetir só a música leva o 1 dentro do ícone. A fila ganha as abas Fila e Tocado recentemente, "Tocando agora" com o nome em verde e "Próximas de: <lista ou álbum>" (sem o nome, só "Próximas"), cada linha com capa quadrada pequena, nome e artista. A linha pressionada (ou com o mouse em cima) clareia e mostra um play sobre a capa, e tocar nela pula até a música: `POST /api/spotify/pular?n=<vez>&uri=<uri>` dá `next` n vezes pela API do Spotify depois de conferir na fila de agora onde a música está (se a fila mudou, não pula nada). `GET /api/spotify/recentes` traz o histórico e pede a permissão `user-read-recently-played`, que logins antigos não têm: quem já estava conectado desconecta e conecta de novo para a aba funcionar. A capa vinha em 300 px do AppleScript, e o Mac agora pede a de 640 px (a `images[0]` da API) e fica com a de 300 se ela não existir. As miniaturas da fila usam a menor imagem com pelo menos 128 px (a de 64 px ficaria borrada).

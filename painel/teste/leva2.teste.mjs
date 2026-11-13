@@ -278,6 +278,45 @@ export default async function (h) {
   h.ok((await texto(p, '#pc-lista-corpo')).includes('A fila está vazia'), 'fila sem próximas: "A fila está vazia"');
   await p.context().close();
 
+  /* fila no molde do Spotify: abas, "Próximas de", capa pequena, tocar para pular, repetir com o 1 */
+  p = await abrirPlayer({ spotifyExtras: 'login', filaContexto: 'Daily Mix 3' });
+  await p.click('#f-player [data-fila]'); await h.dormir(600);
+  const mf = await p.evaluate(() => ({ abas: [...document.querySelectorAll('#pc-lista-abas [data-aba]')].map(b => b.textContent + '=' + b.getAttribute('aria-selected')).join(), abasVisiveis: !document.querySelector('#pc-lista-abas').hidden, grupo: document.querySelector('#pc-lista-corpo h3')?.textContent, imgs: document.querySelectorAll('#pc-lista-corpo .item-lista img.capa-mini[src]').length, lado: Math.round(document.querySelector('#pc-lista-corpo .capa-fila img').getBoundingClientRect().width), cor: getComputedStyle(document.querySelector('#pc-lista-topo b')).color, verde: getComputedStyle(document.documentElement).getPropertyValue('--sucesso').trim(), btn: document.querySelectorAll('#pc-lista-corpo button.item-lista[data-pular]').length }));
+  h.ok(mf.abasVisiveis && mf.abas === 'Fila=true,Tocado recentemente=false' && mf.grupo === 'Próximas de: Daily Mix 3', `fila: abas Fila e Tocado recentemente, e o grupo diz de onde vêm as próximas (${mf.abas} | ${mf.grupo})`);
+  h.ok(mf.imgs === 9 && mf.lado === 48 && mf.btn === 9, `fila: cada linha é um botão com capa quadrada de 48 px (${mf.imgs} capas, ${mf.lado} px, ${mf.btn} botões)`);
+  const fundoRepouso = await p.evaluate(() => getComputedStyle(document.querySelector('#pc-lista-corpo [data-pular="3"]')).backgroundColor);
+  await p.hover('#pc-lista-corpo [data-pular="1"]'); await h.dormir(400); // espera a transição do play
+  const em = await p.evaluate(() => { const b = document.querySelector('#pc-lista-corpo [data-pular="1"]'); return { fundo: getComputedStyle(b).backgroundColor, play: getComputedStyle(b.querySelector('.capa-fila svg')).opacity } });
+  h.ok(em.fundo !== fundoRepouso && em.play === '1', `fila: a linha em destaque tem fundo mais claro e o play sobre a capa (${em.fundo} contra ${fundoRepouso}, play ${em.play})`);
+  await h.foto(p, 'player-fila-spotify');
+  await p.click('#pc-lista-corpo [data-pular="2"]'); await h.dormir(900);
+  c = await spot();
+  h.ok(c.at(-1) === 'pular:3:spotify:track:p3', `tocar a 3ª da fila manda pular até ela, com a música (${c.at(-1)})`);
+  const depois = await p.evaluate(() => ({ topo: document.querySelector('#pc-lista-topo b').textContent, primeira: document.querySelector('#pc-lista-corpo .item-lista b')?.textContent, n: document.querySelectorAll('#pc-lista-corpo [data-pular]').length }));
+  h.ok(depois.topo === 'Próxima música 3' && depois.primeira === 'Próxima música 4' && depois.n === 6, `e a fila anda: toca agora a 3ª, e as de antes saem (${depois.topo}, ${depois.primeira}, ${depois.n} na fila)`);
+  await p.click('#pc-lista-abas [data-aba="recentes"]'); await h.dormir(600);
+  const rc = await p.evaluate(() => ({ abas: [...document.querySelectorAll('#pc-lista-abas [data-aba]')].map(b => b.getAttribute('aria-selected')).join(), topo: document.querySelector('#pc-lista-topo').hidden, itens: [...document.querySelectorAll('#pc-lista-corpo .item-lista b')].map(x => x.textContent).join('|'), pular: document.querySelectorAll('#pc-lista-corpo [data-pular]').length }));
+  h.ok(rc.abas === 'false,true' && rc.topo && rc.itens === 'Tocada antes 1|Tocada antes 2' && rc.pular === 0, `aba Tocado recentemente: lista o histórico, sem o "Tocando agora" (${rc.itens})`);
+  await p.click('#pc-lista-abas [data-aba="fila"]'); await h.dormir(600);
+  h.ok(await p.evaluate(() => !document.querySelector('#pc-lista-topo').hidden && document.querySelectorAll('#pc-lista-corpo [data-pular]').length === 6), 'voltar para a aba Fila traz o alto e a lista de novo');
+  await p.context().close();
+  p = await abrirPlayer({ spotifyExtras: 'login', filaRecusa: 'A fila mudou. Abra a fila de novo.' });
+  await p.click('#f-player [data-fila]'); await h.dormir(600); await p.click('#pc-lista-corpo [data-pular="1"]'); await h.dormir(700);
+  h.ok(await p.evaluate(() => document.querySelectorAll('#pc-lista-corpo [data-pular]').length) === 9 && (await aviso(p)).txt.includes('A fila mudou'), 'pular recusado pelo Mac: a lista volta inteira e o aviso diz o motivo');
+  await p.context().close();
+
+  p = await abrirPlayer({ spotifyExtras: 'login' });
+  const icone = () => p.evaluate(() => { const b = document.querySelector('#f-player [data-midia="repetir"]'); return { um: !!b.querySelector('path[d$="M11 10h1v4"]'), umPequeno: !!document.querySelector('.player [data-midia="repetir"] path[d$="M11 10h1v4"]'), cor: getComputedStyle(b).color, ponto: getComputedStyle(b, '::after').content, fundo: getComputedStyle(b).backgroundColor, verde: getComputedStyle(document.documentElement).getPropertyValue('--sucesso').trim() }; });
+  let ic = await icone();
+  h.ok(!ic.um && ic.ponto === 'none', 'repetir desligado: ícone sem número e sem pontinho');
+  await p.click('#f-player [data-midia="repetir"]'); await h.dormir(500); ic = await icone();
+  h.ok(!ic.um && ic.ponto !== 'none' && ic.fundo === 'rgba(0, 0, 0, 0)', 'repetir a lista: ícone sem número, verde, com pontinho embaixo e sem fundo');
+  await p.click('#f-player [data-midia="repetir"]'); await h.dormir(500); ic = await icone();
+  h.ok(ic.um && ic.umPequeno && ic.ponto !== 'none', 'repetir só a música: o ícone leva o número 1 (nos dois players) e o pontinho');
+  await p.click('#f-player [data-midia="repetir"]'); await h.dormir(500); ic = await icone();
+  h.ok(!ic.um && !ic.umPequeno && ic.ponto === 'none', 'desligar volta ao ícone sem número e sem pontinho');
+  await p.context().close();
+
   /* texto com HTML vindo do Spotify não executa */
   await h.reset(); await h.cenario({ spotifyExtras: 'login', xss: true });
   p = await h.pagina(); await pronta(h, p); await h.dormir(400); await p.click('.player .capa'); await h.dormir(800);

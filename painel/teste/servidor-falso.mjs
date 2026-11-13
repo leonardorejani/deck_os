@@ -60,6 +60,8 @@ const padrao = () => ({
   spotifyExtras: 'nao',      // nao (Mac antigo: sem volume nem login) | volume (só o do Spotify) | dois (Spotify e Mac) | login (conectado: curtir, aparelhos, fila e repetir só a música)
   volume: 60, volumeMac: 40, curtida: false, repetirFaixa: false, aparelhoAtivo: 'd-mac', volumeAparelho: 35,
   filaVazia: false,          // GET /api/spotify/fila devolve a fila sem próximas
+  filaContexto: '',          // nome da lista que toca ("Próximas de: ..."). Vazio: o Mac não soube dizer
+  filaRecusa: '',            // POST /api/spotify/pular falha (422) com esse motivo
   aparelhosErro: '',         // GET /api/spotify/dispositivos falha (500) com esse motivo
   apps: 'antigo',            // antigo (Mac sem as rotas de apps: 404, o editor usa a lista curta) | normal | erro (a lista falha com 500) | muitos (140 apps)
   acoesAtraso: 0,            // ms de espera antes de o Mac responder o que um app oferece (ler as contas do Mail demora)
@@ -206,7 +208,9 @@ const aparelhos = () => [
   { id: 'd-tv', nome: 'TV do quarto', tipo: 'tv', ativo: false, volume: null, restrito: true },
   { id: 'd-cel', nome: 'Celular', tipo: 'smartphone', ativo: c.aparelhoAtivo === 'd-cel', volume: null, restrito: false },
 ];
-const FILA = () => ({ atual: { faixa: X('Faixa de Exemplo'), artista: X('Artista Exemplo') }, proximas: c.filaVazia ? [] : Array.from({ length: 9 }, (_, i) => ({ faixa: X('Próxima música ' + (i + 1)), artista: i % 3 === 0 ? 'Artista Exemplo, Convidado' : 'Banda ' + (i + 1) })) });
+const CAPA_FILA = i => `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48"><rect width="48" height="48" fill="hsl(${i * 40} 50% 40%)"/></svg>`)}`;
+const proximasDaFila = () => c.filaVazia ? [] : Array.from({ length: 9 }, (_, i) => ({ faixa: X('Próxima música ' + (i + 1)), artista: i % 3 === 0 ? 'Artista Exemplo, Convidado' : 'Banda ' + (i + 1), uri: 'spotify:track:p' + (i + 1), capa: CAPA_FILA(i + 1) })).slice(c.filaPulou || 0);
+const FILA = () => ({ atual: { faixa: X('Faixa de Exemplo'), artista: X('Artista Exemplo') }, proximas: proximasDaFila(), ...(c.filaContexto ? { contexto: X(c.filaContexto) } : {}) });
 // os apps do Mac de quem usa (GET /api/apps) e o que cada um oferece (GET /api/apps/<id>/acoes), como o Apps.swift e o AcoesDeApp.swift
 const APPS_MAC = () => [
   ...[['Calculadora', 'Calculator', 'com.apple.calculator'], ['Calendário', 'Calendar', 'com.apple.iCal'], ['Finder', 'Finder', 'com.apple.finder'], ['Mail', 'Mail', 'com.apple.mail'], ['Notas', 'Notes', 'com.apple.Notes'], ['Terminal', 'Terminal', 'com.apple.Terminal'], ['WhatsApp', 'WhatsApp', 'net.whatsapp.WhatsApp'], ['Spotify', 'Spotify', 'com.spotify.client']]
@@ -347,6 +351,16 @@ async function api(req, res, url) {
     if (semLogin()) return;
     if (c.aparelhosErro) return json(res, 500, { erro: c.aparelhosErro });
     return json(res, 200, aparelhos());
+  }
+  if (rota === '/api/spotify/recentes' && m === 'GET') { if (semLogin()) return; return json(res, 200, { itens: c.filaVazia ? [] : [{ faixa: X('Tocada antes 1'), artista: 'Artista Velho', capa: CAPA_FILA(1) }, { faixa: 'Tocada antes 2', artista: 'Banda Velha' }] }) }
+  if (rota === '/api/spotify/pular' && m === 'POST') {
+    if (semLogin()) return;
+    if (c.filaRecusa) return json(res, 422, { erro: c.filaRecusa });
+    const n = +url.searchParams.get('n'), alvo = proximasDaFila()[n - 1];
+    cont.spotify.push(`pular:${n}:${url.searchParams.get('uri')}`);
+    if (!alvo || alvo.uri !== url.searchParams.get('uri')) return json(res, 422, { erro: 'A fila mudou. Abra a fila de novo.' });
+    c.filaPulou = (c.filaPulou || 0) + n; c.faixa = alvo.faixa;
+    return json(res, 200, { ok: true });
   }
   if (rota === '/api/spotify/fila' && m === 'GET') { cont.filas = (cont.filas || 0) + 1; if (semLogin()) return; return json(res, 200, FILA()) }
   if (rota.startsWith('/api/spotify/') && m === 'POST') {

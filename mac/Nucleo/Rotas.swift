@@ -109,6 +109,9 @@ protocol ControleSpotify: Sendable {
     func transferir(para id: String) -> ErroSpotify?
     func curtir(_ curtir: Bool) -> ErroSpotify?
     func fila() -> Result<FilaSpotify, ErroSpotify>
+    func recentes() -> Result<RecentesSpotify, ErroSpotify>
+    /// Toca a música da fila na vez `posicao` (1 é a próxima), pulando as de antes. `uri` confere que a fila não andou.
+    func pularFila(posicao: Int, uri: String?) -> ErroSpotify?
     /// "faixa" (repetir só a música), "nao" ou "contexto". Pela API, por isso só com login.
     func repetirModo(_ modo: String) -> ErroSpotify?
 }
@@ -119,6 +122,8 @@ extension ControleSpotify {
     func transferir(para id: String) -> ErroSpotify? { .naoConectado }
     func curtir(_ curtir: Bool) -> ErroSpotify? { .naoConectado }
     func fila() -> Result<FilaSpotify, ErroSpotify> { .failure(.naoConectado) }
+    func recentes() -> Result<RecentesSpotify, ErroSpotify> { .failure(.naoConectado) }
+    func pularFila(posicao: Int, uri: String?) -> ErroSpotify? { .naoConectado }
     func repetirModo(_ modo: String) -> ErroSpotify? { .naoConectado }
 }
 
@@ -295,6 +300,7 @@ struct Roteador: Sendable {
         if let acao = sufixo(r.caminho, "/api/spotify/") {
             if acao == "dispositivos" { return somente(["GET"], r) ?? respostaSpotify(spotify.dispositivos()) }
             if acao == "fila" { return somente(["GET"], r) ?? respostaSpotify(spotify.fila()) }
+            if acao == "recentes" { return somente(["GET"], r) ?? respostaSpotify(spotify.recentes()) }
             return somente(["POST"], r) ?? controlarSpotify(acao, r)
         }
         return .erro(404, "Essa rota não existe.")
@@ -520,6 +526,11 @@ struct Roteador: Sendable {
         case "curtir":
             guard let v = r.query["v"], ["0", "1"].contains(v) else { return .erro(400, "Informe curtir?v=1 para curtir ou curtir?v=0 para tirar a curtida.") }
             return respostaSpotify(spotify.curtir(v == "1"))
+        case "pular":
+            guard let n = r.query["n"].flatMap(Int.init), (1...50).contains(n) else {
+                return .erro(400, "Informe a vez da música na fila, por exemplo pular?n=3.")
+            }
+            return respostaSpotify(spotify.pularFila(posicao: n, uri: r.query["uri"]))
         case "repetir", "aleatorio":
             // Com `modo`, é o repetir da API (só a música, pede login). Sem ele, o do AppleScript, que já existia.
             if acao == "repetir", let modo = r.query["modo"] {
