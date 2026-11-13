@@ -487,6 +487,7 @@ arrastoCal().addEventListener('pointermove', e => {
 });
 arrastoCal().addEventListener('pointerup', e => soltarMes(e, false));
 arrastoCal().addEventListener('pointercancel', e => soltarMes(e, true));
+arrastoCal().addEventListener('lostpointercapture', e => soltarMes(e, true)); // o sistema tomou o ponteiro sem avisar: o mês volta, não fica preso no meio
 // o toque que terminou um arrasto não escolhe o dia nem aperta a seta que estava embaixo do dedo
 arrastoCal().addEventListener('click', e => { if (ag.arrastou) { e.stopPropagation(); e.preventDefault() } }, true);
 
@@ -514,6 +515,7 @@ for (const el of [$('#ca-lista'), $('#ca-puxa')]) { // o puxador aceita o mesmo 
   });
   el.addEventListener('pointerup', e => soltarLista(e, false));
   el.addEventListener('pointercancel', e => soltarLista(e, true));
+  el.addEventListener('lostpointercapture', e => soltarLista(e, true)); // idem: a lista nunca fica presa fora do lugar
   el.addEventListener('click', e => { if (ag.arrastou) { e.stopPropagation(); e.preventDefault() } }, true);
 }
 

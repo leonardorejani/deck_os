@@ -517,7 +517,10 @@ button.cartao { font: inherit; color: inherit; text-align: left; border: 0; curs
 .sb-dia.hoje { background: var(--cal-vermelho); color: var(--destaque-bloco-texto) }
 .sb-dia.sel { background: var(--superficie-2) }
 .sb-dia.tem::after { content: ""; position: absolute; bottom: calc(-1 * var(--item)); left: 50%; width: 4px; height: 4px; translate: -50% 0; border-radius: 50%; background: var(--texto-3) }
-.lista-cal { overflow: auto; overscroll-behavior: contain; scrollbar-width: none; border-left: 1px solid var(--borda); padding: var(--secao) var(--seguro-dir) 0 var(--pad); margin-right: calc(-1 * var(--seguro-dir)) }
+/* janela da lista: a lista arrastada para abrir o formulário segue o dedo só dentro da coluna dela, sem passar por cima do mês */
+.lista-janela { display: grid; grid-template-rows: minmax(0, 1fr); min-width: 0; min-height: 0; overflow: hidden; margin-right: calc(-1 * var(--seguro-dir)) }
+.lista-janela:has(> #ca-lista[hidden]) { display: none }
+.lista-cal { overflow: auto; overscroll-behavior: contain; scrollbar-width: none; border-left: 1px solid var(--borda); padding: var(--secao) var(--seguro-dir) 0 var(--pad); min-height: 0 }
 .lista-cal::-webkit-scrollbar { display: none }
 .folha.cheia .grupo-data h3 { background: var(--cal-fundo) }
 /* Novo compromisso: a parte da direita inteira vira o formulário (a lista fica escondida, o mês continua ali) */
@@ -558,7 +561,8 @@ button.cartao { font: inherit; color: inherit; text-align: left; border: 0; curs
 .vertical .novo-comp { grid-column: 1; grid-row: 2; border-left: 0; border-top: 1px solid var(--borda); padding: var(--pad) 0 0; margin: 0 }
 .vertical .nc-corpo { gap: var(--pad) var(--icone) }
 .vertical .cal-corpo { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); padding-top: var(--seguro-cima) }
-.vertical .lista-cal { border-left: 0; border-top: 1px solid var(--borda); padding: 0; margin: 0 }
+.vertical .lista-janela { margin: 0 }
+.vertical .lista-cal { border-left: 0; border-top: 1px solid var(--borda); padding: 0 }
 .vertical .sb-grade { grid-auto-rows: var(--dia-cal) }
 
 /* ---------- Em pé: apps em 2 fileiras, divisória horizontal, "+" numa seção só dele (botão baixo) ---------- */
