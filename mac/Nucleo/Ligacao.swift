@@ -242,7 +242,8 @@ enum Ligacao {
                          certificadoCA: URL? = nil, contaSpotify: ContaSpotify? = nil,
                          apps: (any ProvedorDeApps)? = nil, criadorDeAgenda: (any CriadorDeAgenda)? = nil,
                          usoMedido: (@Sendable ([ContaIA], Date) -> [String: UsoConta])? = nil,
-                         ponteQR: PonteWhatsAppQR? = nil) -> Roteador {
+                         ponteQR: PonteWhatsAppQR? = nil,
+                         registrar: @escaping @Sendable (String) -> Void = { _ in }) -> Roteador {
         // A mesma decisão de origem do WhatsApp serve a leitura (estado) e a abertura (tecla e "Abrir no Mac").
         let origemWhats = OrigemWhatsApp(executor: executor, banco: FonteWhatsApp.caminhoPadrao(casa: NSHomeDirectory()),
                                          config: { armazem.ler().whatsapp })
@@ -257,7 +258,7 @@ enum Ligacao {
         let casa = URL(fileURLWithPath: NSHomeDirectory())
         let gastoDeTokens = GastoTokens(raizClaude: casa.appendingPathComponent(".claude/projects"), raizCodex: casa.appendingPathComponent(".codex/sessions"),
                                         pastaDeCache: Variante.atual.pastaDeDados())
-        let abridor = AbridorWhatsApp(origem: origemWhats, executor: executor, busca: BuscaPadrao.para(executor))
+        let abridor = AbridorWhatsApp(origem: origemWhats, executor: executor, busca: BuscaPadrao.para(executor), ax: AcessibilidadePadrao.para(executor), registrar: registrar)
         return Roteador(
             paineis: PaineisReais(armazem: armazem, agregador: agregador, agenda: agenda, ponteQR: ponteQR, abridorWhatsApp: abridor, gasto: gastoDeTokens),
             teclas: ExecutorAcoes(shell: executor, whatsappWeb: { abridor.abrir() }), spotify: SpotifyReal(executor: executor, conta: contaSpotify, complemento: complemento),

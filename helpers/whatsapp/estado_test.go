@@ -107,14 +107,21 @@ func TestArquivadaSegueNaListaMarcadaEMidiaNaoVazaReferencia(t *testing.T) {
 	}
 }
 
-// Arquivada, depois chega mensagem nova: com "manter arquivadas" desligado (padrão), o WhatsApp desarquiva no
-// celular sem avisar pelo app state. O Deck tem de contar a conversa em Todas, não como arquivada.
-func TestMensagemNovaDesarquivaQuandoNaoMantem(t *testing.T) {
+// Caso do Leonardo: grupos arquivados no celular continuam arquivados com mensagem nova. Sem aviso explícito do
+// WhatsApp, o padrão é MANTER arquivada, e as não lidas deles não contam em Todas.
+func TestMensagemNovaNaoDesarquivaPorPadrao(t *testing.T) {
 	e := NovoEstado("")
 	e.ArquivarEm("a", true, t0)
 	e.Recebida("a", "Ana", false, Msg{Texto: "oi", Hora: "h"}, t0.Add(time.Hour))
-	if l := e.Lista(); len(l) != 1 || l[0].Arquivada {
-		t.Fatalf("mensagem nova depois de arquivar tem de desarquivar: %+v", l)
+	if l := e.Lista(); len(l) != 1 || !l[0].Arquivada {
+		t.Fatalf("sem aviso do WhatsApp a conversa fica arquivada: %+v", l)
+	}
+	// Marca antiga (sem instante) com não lidas também continua arquivada.
+	f := NovoEstado("")
+	f.arquivadas["b"] = 0
+	f.Recebida("b", "Bia", false, Msg{Texto: "oi", Hora: "h"}, t0)
+	if l := f.Lista(); !l[0].Arquivada {
+		t.Fatalf("marca antiga com não lidas fica arquivada: %+v", l)
 	}
 }
 
@@ -128,46 +135,42 @@ func TestArquivadaDepoisDaMensagemContinuaArquivada(t *testing.T) {
 	}
 }
 
-// Com "manter arquivadas" ligado, mensagem nova não desarquiva. A ordem dos eventos não importa.
-func TestManterArquivadasLigadoNaoDesarquiva(t *testing.T) {
+// Só o aviso explícito de que mensagem nova desarquiva faz a conversa sair do arquivo. A ordem dos eventos não importa.
+func TestAjusteExplicitoDesarquivaComMensagem(t *testing.T) {
 	e := NovoEstado("")
 	e.ArquivarEm("a", true, t0)
 	e.Recebida("a", "Ana", false, Msg{Texto: "oi", Hora: "h"}, t0.Add(time.Hour))
-	e.ManterArquivadas(true)
-	if l := e.Lista(); !l[0].Arquivada {
-		t.Fatal("com manter ligado a conversa fica arquivada")
-	}
-	e.ManterArquivadas(false)
+	e.DesarquivaComMensagem(true)
 	if l := e.Lista(); l[0].Arquivada {
-		t.Fatal("desligando o ajuste a mensagem nova volta a desarquivar")
+		t.Fatal("com o aviso explícito a mensagem nova desarquiva")
+	}
+	e.DesarquivaComMensagem(false)
+	if l := e.Lista(); !l[0].Arquivada {
+		t.Fatal("desligando o ajuste a conversa fica arquivada")
 	}
 }
 
-// Estado já gravado pelo formato antigo (lista de ids, sem instante): conversa com não lidas se conserta sozinha
-// no próximo início, e conversa arquivada sem não lidas continua arquivada.
-func TestMarcaAntigaComNaoLidasSeConsertaNoInicio(t *testing.T) {
+// Estado que o #47 deixou no disco (marca sem instante, conversas com não lidas, ajuste que nunca chegou): no próximo
+// início tudo volta arquivado, sem apagar id nenhum.
+func TestEstadoDoDiscoVoltaArquivadoNoInicio(t *testing.T) {
 	dir := t.TempDir()
 	arq := filepath.Join(dir, "conversas.json")
-	conv := `[{"id":"a","nome":"Ana","naoLidas":2,"ultima":"2026-11-13T10:00:00Z","arquivada":true,"mensagens":[{"texto":"x","hora":"h"},{"texto":"y","hora":"h"}]}]`
+	conv := `[{"id":"a","nome":"Ana","naoLidas":2,"ultima":"2026-11-13T10:00:00Z","mensagens":[{"texto":"x","hora":"h"},{"texto":"y","hora":"h"}]}]`
 	if err := os.WriteFile(arq, []byte(conv), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(arq+".arquivadas", []byte(`["a","b"]`), 0o600); err != nil {
+	if err := os.WriteFile(arq+".arquivadas", []byte(`{"ids":{"a":0,"b":1763000000000}}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	e := NovoEstado(arq)
-	if l := e.Lista(); len(l) != 1 || l[0].Arquivada {
-		t.Fatalf("a marca antiga com não lidas tinha de cair: %+v", l)
+	if l := e.Lista(); len(l) != 1 || !l[0].Arquivada {
+		t.Fatalf("tinha de voltar arquivada: %+v", l)
 	}
-	e.Recebida("b", "Bia", false, Msg{Texto: "oi", Hora: "h"}, t0)
-	if l := e.Lista(); len(l) != 2 {
-		t.Fatalf("lista: %+v", l)
-	}
-	if err := e.Salvar(); err != nil {
-		t.Fatal(err)
-	}
-	if l := NovoEstado(arq).Lista(); len(l) != 2 {
-		t.Fatalf("recarga: %+v", l)
+	e.Recebida("b", "Bia", false, Msg{Texto: "oi", Hora: "h"}, time.Now().Add(time.Hour))
+	for _, c := range e.Lista() {
+		if !c.Arquivada {
+			t.Fatalf("todas arquivadas: %+v", c)
+		}
 	}
 }
 
@@ -175,13 +178,13 @@ func TestMarcaAntigaComNaoLidasSeConsertaNoInicio(t *testing.T) {
 func TestAjusteEInstantePersistem(t *testing.T) {
 	arq := filepath.Join(t.TempDir(), "conversas.json")
 	e := NovoEstado(arq)
-	e.ManterArquivadas(true)
+	e.DesarquivaComMensagem(true)
 	e.ArquivarEm("a", true, t0)
 	e.Recebida("a", "Ana", false, Msg{Texto: "oi", Hora: "h"}, t0.Add(time.Hour))
 	if err := e.Salvar(); err != nil {
 		t.Fatal(err)
 	}
-	if l := NovoEstado(arq).Lista(); len(l) != 1 || !l[0].Arquivada {
-		t.Fatalf("manter ligado tem de sobreviver: %+v", l)
+	if l := NovoEstado(arq).Lista(); len(l) != 1 || l[0].Arquivada {
+		t.Fatalf("o aviso explícito tem de sobreviver: %+v", l)
 	}
 }

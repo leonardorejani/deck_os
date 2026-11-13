@@ -96,6 +96,7 @@ func TestArquivadaSilenciadaContinuaArquivadaComMensagemNova(t *testing.T) {
 	a := ajudanteDeEventos(e)
 	jid := types.NewJID("5544999990001", types.DefaultUserServer)
 	id := jid.String()
+	e.DesarquivaComMensagem(true)
 	a.tratar(context.Background(), &events.Archive{JID: jid, Timestamp: t0, Action: &waSyncAction.ArchiveChatAction{Archived: ptr(true)}})
 	a.tratar(context.Background(), &events.Mute{JID: jid, Timestamp: t0, Action: &waSyncAction.MuteAction{Muted: ptr(true), MuteEndTimestamp: ptr(int64(-1))}})
 	e.Recebida(id, "Ana", false, Msg{Texto: "oi", Hora: "h"}, time.Now().Add(time.Hour))
@@ -113,6 +114,7 @@ func TestArquivadaSilenciadaContinuaArquivadaComMensagemNova(t *testing.T) {
 func TestSilencioVencidoNaoSeguraArquivada(t *testing.T) {
 	e := NovoEstado("")
 	a := ajudanteDeEventos(e)
+	e.DesarquivaComMensagem(true)
 	jid := types.NewJID("5544999990001", types.DefaultUserServer)
 	a.tratar(context.Background(), &events.Archive{JID: jid, Timestamp: t0, Action: &waSyncAction.ArchiveChatAction{Archived: ptr(true)}})
 	a.tratar(context.Background(), &events.Mute{JID: jid, Action: &waSyncAction.MuteAction{Muted: ptr(true), MuteEndTimestamp: ptr(t0.Add(time.Hour).Unix())}})
@@ -143,6 +145,7 @@ func TestSilencioDoHistoricoPersiste(t *testing.T) {
 // A Ultima nunca volta no tempo: mensagem fora de ordem ou histórico atrasado não reabrem a arquivada.
 func TestUltimaNaoRegrideEArquivadaNaoVolta(t *testing.T) {
 	e := NovoEstado("")
+	e.DesarquivaComMensagem(true)
 	e.ArquivarEm("a", true, t0)
 	e.Recebida("a", "Ana", false, Msg{Texto: "oi", Hora: "h"}, t0.Add(2*time.Hour))
 	e.Recebida("a", "Ana", false, Msg{Texto: "atrasada", Hora: "h"}, t0.Add(-time.Hour))
@@ -150,6 +153,7 @@ func TestUltimaNaoRegrideEArquivadaNaoVolta(t *testing.T) {
 		t.Fatalf("mensagem fora de ordem não pode reabrir a arquivada: %+v", l)
 	}
 	f := NovoEstado("")
+	f.DesarquivaComMensagem(true)
 	f.ArquivarEm("a", true, t0.Add(time.Hour))
 	f.Recebida("a", "Ana", false, Msg{Texto: "oi", Hora: "h"}, t0.Add(2*time.Hour))
 	f.Historico("a", "Ana", false, 1, t0.Add(30*time.Minute), nil)
@@ -158,30 +162,48 @@ func TestUltimaNaoRegrideEArquivadaNaoVolta(t *testing.T) {
 	}
 }
 
-// UnarchiveChatsSetting vira "manter arquivadas" ao contrário, e sem Action (remoção) não mexe em nada.
-func TestAjusteManterArquivadasPorEvento(t *testing.T) {
+// UnarchiveChatsSetting ligado é o único aviso que faz mensagem nova desarquivar. Sem Action (remoção) não mexe.
+func TestAjusteDesarquivarPorEvento(t *testing.T) {
 	e := NovoEstado("")
 	a := ajudanteDeEventos(e)
 	jid := types.NewJID("5544999990001", types.DefaultUserServer)
 	e.ArquivarEm(jid.String(), true, t0)
 	e.Recebida(jid.String(), "Ana", false, Msg{Texto: "oi", Hora: "h"}, t0.Add(time.Hour))
 	a.tratar(context.Background(), &events.UnarchiveChatsSetting{})
-	if l := e.Lista(); l[0].Arquivada {
-		t.Fatalf("evento sem Action não liga manter: %+v", l)
+	if l := e.Lista(); !l[0].Arquivada {
+		t.Fatalf("evento sem Action não mexe: %+v", l)
 	}
 	a.tratar(context.Background(), &events.UnarchiveChatsSetting{Action: &waSyncAction.UnarchiveChatsSetting{UnarchiveChats: ptr(false)}})
 	if l := e.Lista(); !l[0].Arquivada {
-		t.Fatalf("UnarchiveChats desligado quer dizer manter arquivadas: %+v", l)
+		t.Fatalf("UnarchiveChats desligado mantém arquivada: %+v", l)
 	}
 	a.tratar(context.Background(), &events.UnarchiveChatsSetting{Action: &waSyncAction.UnarchiveChatsSetting{UnarchiveChats: ptr(true)}})
 	if l := e.Lista(); l[0].Arquivada {
-		t.Fatalf("UnarchiveChats ligado quer dizer que mensagem nova desarquiva: %+v", l)
+		t.Fatalf("UnarchiveChats ligado desarquiva com mensagem nova: %+v", l)
+	}
+}
+
+// Caso do Leonardo, de ponta a ponta com eventos falsos: arquiva, chega mensagem, nada desarquiva. Só o Archive
+// com archived=false do WhatsApp tira do arquivo.
+func TestGrupoArquivadoContinuaArquivadoComMensagemNova(t *testing.T) {
+	e := NovoEstado("")
+	a := ajudanteDeEventos(e)
+	jid := types.NewJID("120363000000000001", types.GroupServer)
+	a.tratar(context.Background(), &events.Archive{JID: jid, Timestamp: t0, Action: &waSyncAction.ArchiveChatAction{Archived: ptr(true)}})
+	e.Recebida(jid.String(), "Promo", true, Msg{Texto: "oferta", Hora: "h"}, time.Now())
+	if l := e.Lista(); len(l) != 1 || !l[0].Arquivada {
+		t.Fatalf("grupo arquivado fica arquivado: %+v", l)
+	}
+	a.tratar(context.Background(), &events.Archive{JID: jid, Timestamp: time.Now(), Action: &waSyncAction.ArchiveChatAction{Archived: ptr(false)}})
+	if l := e.Lista(); l[0].Arquivada {
+		t.Fatalf("o WhatsApp desarquivou: %+v", l)
 	}
 }
 
 // O instante do evento Archive é o que vale, não o "agora": arquivar antes da mensagem não segura a conversa.
 func TestArquivarEventoUsaOTimestampDoEvento(t *testing.T) {
 	e := NovoEstado("")
+	e.DesarquivaComMensagem(true)
 	a := ajudanteDeEventos(e)
 	jid := types.NewJID("5544999990001", types.DefaultUserServer)
 	e.Recebida(jid.String(), "Ana", false, Msg{Texto: "oi", Hora: "h"}, t0.Add(time.Hour))
@@ -198,6 +220,7 @@ func TestArquivarEventoUsaOTimestampDoEvento(t *testing.T) {
 // Histórico: a Ultima da conversa vira o instante do arquivamento, e o silêncio da conversa entra junto.
 func TestHistoricoArquivadaESilenciada(t *testing.T) {
 	e := NovoEstado("")
+	e.DesarquivaComMensagem(true)
 	a := ajudanteDeEventos(e)
 	jid := types.NewJID("5544999990001", types.DefaultUserServer)
 	conv := func(ts uint64, mudo uint64) *events.HistorySync {

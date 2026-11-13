@@ -335,7 +335,7 @@ func (a *ajudante) tratar(ctx context.Context, ev any) {
 		fase("erro", "O aparelho foi desconectado pelo WhatsApp. Gere um QR novo.")
 	case *events.UnarchiveChatsSetting:
 		if e.Action != nil {
-			a.estado.ManterArquivadas(!e.Action.GetUnarchiveChats())
+			a.estado.DesarquivaComMensagem(e.Action.GetUnarchiveChats())
 			a.marcarSujo()
 		}
 	case *events.Mute:

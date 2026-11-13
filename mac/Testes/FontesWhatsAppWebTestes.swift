@@ -24,6 +24,8 @@ final class FontesWhatsAppWebTestes: XCTestCase {
     }
     let outrosFechados: [(String, SaidaShell)] = ["com.apple.Safari", "company.thebrowser.Browser", "com.brave.Browser", "com.microsoft.edgemac"].map { ($0, SaidaShell(status: 0, saida: "fechado\n")) }
 
+    var todosFechados: [(String, SaidaShell)] { outrosFechados + [("com.google.Chrome", fechado)] }
+
     // MARK: Título da aba
 
     func testLeONumeroDeNaoLidasDoTituloDaAba() {
@@ -330,14 +332,14 @@ final class FontesWhatsAppWebTestes: XCTestCase {
     // MARK: Responder no Mac (12/11/2026): abre a conversa do contato no WhatsApp Web
 
     func testResponderAbreAConversaDoNumeroNoNavegadorPadrao() {
-        let ex = ExecutorFalso([("open 'https", SaidaShell(status: 0, saida: ""))])
+        let ex = ExecutorFalso([("open 'https", SaidaShell(status: 0, saida: ""))] + todosFechados)
         let abridor = AbridorWhatsApp(origem: origem(ConfigWhatsApp(origem: "qr", navegador: nil), ex), executor: ex)
         XCTAssertEqual(abridor.abrirConversa(numero: "5511900000000", grupo: false), .aberta(aviso: nil))
         XCTAssertEqual(ex.comandos.filter { $0.hasPrefix("open") }, ["open 'https://web.whatsapp.com/send?phone=5511900000000'"])
     }
 
     func testResponderUsaONavegadorEscolhido() {
-        let ex = ExecutorFalso([("open -a", SaidaShell(status: 0, saida: ""))])
+        let ex = ExecutorFalso([("open -a", SaidaShell(status: 0, saida: ""))] + todosFechados)
         let abridor = AbridorWhatsApp(origem: origem(ConfigWhatsApp(origem: "qr", navegador: "Arc"), ex), executor: ex)
         XCTAssertEqual(abridor.abrirConversa(numero: "5511900000000", grupo: false), .aberta(aviso: nil))
         XCTAssertEqual(ex.comandos.filter { $0.hasPrefix("open") }, ["open -a 'Arc' 'https://web.whatsapp.com/send?phone=5511900000000'"])
@@ -510,7 +512,7 @@ final class FontesWhatsAppWebTestes: XCTestCase {
     }
 
     func testResponderFalhaDaErroEmPortugues() {
-        let ex = ExecutorFalso([("open", SaidaShell(status: 1, saida: "x"))])
+        let ex = ExecutorFalso([("open 'https", SaidaShell(status: 1, saida: "x"))] + todosFechados)
         let abridor = AbridorWhatsApp(origem: origem(ConfigWhatsApp(origem: "qr", navegador: nil), ex), executor: ex)
         XCTAssertEqual(abridor.abrirConversa(numero: "5511900000000", grupo: false), .falhou(AbridorWhatsApp.erro))
     }
