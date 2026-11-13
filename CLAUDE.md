@@ -48,7 +48,8 @@ Bluetooth, build, instalação e renovação). Falta o teste de ponta a ponta no
   Prova no iPhone: `docs/provas/fase-6-cabo.md`.
   Fase 7, Bluetooth: `Enlace.swift` (fio de bytes e os 6 dígitos), `EnlaceSeguro.swift` (aperto de mão cifrado, só onde há
   CryptoKit) e `VazaoBluetooth.swift` existem nos dois pacotes (espelhos). No Mac, `PortaDoBluetooth.ligar` anuncia o serviço
-  e atende cada iPhone. No iPhone, `GerenteBluetooth` pareia e reconecta, e a `Casca` escolhe cabo ou Bluetooth.
+  e atende cada iPhone. No iPhone, `GerenteBluetooth` pareia e reconecta, e a `Casca` escolhe cabo ou Bluetooth. Sentido
+  invertido (12/11/2026): o iPhone também anuncia (`RadioPeriferico.swift`) e o Mac conecta como central (`BluetoothCentral.swift`).
   Prova no iPhone: `docs/provas/fase-7-bluetooth.md`.
   Fase 8, instalar e renovar: `./build.sh` gera `dist/Deck-1.0.dmg`, `./instalar-iphone.sh` faz a primeira instalação no iPhone e o
   `Deck.app` renova o app a cada 5 dias (`mac/Nucleo/Renovacao.swift`, `mac/App/Modelo/ModeloRenovacao.swift`).

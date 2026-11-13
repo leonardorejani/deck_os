@@ -416,7 +416,8 @@ Bluetooth só para o app nativo.
   200 px (JPEG) e o resto do estado cabe folgado. O pareamento principal é por aqui: o iPhone lista os Macs, os dois
   derivam os mesmos 6 dígitos (comparação numérica) e a pessoa confirma nas duas telas. Troca automática: o cabo é
   o canal em uso quando está plugado e o Bluetooth assume na hora quando ele sai, com o aviso de 3 s. Os dois ficam
-  conectados ao mesmo tempo, e uma leitura que estava indo pelo cabo é repetida no Bluetooth.
+  conectados ao mesmo tempo, e uma leitura que estava indo pelo cabo é repetida no Bluetooth. Desde 12/11/2026 há também o
+  sentido invertido (o iPhone anuncia, o Mac conecta como central): ver o parágrafo "Bluetooth no sentido invertido" na seção 13.
 - **Config:** `~/Library/Application Support/Deck/config.json` (teclas, ordem, código, porta).
   O iPhone grava com `PUT /api/config` mandando a config inteira que o GET devolve (sem código nem
   porta, que ficam sempre os do Mac). Corpo incompleto é recusado e nada muda.
@@ -1257,6 +1258,30 @@ ou desligar a câmera da reunião" (item 35) ganham isso, e o Mac só lê quando
   A Acessibilidade lendo a página do Meet direto foi descartada: o Chrome só monta a árvore de acessibilidade da página com um
   modo especial ligado, que deixa o navegador mais lento. Zoom e Teams não foram conferidos numa reunião de verdade (o Deck não
   abre reunião em teste): os títulos acima são os que os apps usam e o primeiro uso real dele confirma.
+
+Bluetooth no sentido invertido (12/11/2026). O iPhone achava o Mac, mas toda conexão pelo Bluetooth falhava na cifragem do
+sistema (CBError 15 no iPhone). O log do bluetoothd do Mac mostrou a causa: com o iPhone e o Mac na mesma conta do iCloud, toda
+conexão LE entre eles passa pelo Fast LE Connection do macOS, que falhava a cifragem com o Mac periférico ("Failed to encrypt
+connection", 217 de 217 no dia) e passava na única conexão com o Mac central ("localRole=Central encrypted:1"). Reiniciar o
+Bluetooth dos dois lados não resolve.
+- Agora os dois sentidos convivem. O Mac anuncia o serviço de sempre e também procura o iPhone. O iPhone procura o Mac e, com o
+  app aberto e sem conexão pelo Bluetooth, também anuncia um serviço próprio do Deck (UUIDs terminados em 0002). O Mac só conecta
+  em quem anuncia esse serviço. Só o transporte troca de mãos: o pedido do iPhone sai por notificação e a resposta do Mac entra
+  por escrita, com o mesmo aperto de mão cifrado, o mesmo pareamento por comparação numérica e os mesmos quadros. As
+  características não pedem cifragem do sistema, o Deck já cifra por cima.
+- O primeiro sentido que fecha o aperto de mão vale e o outro é fechado: nunca duas sessões para o mesmo iPhone. Como o iPhone
+  periférico não consegue derrubar o Mac, ele avisa que fechou com uma notificação vazia, e o Mac solta a conexão.
+- Depois de uma falha de cifragem no sentido antigo, o iPhone para de conectar no Mac por 60 s e fica só anunciando. A tela de
+  conexão diz "Esperando o Mac conectar pelo Bluetooth." e o aviso de cifragem (o que fazer) só aparece se nenhum dos dois
+  sentidos conectar em 60 s desde a primeira falha. Voltar o app ao primeiro plano começa uma rodada nova.
+- iPhone novo: se o sentido antigo falha ao parear, o iPhone anuncia por até 15 s e o pareamento segue pelo Mac que conectar,
+  igual ao de sempre (6 dígitos nas duas telas, e o Mac só aceita com Conectar iPhone aberto). Sem pareamento e sem pareamento em
+  curso, o iPhone não anuncia (e não pede a permissão de Bluetooth por isso).
+- Só em primeiro plano, sem modo de segundo plano novo. A permissão é a mesma que o app já pede (NSBluetoothAlwaysUsageDescription).
+- Um Mac que conecta pelo sentido invertido e não reconhece o iPhone não conta para esquecer o pareamento (pode ser outro Mac
+  com o Deck por perto). Essa contagem continua só no sentido antigo e no cabo.
+- Diário: o iPhone anota cada passo do periférico em `Documents/bluetooth.log` (linhas `bluetooth/periférico:`) e o Mac cada
+  passo da central no deck.log (linhas `bluetooth/central:` e `bluetooth inv-...`).
 
 ## 14. Melhorias (10/11/2026)
 
