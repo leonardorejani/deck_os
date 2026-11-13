@@ -94,9 +94,10 @@ function acoesHTML() {
   if (e.acoesEstado === 'erro') return `<span class="rotulo">O que a tecla faz</span><span class="ajuda">${esc(e.erro || 'Não deu para ler o que o app oferece.')}</span><button class="btn secundario pequeno" data-acoes-tentar style="justify-self:start">Tentar de novo</button>`;
   if (e.acoesEstado === 'sumiu') return '<span class="ajuda">Esse app não foi achado neste Mac. A tecla vai tentar abrir mesmo assim.</span>';
   const acoes = e.acoes || [];
-  if (!acoes.length) return `<span class="ajuda">${rasc.valor === CONTROLES_DO_MAC.valor ? 'A tecla abre os controles do Mac aqui no iPhone.' : 'A tecla abre o app.'}</span>`;
+  if (!acoes.length) return `<span class="ajuda">${rasc.valor === CONTROLES_DO_MAC.valor ? 'A tecla abre os controles do Mac aqui no iPhone.' : rasc.valor === MEET_NAVEGADOR.valor ? 'A tecla abre a central do Meet aqui no iPhone, com entrar, microfone, câmera e sair.' : 'A tecla abre o app.'}</span>`;
   const atual = rasc.acao?.id || '';
-  const opcoes = [{ id: '', nome: 'Só abrir o app' }, ...acoes].map(a => `<button class="opcao" role="radio" aria-checked="${a.id === atual}" data-acao-id="${esc(a.id)}">${esc(a.nome)}</button>`).join('');
+  const meet = rasc.valor === MEET_NAVEGADOR.valor; // a tecla do Meet sozinha abre a central dele aqui no iPhone
+  const opcoes = [{ id: '', nome: meet ? 'Abrir a central do Meet (entrar, microfone, câmera e sair)' : 'Só abrir o app' }, ...acoes].map(a => `<button class="opcao" role="radio" aria-checked="${a.id === atual}" data-acao-id="${esc(a.id)}">${esc(a.nome)}</button>`).join('');
   return `<span class="rotulo">O que a tecla faz</span><div class="opcoes" role="radiogroup" aria-label="O que a tecla faz">${opcoes}</div>${escolhaDaAcaoHTML(acoes.find(a => a.id === atual))}`;
 }
 function escolhaDaAcaoHTML(a) {

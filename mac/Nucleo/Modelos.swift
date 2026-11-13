@@ -366,6 +366,8 @@ struct ConversaWhatsApp: Codable, Equatable, Sendable {
 // GET  /api/sessoes                -> [Sessao]
 // POST /api/sessoes/<id>/abrir     traz para a frente o terminal da sessão no Mac -> SessaoAberta {"ok", "como": "terminal"|"pasta", "app"}
 // POST /api/reuniao/entrar         <- {"link": "https://..."} abre a reunião no Mac (Meet e Teams no navegador padrão, Zoom no app se houver). Só Meet, Zoom e Teams, senão 400.
+// GET  /api/meet                   -> EstadoMeet {"aberta", "naChamada"?, "microfone", "camera" (ligado|desligado|desconhecido|sem-reuniao), "aviso"?}  a central do Google Meet
+// POST /api/meet/entrar|microfone|camera|sair  traz a aba da reunião (ou abre o Meet), alterna o microfone ou a câmera, sai da chamada -> {"ok": true}
 // POST /api/parear                 <- {"codigo": "<6 dígitos mostrados no Mac>"} -> {"codigoAcesso"}
 // GET  /ca.crt                     o certificado do CA do Deck (application/x-x509-ca-cert), sem código de acesso
 // GET  /<arquivo>                  a página do painel

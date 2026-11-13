@@ -153,6 +153,9 @@ button.cartao { font: inherit; color: inherit; text-align: left; border: 0; curs
 .tecla .selo { position: absolute; top: var(--item); right: var(--item); min-width: var(--selo); height: var(--selo); padding: 0 var(--item); border-radius: var(--raio-pilula); background: var(--perigo); color: var(--fundo); font-size: var(--texto-xs); font-weight: 700; display: grid; place-items: center; font-variant-numeric: tabular-nums }
 .tecla .estado-tecla { position: absolute; top: var(--item); left: 0; right: 0; text-align: center; font-size: var(--texto-xs); font-weight: 700; color: var(--texto-2); line-height: var(--selo) }
 .tecla .estado-tecla.desligado { color: var(--perigo) }
+/* microfone e câmera da reunião: verde ligados (é a .acesa), vermelho desligados */
+.tecla.reuniao-desligado { background: var(--perigo-suave); box-shadow: inset 0 0 0 2px var(--perigo), 0 0 10px -2px var(--perigo) }
+.tecla.reuniao-desligado .led { width: 40px; height: 5px; background: var(--perigo); box-shadow: 0 0 10px 1px var(--perigo) }
 .tecla.reuniao-sem-reuniao { opacity: .5 } /* sem reunião aberta a tecla fica apagada (ainda toca: o Mac explica o que falta) */
 .tecla .hora-tecla { position: absolute; top: var(--item); left: 0; right: 0; text-align: center; font-size: var(--texto-sm); font-weight: 700; color: var(--texto); font-variant-numeric: tabular-nums; line-height: var(--selo) }
 /* topo de toda tecla reserva a altura do selo: ícone fica no mesmo lugar com ou sem selo */
@@ -269,8 +272,8 @@ button.cartao { font: inherit; color: inherit; text-align: left; border: 0; curs
 .com-folha .veu { opacity: 1; pointer-events: auto; transition: opacity var(--mov-lento) var(--curva-entra) }
 .folha { position: absolute; left: var(--seguro-esq); right: var(--seguro-dir); bottom: 0; height: calc(100% - var(--icone)); background: var(--superficie); border-radius: var(--raio-card) var(--raio-card) 0 0; box-shadow: var(--sombra-3); z-index: 17; translate: 0 105%; transition: translate var(--mov-sai-lento) var(--curva-sai); display: grid; grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden; overscroll-behavior: contain }
 .vertical .folha { left: 0; right: 0; height: 86% }
-.folha:not(.aberta) { pointer-events: none } /* fechada, nenhuma folha cobre o toque da que está aberta */
-.folha.aberta { translate: 0 0; transition: translate var(--mov-lento) var(--curva-entra) }
+.folha:not(.aberta) { pointer-events: none; visibility: hidden; transition: translate var(--mov-sai-lento) var(--curva-sai), visibility 0s linear var(--mov-sai-lento) } /* fechada, nenhuma folha cobre o toque da que está aberta, e nem é desenhada: o fundo do player cheio leva as cores da capa e, parado fora da tela, o iPhone deixava um risco dessa cor aparecer em cima das teclas ao arrastar as cenas */
+.folha.aberta { translate: 0 0; visibility: visible; transition: translate var(--mov-lento) var(--curva-entra) }
 .folha > header { display: flex; align-items: center; gap: var(--icone); padding: var(--icone) var(--pad) var(--item) var(--margem); min-height: var(--linha) }
 .folha > header h2 { margin: 0; font-size: var(--texto-md); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
 .folha > header h2 small { font-size: var(--texto-sm); color: var(--texto-2); font-weight: 400; letter-spacing: 0; margin-left: var(--item) }
@@ -533,7 +536,11 @@ button.cartao { font: inherit; color: inherit; text-align: left; border: 0; curs
 .nc-dia, .nc-ini, .nc-fim { grid-column: span 4 }
 .nc-onde, .nc-alerta, .nc-todo, .nc-padrao { grid-column: span 6 }
 .novo-comp .campo { min-width: 0 }
-.novo-comp .campo select, .novo-comp .campo input[type="date"], .novo-comp .campo input[type="time"] { font: inherit; font-size: var(--texto-campo); min-height: var(--alvo); border-radius: var(--raio-sm); border: 1px solid var(--borda); background: var(--fundo); color: var(--texto); padding: 0 var(--icone); min-width: 0; width: 100% }
+.novo-comp .campo select { font: inherit; font-size: var(--texto-campo); min-height: var(--alvo); border-radius: var(--raio-sm); border: 1px solid var(--borda); background: var(--fundo); color: var(--texto); padding: 0 var(--icone); min-width: 0; width: 100% }
+.nc-data { position: relative; display: block; min-width: 0; overflow: hidden; min-height: var(--alvo); border-radius: var(--raio-sm); border: 1px solid var(--borda); background: var(--fundo) } /* o valor desenhado é nosso (curto e que cabe), o campo nativo fica por cima, transparente, só para receber o toque e abrir o seletor do iPhone */
+.nc-vis { display: flex; align-items: center; min-height: var(--alvo); padding: 0 var(--icone); font-size: var(--texto-campo); color: var(--texto); white-space: nowrap; overflow: hidden; text-overflow: clip }
+.nc-data:has(input:disabled) { opacity: .5 }
+.nc-data input { position: absolute; inset: 0; width: 100%; height: 100%; min-width: 0; max-width: 100%; margin: 0; padding: 0; opacity: 0; -webkit-appearance: none; appearance: none; font-size: 16px; border: 0; background: transparent }
 .novo-comp input[type="time"]::-webkit-calendar-picker-indicator, .novo-comp input[type="date"]::-webkit-calendar-picker-indicator { display: none } /* o iPhone não desenha esse ícone, e no Chrome ele roubava espaço do valor */
 .novo-comp .campo input:disabled { opacity: .5 }
 .nc-check { display: flex; align-items: center; gap: var(--item); min-height: var(--alvo); font-size: var(--texto-sm); color: var(--texto); cursor: pointer }
@@ -839,3 +846,27 @@ button.item-lista:disabled { opacity: .5; cursor: default }
 .mn-seta { display: inline-flex; flex: none; color: var(--texto-2) }
 .mn-seta svg { width: 18px; height: 18px }
 .mn-vazio { height: auto; min-height: 120px; padding-bottom: var(--secao) }
+
+/* ---------- Google Meet: a central da reunião ---------- */
+.mt-estado { display: flex; align-items: center; gap: var(--item); min-height: var(--alvo-sm); color: var(--texto-2); font-size: var(--texto-sm) }
+.mt-estado i { width: 10px; height: 10px; border-radius: 50%; background: var(--borda) }
+.mt-estado.aberta { color: var(--texto) }
+.mt-estado.aberta i { background: var(--sucesso); box-shadow: 0 0 8px var(--sucesso) }
+.mt-aviso { min-height: calc(var(--texto-xs) * 2.6); padding-bottom: var(--item); color: var(--texto-2); font-size: var(--texto-xs) } /* o espaço do aviso fica reservado: ele aparece e some sem empurrar os botões */
+.mt-grade { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--icone) }
+.vertical .mt-grade { grid-template-columns: 1fr 1fr }
+.mt-bloco { font: inherit; display: grid; justify-items: center; align-content: center; gap: var(--item); min-height: 148px; padding: var(--pad) var(--icone); border: 0; border-radius: var(--raio-card); background: var(--superficie-2); color: var(--texto); cursor: pointer; text-align: center; transition: transform var(--mov-rapido) var(--curva-move), background-color var(--mov-rapido) var(--curva-move) }
+.mt-bloco:active:not(:disabled) { transform: scale(.97) }
+.mt-ic { display: grid; place-items: center; width: 44px; height: 44px }
+.mt-ic svg { width: 34px; height: 34px }
+.mt-nome { font-size: var(--texto-base); font-weight: 600 }
+.mt-sub { font-size: var(--texto-xs); color: var(--texto-2) }
+.mt-bloco.entrar { background: var(--destaque); color: var(--destaque-texto) }
+.mt-bloco.entrar .mt-sub { color: inherit; opacity: .8 }
+.mt-bloco.ligado { background: var(--sucesso-suave); box-shadow: inset 0 0 0 2px var(--sucesso); color: var(--sucesso) }
+.mt-bloco.desligado { background: var(--perigo-suave); box-shadow: inset 0 0 0 2px var(--perigo); color: var(--perigo) }
+.mt-bloco.ligado .mt-sub, .mt-bloco.desligado .mt-sub { color: inherit; font-weight: 600 }
+.mt-bloco.sair { color: var(--perigo) }
+.mt-bloco.sair .mt-sub { color: var(--texto-2) }
+.mt-bloco.sem, .mt-bloco:disabled { opacity: .5; cursor: default }
+.mt-bloco.esq { min-height: 148px; background: var(--superficie-2); opacity: .6 }
