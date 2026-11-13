@@ -76,6 +76,11 @@ enum BotaoDoMeet: Equatable, Sendable {
         return nil
     }
 
+    /// Os botões da tela "Você saiu da reunião": a aba continua com o título da sala, mas a chamada acabou.
+    static func ehTelaDeSaida(_ botao: BotaoWeb) -> Bool {
+        botao.rotulos.contains { casa(normalizar($0), #"^(entrar novamente|voltar a tela inicial|rejoin|return to home screen|volver a unirte|volver a la pantalla de inicio)$"#) }
+    }
+
     static func classificar(_ botao: BotaoWeb) -> BotaoDoMeet? {
         for r in botao.rotulos { if let c = classificar(r) { return c } }
         return nil
@@ -140,8 +145,11 @@ enum LeitorDeMeetAX {
     }
 
     /// O título da aba (ou da janela) que é de uma sala do Meet.
+    /// Na tela "Você saiu da reunião" a aba da frente ainda tem o título da sala, mas não é reunião: não conta.
     static func abaDeSala(_ j: JanelaDoNavegador) -> String? {
-        j.abas.first(where: ehTituloDeSala) ?? (ehTituloDeSala(j.titulo) ? j.titulo : nil)
+        let saiu = j.botoes.contains(where: BotaoDoMeet.ehTelaDeSaida)
+        let abas = saiu ? j.abas.filter { !(ehTituloDeSala($0) && j.titulo.hasPrefix($0)) } : j.abas
+        return abas.first(where: ehTituloDeSala) ?? (!saiu && ehTituloDeSala(j.titulo) ? j.titulo : nil)
     }
 
     static func ler(_ n: NavegadorWeb, executor: any Executor, ax: any AcessibilidadeDoNavegador, confiavel: Bool) -> Resultado {
@@ -187,6 +195,16 @@ enum LeitorDeMeetAX {
     static func trazerAba(_ sala: SalaMeet, ax: any AcessibilidadeDoNavegador) -> Bool {
         guard sala.somenteAba, let titulo = sala.abaDaReuniao, sala.pid != 0 else { return false }
         return ax.pressionarAba(pid: sala.pid, janela: sala.janela, titulo: titulo)
+    }
+
+    /// A chamada está na janelinha flutuante: a aba da sala está numa janela com barra de abas do mesmo processo. Seleciona
+    /// essa aba. Devolve se apertou (sem aba para trazer, quem chamou cai no resto).
+    static func trazerAbaDaJanelaFlutuante(_ sala: SalaMeet, ax: any AcessibilidadeDoNavegador) -> Bool {
+        guard sala.flutuante, sala.pid != 0, let janelas = ax.janelas(pid: sala.pid) else { return false }
+        for (i, j) in janelas.enumerated() where !j.flutuante {
+            if let aba = abaDeSala(j) { return ax.pressionarAba(pid: sala.pid, janela: i, titulo: aba) }
+        }
+        return false
     }
 }
 

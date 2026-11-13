@@ -90,7 +90,9 @@ struct MeetReal: MeetDoMac {
         if let ax = acoes.ax, acoes.temAcessibilidade() {
             for n in NavegadorWeb.todos {
                 guard case .sala(let sala) = LeitorDeMeetAX.ler(n, executor: executor, ax: ax, confiavel: true) else { continue }
-                if !sala.somenteAba || LeitorDeMeetAX.trazerAba(sala, ax: ax) { return nil }
+                if sala.somenteAba { if LeitorDeMeetAX.trazerAba(sala, ax: ax) { return nil } }
+                else if sala.flutuante { if LeitorDeMeetAX.trazerAbaDaJanelaFlutuante(sala, ax: ax) { return nil } }
+                else { return nil } // a chamada já está na aba da frente da janela dela
             }
         }
         return executor.rodar("open \(ExecutorAcoes.escapar(Self.endereco))").status == 0 ? nil : "Não consegui abrir o Meet no navegador"

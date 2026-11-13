@@ -226,6 +226,43 @@ final class MeetTestes: XCTestCase {
         XCTAssertEqual(ax.apertados, ["4242/0/Sair da chamada"])
     }
 
+    // MARK: - Correções da verificação (13/11/2026)
+
+    private func telaDeSaida(_ ax: ArvoreFalsa) {
+        ax.porPid[4242] = [JanelaDoNavegador(titulo: "Meet - abc-defg-hij - Google Chrome", botoes: ["Entrar novamente", "Voltar à tela inicial"].map { BotaoWeb(rotulos: [$0]) }, abas: ["Meet - abc-defg-hij"])]
+    }
+
+    func testDepoisDeSairDaChamadaATelaDeSaidaNaoEhReuniao() {
+        let sh = ShellDoMeet(), ax = ArvoreFalsa()
+        telaDeSaida(ax)
+        XCTAssertEqual(LeitorDeMeetAX.ler(chrome, executor: sh, ax: ax, confiavel: true), .semSala)
+        XCTAssertEqual(MeetReal(executor: sh, acoes: acoes(sh, ax)).estado(), .semReuniao)
+    }
+
+    func testTelaDeSaidaNaFrenteNaoEscondeOutraAbaDeReuniaoDeFundo() {
+        let sh = ShellDoMeet(), ax = ArvoreFalsa()
+        ax.porPid[4242] = [JanelaDoNavegador(titulo: "Meet - abc-defg-hij - Google Chrome", botoes: [BotaoWeb(rotulos: ["Entrar novamente"])], abas: ["Meet - abc-defg-hij", "Meet - xyz-wxyz-abc"])]
+        guard case .sala(let s) = LeitorDeMeetAX.ler(chrome, executor: sh, ax: ax, confiavel: true) else { return XCTFail("achou") }
+        XCTAssertEqual(s.abaDaReuniao, "Meet - xyz-wxyz-abc")
+    }
+
+    func testEntrarComAChamadaSoNaPiPSemAutomacaoSelecionaAAbaDeFundo() {
+        let sh = ShellDoMeet(), ax = ArvoreFalsa()
+        comPiP(ax)
+        sh.osascript = [("osascript", SaidaShell(status: 1, saida: "Not authorized to send Apple events to Google Chrome. (-1743)"))]
+        XCTAssertNil(MeetReal(executor: sh, acoes: acoes(sh, ax)).agir(.entrar))
+        XCTAssertEqual(ax.abasApertadas, ["4242/0/Meet: abc-defg-hij"])
+        XCTAssertFalse(sh.comandos.contains("open 'https://meet.google.com'"))
+    }
+
+    func testEntrarComAChamadaSoNaPiPSemAbaParaTrazerNaoFingeSucesso() {
+        let sh = ShellDoMeet(), ax = ArvoreFalsa()
+        ax.porPid[4242] = [JanelaDoNavegador(titulo: "Meet", botoes: ["Desativar microfone", "Sair da chamada"].map { BotaoWeb(rotulos: [$0]) }, flutuante: true)]
+        sh.osascript = [("osascript", SaidaShell(status: 1, saida: "Not authorized to send Apple events to Google Chrome. (-1743)"))]
+        _ = MeetReal(executor: sh, acoes: acoes(sh, ax)).agir(.entrar)
+        XCTAssertTrue(sh.comandos.contains("open 'https://meet.google.com'"), "sem aba para trazer, cai no open de antes")
+    }
+
     // MARK: - Ação
 
     private func acoes(_ sh: Executor, _ ax: ArvoreFalsa, _ teclou: Teclou = Teclou()) -> ExecutorAcoes {
