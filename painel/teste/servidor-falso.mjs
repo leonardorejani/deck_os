@@ -373,6 +373,7 @@ async function api(req, res, url) {
   if (rota === '/api/spotify/recentes' && m === 'GET') { if (semLogin()) return; return json(res, 200, { itens: c.filaVazia ? [] : [{ faixa: X('Tocada antes 1'), artista: 'Artista Velho', capa: CAPA_FILA(1) }, { faixa: 'Tocada antes 2', artista: 'Banda Velha' }] }) }
   if (rota === '/api/spotify/pular' && m === 'POST') {
     if (semLogin()) return;
+    if (c.atrasoAcao) await new Promise(r => setTimeout(r, c.atrasoAcao));
     if (c.filaRecusa) return json(res, 422, { erro: c.filaRecusa });
     const n = +url.searchParams.get('n'), alvo = proximasDaFila()[n - 1];
     cont.spotify.push(`pular:${n}:${url.searchParams.get('uri')}`);
