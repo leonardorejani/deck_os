@@ -142,9 +142,40 @@ const linhaRecente = i => `<div class="item-lista com-capa">${capaLinha(i, false
 function pintarTopoFila() {
   const topo = $('#pc-lista-topo'), s = V?.spotify;
   topo.hidden = lp.qual !== 'fila' || lp.aba !== 'fila' || !s; if (topo.hidden) return;
-  const capa = s.capaId ? ` src="${esc(canal.capaUrl(s.capaId))}"` : '';
-  const html = `<small class="rotulo">Tocando agora</small><div class="linha-agora"><img class="capa-mini"${capa} alt="" onerror="this.dataset.erro=1;this.removeAttribute('src')"><span class="tx"><b>${esc(s.faixa)}</b><small>${esc(s.artista || '')}</small></span></div>`;
-  if (topo.dataset.k !== html) { topo.dataset.k = html; topo.innerHTML = html }
+  const html = `<small class="rotulo">Tocando agora</small><div class="linha-agora"><img class="capa-mini"${capaAttr(s)} alt="" referrerpolicy="no-referrer" onerror="this.dataset.erro=1;this.removeAttribute('src')"><span class="tx"><b>${esc(s.faixa)}</b><small>${esc(s.artista || '')}</small></span></div>`;
+  // só a faixa decide se o alto é refeito: quando o Mac confirma a troca (artista e capa de outra fonte), o que está na tela fica como está
+  const k = s.faixa;
+  if (topo.dataset.k !== k) {
+    const havia = topo.dataset.k !== undefined; topo.dataset.k = k; topo.innerHTML = html;
+    if (havia && !reduzMov()) $('.linha-agora', topo).animate([{ opacity: 0, transform: 'translateY(10px)' }, { opacity: 1, transform: 'none' }], { duration: msCss('--mov-padrao'), easing: curvaCss('--curva-entra') });
+  } else { const img = $('.capa-mini', topo); if (img && !img.getAttribute('src') && capaSrc(s)) img.src = capaSrc(s) }
+}
+const curvaCss = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim() || 'ease';
+/* A saída das faixas de cima. Antes de a lista ser refeita, guarda onde cada linha está e uma cópia das que vão sair. Depois de refeita (a
+   lista nova já no lugar), as cópias ficam onde estavam e saem para cima, uma atrás da outra, enquanto as que ficam sobem do lugar antigo
+   para o novo. Só transform e opacity. Sem isso (movimento reduzido ou lista fechada) a troca é seca. */
+function capturarSaidaFila(i) {
+  const corpo = $('#pc-lista-corpo'); if (reduzMov() || !corpo || $('#pc-lista').hidden) return null;
+  const v = corpo.getBoundingClientRect(), linhas = $$('[data-pular]', corpo).map(el => ({ el, r: el.getBoundingClientRect() })), vis = r => r.bottom > v.top && r.top < v.bottom;
+  const saem = linhas.slice(0, i + 1).filter(l => vis(l.r)).slice(-8).map(l => ({ no: l.el.cloneNode(true), r: l.r })), ficam = linhas.slice(i + 1, i + 15).map(l => l.r);
+  return () => {
+    const lista = $('#pc-lista'), c = corpo.getBoundingClientRect(), lr = lista.getBoundingClientRect(), k0 = lr.width / lista.offsetWidth || 1, curvaEntra = curvaCss('--curva-entra');
+    const cam = document.createElement('div'); cam.className = 'fila-saida'; cam.setAttribute('aria-hidden', 'true');
+    // a tela do painel é uma tela fixa escalada para a janela: as medidas da página (getBoundingClientRect) vêm multiplicadas por k0
+    const px = n => n / k0 + 'px';
+    Object.assign(cam.style, { left: px(c.left - lr.left), top: px(c.top - lr.top), width: px(c.width), height: px(c.height) });
+    const fim = [];
+    saem.forEach(({ no, r }, k) => {
+      no.tabIndex = -1; no.removeAttribute('data-pular'); Object.assign(no.style, { position: 'absolute', margin: '0', left: px(r.left - c.left), top: px(r.top - c.top), width: px(r.width) });
+      cam.append(no);
+      fim.push(no.animate([{ opacity: 1, transform: 'translateY(0)' }, { opacity: 0, transform: 'translateY(-18px)' }], { duration: msCss('--mov-sai-rapido'), delay: Math.min(k * 24, 120), easing: curvaEntra, fill: 'both' }).finished);
+    });
+    if (saem.length) { lista.append(cam); Promise.allSettled(fim).then(() => cam.remove()); setTimeout(() => cam.remove(), 900) }
+    $$('[data-pular]', corpo).slice(0, ficam.length).forEach((el, k) => {
+      const dy = ficam[k].top - el.getBoundingClientRect().top;
+      if (Math.abs(dy) > 1) el.animate([{ transform: `translateY(${dy / k0}px)` }, { transform: 'none' }], { duration: msCss('--mov-padrao'), easing: curvaEntra, fill: 'backwards' });
+    });
+  };
 }
 function filaHTML(f) {
   const prox = f.proximas || [];
@@ -154,12 +185,21 @@ function recentesHTML(r) {
   const itens = r.itens || [];
   return itens.length ? `<section class="grupo-data"><h3>Tocado recentemente</h3>${itens.map(linhaRecente).join('')}</section>` : '<div class="vazio-bloco" style="min-height:120px"><strong>Nada tocado ainda</strong><span>O que você ouvir no Spotify aparece aqui.</span></div>';
 }
-/* tocar uma música da fila: o Spotify pula até ela. A lista já corta as de antes no toque e volta se o Mac recusar */
+/* tocar uma música da fila: o Spotify pula até ela. No toque, antes de o Mac responder, a faixa vira a que toca (capa, nome, os dois players),
+   as de cima saem animadas e a lista sobe. Se o Mac recusar, volta tudo ao que era. */
 async function pularPara(i) {
   const f = lp.dados, item = f?.proximas?.[i]; if (!item || lp.pulando) return;
-  lp.pulando = true; lp.dados = { ...f, proximas: f.proximas.slice(i + 1) }; pintarListaPlayer(); avisar(`Tocando ${item.faixa}`);
-  try { await canal.pularFila(i + 1, item.uri); await atualizarJa(); setTimeout(() => { if (lp.qual === 'fila' && lp.aba === 'fila') lerListaPlayer() }, 800) }
-  catch (e) { if (lp.qual === 'fila' && lp.aba === 'fila') { lp.dados = f; pintarListaPlayer() } tratarErro(e) }
+  lp.pulando = true;
+  const faixaAntes = lp.faixa, animar = capturarSaidaFila(i);
+  lp.dados = { ...f, proximas: f.proximas.slice(i + 1) }; lp.faixa = item.faixa; // lp.faixa já é a nova: a troca do player não manda reler a fila antes da hora
+  otimistaSpotify({ tocando: true }, 0, { faixa: item.faixa, artista: item.artista || '', album: '', capaUrl: item.capa || '', capaId: undefined, duracao: 0 });
+  V = vistaReal(); atualizar(); pintarListaPlayer(); animar?.(); avisar(`Tocando ${item.faixa}`);
+  try { await enfileirarSpotify(async () => { await canal.pularFila(i + 1, item.uri); await atualizarJa() }); setTimeout(() => { if (lp.qual === 'fila' && lp.aba === 'fila') lerListaPlayer() }, 800) }
+  catch (e) {
+    lp.faixa = faixaAntes; desfazerSpotify();
+    if (lp.qual === 'fila' && lp.aba === 'fila') { lp.dados = f; pintarListaPlayer(); if (!reduzMov()) $('#pc-lista-corpo').animate([{ opacity: 0 }, { opacity: 1 }], { duration: msCss('--mov-padrao') }) }
+    tratarErro(e);
+  }
   finally { lp.pulando = false }
 }
 function trocarAba(aba) {

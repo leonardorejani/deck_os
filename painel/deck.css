@@ -771,6 +771,7 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; text
 .pc-lista-topo small { color: var(--texto-2); font-size: var(--texto-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
 .pc-lista-topo .rotulo { color: var(--texto); font-size: var(--texto-md); font-weight: 700 }
 .pc-lista > .corpo { grid-row: 3 }
+.fila-saida { position: absolute; z-index: 2; overflow: hidden; pointer-events: none } /* as faixas de cima saindo, por cima da lista que já subiu */
 .pc-lista > header { display: flex; align-items: center; gap: var(--icone); padding: var(--pad) 0 var(--item); min-height: var(--linha) }
 .pc-lista > header h2 { margin: 0; flex: 1; font-size: var(--texto-md) }
 /* O corpo da lista nunca rola para o lado. A folga de --item de cada lado (onde o fundo da linha sangra no toque) é do corpo, em margem e
