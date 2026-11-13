@@ -9,7 +9,7 @@ import ImageIO
 // Terceira porta de entrada do Deck: o Bluetooth LE. Igual ao HTTPS e ao cabo, só traduz o canal em
 // HttpRequisicao e de volta, e quem responde é o mesmo Roteador. Aqui o Mac é o periférico: anuncia o
 // serviço do Deck, o iPhone (central) conecta e assina a característica de resposta, e cada assinante vira
-// uma sessão. O Bluetooth é lento e aberto ao ar, então a sessão só começa depois do aperto de mão cifrado
+// uma sessão. O sentido invertido (o Mac central) mora em BluetoothCentral.swift e cai na mesma PortaDoBluetooth. O Bluetooth é lento e aberto ao ar, então a sessão só começa depois do aperto de mão cifrado
 // (EnlaceSeguro) e o estado vai enxuto (capa pequena, ver CapaPequena).
 
 /// A capa do Spotify pesa dezenas de KB e o Bluetooth leva poucas dezenas de KB por segundo, então neste
@@ -221,18 +221,35 @@ final class PortaDoBluetooth: @unchecked Sendable {
 #endif
 
 #if canImport(CoreBluetooth) && canImport(CryptoKit)
+/// Os dois sentidos do Bluetooth do Mac, para o app guardar e parar juntos.
+final class RadiosDoBluetooth: @unchecked Sendable {
+    let periferico: RadioPeriferico
+    let central: RadioCentralMac
+    init(periferico: RadioPeriferico, central: RadioCentralMac) {
+        self.periferico = periferico
+        self.central = central
+    }
+    func parar() {
+        periferico.parar()
+        central.parar()
+    }
+}
+
 extension PortaDoBluetooth {
-    /// Liga o Bluetooth do Mac: anuncia o serviço do Deck e atende cada iPhone que conecta. O app do Mac chama isto
-    /// uma vez ao abrir e guarda o rádio para pará-lo (`parar()`) ao sair. `decidir` mostra o código de 6 dígitos
-    /// na tela do Mac (menu da barra e Ajustes > Conectar iPhone) e devolve a escolha da pessoa, Permitir ou Recusar.
+    /// Liga o Bluetooth do Mac nos dois sentidos: anuncia o serviço do Deck (o iPhone conecta) e procura o iPhone que
+    /// anuncia o serviço invertido (o Mac conecta, BluetoothCentral.swift). Os dois entregam o fio à mesma porta. O app do
+    /// Mac chama isto uma vez ao abrir e guarda os rádios para pará-los (`parar()`) ao sair. `decidir` mostra o código de
+    /// 6 dígitos na tela do Mac (menu da barra e Ajustes > Conectar iPhone) e devolve a escolha da pessoa, Permitir ou Recusar.
     static func ligar(roteador: Roteador, nomeMac: @escaping @Sendable () -> String, decidir: @escaping @Sendable (String, String) -> Bool,
                       pareamentoAberto: @escaping @Sendable () -> Bool, desistiu: @escaping @Sendable (String) -> Void = { _ in },
                       log: @escaping @Sendable (String) -> Void = { FileHandle.standardOutput.write(Data(($0 + "\n").utf8)) },
-                      aoAtender: (@Sendable (_ rotulo: String, _ caminho: String, _ status: Int) -> Void)? = nil) -> RadioPeriferico {
+                      aoAtender: (@Sendable (_ rotulo: String, _ caminho: String, _ status: Int) -> Void)? = nil) -> RadiosDoBluetooth {
         let porta = PortaDoBluetooth(roteador: roteador, nomeMac: nomeMac, decidir: decidir, pareamentoAberto: pareamentoAberto, desistiu: desistiu, log: log, aoAtender: aoAtender)
         let radio = RadioPeriferico(nome: nomeMac, aoAbrir: { fluxo, rotulo in porta.atender(fluxo, rotulo: rotulo) }, log: log)
         radio.iniciar()
-        return radio
+        let central = RadioCentralMac(aoAbrir: { fluxo, rotulo in porta.atender(fluxo, rotulo: rotulo) }, log: log)
+        central.iniciar()
+        return RadiosDoBluetooth(periferico: radio, central: central)
     }
 }
 #endif
