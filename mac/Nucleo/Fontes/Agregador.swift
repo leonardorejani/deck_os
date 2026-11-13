@@ -73,6 +73,8 @@ struct Fontes: Sendable {
     var monitor: @Sendable (ConfigMonitor, Date) -> Leitura<EstadoMonitor?> = { _, _ in Leitura(valor: nil, aviso: nil) }
     /// O microfone e a câmera da reunião, por id das teclas que controlam isso. Só é chamada com tecla dessas no perfil.
     var reuniao: @Sendable ([Tecla]) -> Leitura<[String: EstadoDeReuniao]> = { _ in Leitura(valor: [:], aviso: nil) }
+    /// As teclas de comando que estão rodando soltas agora (ou falharam há pouco). Fonte de fora (teste antigo) não precisa trazer.
+    var andamento: @Sendable () -> [String: AndamentoDeTecla] = { [:] }
 
     /// As fontes de verdade deste Mac. `casa` é a pasta do usuário.
     /// `origemWhatsApp` é quem decide entre o banco do app e o WhatsApp Web: o roteador passa o mesmo
@@ -109,7 +111,8 @@ struct Fontes: Sendable {
             agenda: { agenda.ler($0) },
             acesas: { TeclasAcesas.ler($0, executor: executor) },
             monitor: { c, agora in Leitura(valor: monitor.ler(c, agora: agora), aviso: nil) },
-            reuniao: { LeitorDeReuniao(executor: executor).ler($0) }
+            reuniao: { LeitorDeReuniao(executor: executor).ler($0) },
+            andamento: { ComandosEmAndamento.compartilhado.foto() }
         )
     }
 }
@@ -253,12 +256,16 @@ final class Agregador: @unchecked Sendable {
             }
         }
 
+        let idsDasTeclas = Set(teclas.map(\.id))
+        let andamentoDasTeclas = fontes.andamento().filter { idsDasTeclas.contains($0.key) }
+
         return Estado(
             agora: Datas.iso(agora), nomeMac: config.nomeMac, perfilAtivo: config.perfilAtivo, comp: config.comp, blocos: b,
             spotify: leituraSpotify.valor, uso: leituraUso.valor, sessoes: FonteSessoes.semContexto(leituraSessoes.valor), whatsapp: resumoWhats,
             agenda: leituraAgenda.valor, acesas: acesas, selos: selos, avisos: avisos,
             monitor: b.monitor && config.monitor.algum ? (fm ?? cacheMonitor.ultimo())?.valor : nil,
-            reuniao: leituraReuniao?.valor
+            reuniao: leituraReuniao?.valor,
+            andamento: andamentoDasTeclas.isEmpty ? nil : andamentoDasTeclas
         )
     }
 

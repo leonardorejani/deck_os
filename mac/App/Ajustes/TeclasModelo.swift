@@ -50,7 +50,7 @@ final class ModeloTeclas: ObservableObject {
 
     init(modelo: ModeloApp, catalogo: CatalogoDeApps? = nil, acesas: Set<String> = [],
          pedirAcessibilidade: @escaping () -> Void = { if !AcoesSistema.temAcessibilidade() { AcoesSistema.pedirAcessibilidade() } },
-         executar: @escaping (Tecla) -> String? = { ExecutorAcoes(shell: ExecutorShell()).executar($0) },
+         executar: @escaping (Tecla) -> String? = { ExecutorAcoes(shell: ExecutorShell(), graca: 300).executar($0) },
          mouseApertado: @escaping () -> Bool = { NSEvent.pressedMouseButtons & 1 != 0 }) {
         self.mouseApertado = mouseApertado
         self.modelo = modelo
