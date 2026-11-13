@@ -56,6 +56,25 @@ final class RotasTestes: XCTestCase {
         XCTAssertEqual((c.pedir("GET", "/api/sessoes").json as? [[String: Any]])?.first?["id"] as? String, "s1")
     }
 
+    // MARK: WhatsApp pelo Bluetooth (13/11/2026): a lista não vai inteira a cada leitura
+
+    func testWhatsAppSemVersaoNoMacOuNoPedidoVaiInteiro() throws {
+        let semVersao = try Cenario()
+        XCTAssertNotNil(semVersao.pedir("GET", "/api/whatsapp?v=3").json as? [[String: Any]], "banco do app e Web não têm versão")
+        let comVersao = try Cenario(versaoZap: 7)
+        XCTAssertNotNil(comVersao.pedir("GET", "/api/whatsapp").json as? [[String: Any]], "iPhone antigo, sem ?v, recebe a lista de sempre")
+    }
+
+    func testWhatsAppComVersaoNovaVaiComAVersaoEIgualVaiPequeno() throws {
+        let c = try Cenario(versaoZap: 7)
+        let nova = c.pedir("GET", "/api/whatsapp?v=3").json as? [String: Any]
+        XCTAssertEqual(nova?["v"] as? Int, 7)
+        XCTAssertEqual((nova?["conversas"] as? [[String: Any]])?.first?["nome"] as? String, "Louvor")
+        let igual = c.pedir("GET", "/api/whatsapp?v=7")
+        XCTAssertEqual(igual.json as? [String: AnyHashable], ["v": 7, "igual": true])
+        XCTAssertLessThan(igual.corpo.count, 40)
+    }
+
     // MARK: WhatsApp por QR: foto, mídia e Responder no Mac (12/11/2026)
 
     func testFotoDePerfilVemEmBase64EOutroNomeDa404() throws {

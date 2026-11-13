@@ -100,6 +100,24 @@ enum WhatsAppWeb {
         return Shell.limitado("osascript " + linhas.map { "-e " + Shell.aspas($0) }.joined(separator: " "), segundos: limiteSegundos)
     }
 
+    /// Leva a aba que já está aberta direto para a conversa de um número (muda o endereço dela, sem abrir aba nova) e a
+    /// traz para a frente. nil se o número não vale: só dígitos entram no endereço, e janela e aba são inteiros.
+    static func comandoIrParaConversa(_ a: AbaWeb, numero: String) -> String? {
+        guard let endereco = enderecoDaConversa(numero: numero) else { return nil }
+        let escolher = a.navegador.estilo == .safari
+            ? "set current tab of window \(a.janela) to tab \(a.aba) of window \(a.janela)"
+            : "set active tab index of window \(a.janela) to \(a.aba)"
+        let linhas = [
+            #"tell application id "\#(a.navegador.idBundle)""#,
+            #"set URL of tab \#(a.aba) of window \#(a.janela) to "\#(endereco)""#,
+            escolher,
+            "set index of window \(a.janela) to 1",
+            "activate",
+            "end tell",
+        ]
+        return Shell.limitado("osascript " + linhas.map { "-e " + Shell.aspas($0) }.joined(separator: " "), segundos: limiteSegundos)
+    }
+
     /// Sem aba aberta: abre o WhatsApp Web no navegador escolhido, ou no padrão do Mac.
     static func comandoAbrir(navegador: NavegadorWeb?) -> String {
         comandoAbrir(endereco: endereco, navegador: navegador)
@@ -215,6 +233,10 @@ final class OrigemWhatsApp: @unchecked Sendable {
         return agora.timeIntervalSince1970 - mudou < Self.janelaAtividade ? .ativo : .parado
     }
 
+    /// Uma aba do WhatsApp Web que já esteja aberta (no navegador escolhido primeiro), venha a leitura de onde vier.
+    /// Sem cache: "Responder no Mac" quer a aba de agora, não a de dois segundos atrás.
+    func abaAberta() -> AbaWeb? { procurar(preferido: navegadorEscolhido()).aba }
+
     /// A primeira aba do WhatsApp Web, olhando o navegador preferido primeiro. Com várias abas no mesmo
     /// navegador (o WhatsApp Web só deixa uma ativa por perfil), vale a que tem mais não lidas.
     private func procurar(preferido: NavegadorWeb?) -> (aba: AbaWeb?, semPermissao: Bool) {
@@ -286,15 +308,18 @@ struct AbridorWhatsApp: Sendable {
     static let avisoDoGrupo = "Abri o WhatsApp Web. Grupo não tem link direto: procure o grupo na lista."
     static let avisoSemNumero = "Abri o WhatsApp Web, mas não achei o número desse contato: procure a conversa na lista."
 
-    /// "Responder no Mac": abre a conversa do contato no WhatsApp Web, no navegador escolhido nos Ajustes ou no padrão do Mac.
-    /// Vale para qualquer origem de leitura. Grupo (ou contato sem número) não tem link direto: abre o Web e avisa.
+    /// "Responder no Mac": usa a aba do WhatsApp Web que já está aberta e só abre uma nova se não houver nenhuma.
+    /// Contato com número vai direto na conversa. Grupo (ou contato sem número) não tem link direto: a aba vem para a
+    /// frente e o aviso diz para escolher a conversa na lista. Vale para qualquer origem de leitura.
     func abrirConversa(numero: String?, grupo: Bool) -> AberturaDeConversa {
-        var aviso: String? = grupo ? Self.avisoDoGrupo : nil
-        var endereco = WhatsAppWeb.endereco
-        if !grupo {
-            if let numero, let link = WhatsAppWeb.enderecoDaConversa(numero: numero) { endereco = link } else { aviso = Self.avisoSemNumero }
+        let link = grupo ? nil : numero.flatMap { WhatsAppWeb.enderecoDaConversa(numero: $0) }
+        let aviso: String? = grupo ? Self.avisoDoGrupo : (link == nil ? Self.avisoSemNumero : nil)
+        if let aba = origem.abaAberta() {
+            let comando = numero.flatMap { link == nil ? nil : WhatsAppWeb.comandoIrParaConversa(aba, numero: $0) } ?? WhatsAppWeb.comandoTrazer(aba)
+            if executor.rodar(comando).status == 0 { return .aberta(aviso: aviso) }
+            // A aba fechou nesse meio tempo: cai para abrir uma nova.
         }
-        let r = executor.rodar(WhatsAppWeb.comandoAbrir(endereco: endereco, navegador: origem.navegadorEscolhido()))
+        let r = executor.rodar(WhatsAppWeb.comandoAbrir(endereco: link ?? WhatsAppWeb.endereco, navegador: origem.navegadorEscolhido()))
         return r.status == 0 ? .aberta(aviso: aviso) : .falhou(Self.erro)
     }
 
