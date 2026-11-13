@@ -18,6 +18,10 @@ struct AgendaDoMac {
     static let esperaMaxima: TimeInterval = 30
     /// Sessão que durou isso já foi uma conversa de verdade: a próxima tentativa volta para a espera mínima.
     static let sessaoBoa: TimeInterval = 20
+    /// iPhone que atendeu mas não tem o serviço (app fechado, ou anúncio velho que o macOS guardou): não é aperto de mão
+    /// falhando, então não cresce. Sem isto, o Mac já estava no teto de 30 s quando o app abria e o pareamento (que espera
+    /// 15 s) acabava antes de ele voltar (diário de 13/11/2026).
+    static let esperaSemServico: TimeInterval = 5
 
     private var ocupados: Set<String> = []
     private var proxima: [String: Date] = [:]
@@ -30,8 +34,13 @@ struct AgendaDoMac {
     mutating func conectando(_ id: String) { ocupados.insert(id) }
 
     /// O enlace com `id` acabou. `duracao` é quanto a sessão durou, ou nil se ela nem abriu (falhou antes de assinar).
-    mutating func terminou(_ id: String, duracao: TimeInterval?, agora: Date) {
+    /// `semServico`: o iPhone conectou mas não oferece o serviço invertido.
+    mutating func terminou(_ id: String, duracao: TimeInterval?, semServico: Bool = false, agora: Date) {
         ocupados.remove(id)
+        if semServico {
+            proxima[id] = agora.addingTimeInterval(Self.esperaSemServico)
+            return
+        }
         let espera: TimeInterval
         if let duracao, duracao >= Self.sessaoBoa {
             espera = Self.esperaMinima
@@ -43,6 +52,9 @@ struct AgendaDoMac {
     }
 
     func espera(_ id: String) -> TimeInterval? { esperas[id] }
+
+    /// Quanto falta (a partir de `agora`) para poder conectar de novo em `id`, para o log.
+    func faltam(_ id: String, agora: Date) -> TimeInterval { max(0, (proxima[id] ?? agora).timeIntervalSince(agora)) }
 }
 
 #if canImport(CoreBluetooth)
@@ -170,7 +182,7 @@ final class RadioCentralMac: NSObject, CBCentralManagerDelegate, CBPeripheralDel
     func peripheral(_ p: CBPeripheral, didDiscoverServices error: Error?) {
         log("bluetooth/central: serviços de \(p.identifier.uuidString.prefix(8)): \(p.services?.map { $0.uuid.uuidString } ?? []) erro=\(error.map { "\($0)" } ?? "-")")
         guard let e = enlaces[p.identifier.uuidString] else { return }
-        guard error == nil, let s = p.services?.first(where: { $0.uuid == uuidServico }) else { return fechar(e, "o iPhone não tem o serviço invertido") }
+        guard error == nil, let s = p.services?.first(where: { $0.uuid == uuidServico }) else { return fechar(e, "o iPhone não tem o serviço invertido", semServico: error == nil) }
         p.discoverCharacteristics([uuidPedido, uuidResposta], for: s)
     }
 
@@ -230,13 +242,14 @@ final class RadioCentralMac: NSObject, CBCentralManagerDelegate, CBPeripheralDel
     }
 
     /// Roda na fila. Fecha o fio, solta a conexão e marca na agenda quando pode conectar de novo neste iPhone.
-    private func fechar(_ e: Enlace, _ motivo: String) {
+    private func fechar(_ e: Enlace, _ motivo: String, semServico: Bool = false) {
         let id = e.peripheral.identifier.uuidString
         guard enlaces[id] === e else { return }
         enlaces[id] = nil
         let duracao = e.abriuEm.map { Date().timeIntervalSince($0) }
-        agenda.terminou(id, duracao: duracao, agora: Date())
-        log("bluetooth/central: \(id.prefix(8)) caiu (\(motivo)), sessão de \(duracao.map { String(format: "%.0f s", $0) } ?? "nenhuma"), próxima tentativa em \(Int(agenda.espera(id) ?? 0)) s")
+        let agora = Date()
+        agenda.terminou(id, duracao: duracao, semServico: semServico, agora: agora)
+        log("bluetooth/central: \(id.prefix(8)) caiu (\(motivo)), sessão de \(duracao.map { String(format: "%.0f s", $0) } ?? "nenhuma"), próxima tentativa em \(Int(agenda.faltam(id, agora: agora).rounded())) s")
         e.portao.fechar()
         central?.cancelPeripheralConnection(e.peripheral)
         e.fluxo?.fechar()

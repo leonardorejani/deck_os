@@ -784,6 +784,23 @@ final class AgendaDoMacTestes: XCTestCase {
         a.terminou("i", duracao: AgendaDoMac.sessaoBoa, agora: t0)
         XCTAssertEqual(a.espera("i"), AgendaDoMac.esperaMinima)
     }
+
+    /// 13/11/2026: o Mac já estava a 30 s de espera (iPhone sem o app aberto, sem o serviço) quando o app abriu e o pareamento,
+    /// que espera 15 s, acabava antes de o Mac voltar. Iphone sem o serviço não é aperto de mão falhando: espera curta e fixa.
+    func testIphoneSemOServicoNaoCresceAEsperaEVoltaEmPoucosSegundos() {
+        var a = AgendaDoMac()
+        for _ in 0..<8 {
+            a.conectando("i")
+            a.terminou("i", duracao: nil, semServico: true, agora: t0)
+            XCTAssertFalse(a.podeConectar("i", agora: t0.addingTimeInterval(AgendaDoMac.esperaSemServico - 1)))
+            XCTAssertTrue(a.podeConectar("i", agora: t0.addingTimeInterval(AgendaDoMac.esperaSemServico)))
+        }
+        XCTAssertLessThan(AgendaDoMac.esperaSemServico, 15, "o pareamento do iPhone espera 15 s pelo Mac")
+        // O aperto de mão que falha de verdade continua dobrando.
+        a.conectando("i")
+        a.terminou("i", duracao: 1, agora: t0)
+        XCTAssertEqual(a.espera("i"), 2)
+    }
 }
 
 /// A sessão inteira pelo sentido invertido, na mesma PortaDoBluetooth do sentido antigo.

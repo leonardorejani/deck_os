@@ -996,3 +996,69 @@ final class AvaliacaoDeAnuncioTestes: XCTestCase {
         XCTAssertFalse(av(servicos: [deck], rssi: 127, filtro: true).aceito)
     }
 }
+
+/// O que o rádio do iPhone (periférico) faz a seguir, sem rádio. Diário de 13/11/2026: ao desligar e ligar o Bluetooth do iPhone
+/// o serviço era publicado de novo sem tirar o anterior, o Mac via o serviço em dobro e assinava o velho.
+final class PlanoDoPerifericoTestes: XCTestCase {
+    private let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+
+    func testPrimeiraPublicacaoNaoTemNadaParaLimparEDepoisAnuncia() {
+        var p = PlanoDoPeriferico()
+        p.desejado = true
+        XCTAssertEqual(p.proxima(ligado: false, anunciando: false, agora: t0), [], "rádio fora: nada")
+        XCTAssertEqual(p.proxima(ligado: true, anunciando: false, agora: t0), [.publicarServico])
+        p.aoPublicar(erro: false)
+        XCTAssertEqual(p.proxima(ligado: true, anunciando: false, agora: t0), [.anunciar])
+    }
+
+    func testDesligarELigarOBluetoothLimpaOServicoAntigoAntesDePublicarDeNovo() {
+        var p = PlanoDoPeriferico()
+        p.desejado = true
+        _ = p.proxima(ligado: true, anunciando: false, agora: t0)
+        p.aoPublicar(erro: false)
+        _ = p.proxima(ligado: true, anunciando: false, agora: t0)
+        p.aoAnunciar()
+        // O usuário desliga e liga o Bluetooth: o iOS guarda o serviço no gerenciador.
+        p.aoMudarEstado(ligado: false)
+        XCTAssertEqual(p.proxima(ligado: false, anunciando: false, agora: t0), [])
+        let acoes = p.proxima(ligado: true, anunciando: false, agora: t0.addingTimeInterval(15))
+        XCTAssertEqual(acoes, [.limparServicos, .publicarServico], "sem limpar, o Mac vê o serviço em dobro e assina o velho")
+        p.aoLimpar()
+        p.aoPublicar(erro: false)
+        XCTAssertEqual(p.servicosNoRadio, 1, "um serviço só no gerenciador")
+        XCTAssertEqual(p.proxima(ligado: true, anunciando: false, agora: t0.addingTimeInterval(15)), [.anunciar], "volta a anunciar")
+    }
+
+    func testVariasVoltasDoRadioNuncaDeixamDoisServicos() {
+        var p = PlanoDoPeriferico()
+        p.desejado = true
+        for volta in 0..<4 {
+            let acoes = p.proxima(ligado: true, anunciando: false, agora: t0.addingTimeInterval(Double(volta) * 20))
+            if acoes.contains(.limparServicos) { p.aoLimpar() }
+            if acoes.contains(.publicarServico) { p.aoPublicar(erro: false) }
+            XCTAssertEqual(p.servicosNoRadio, 1, "volta \(volta)")
+            p.aoMudarEstado(ligado: false)
+        }
+    }
+
+    func testPublicacaoComErroTentaDeNovoSemAcumular() {
+        var p = PlanoDoPeriferico()
+        p.desejado = true
+        XCTAssertEqual(p.proxima(ligado: true, anunciando: false, agora: t0), [.publicarServico])
+        p.aoPublicar(erro: true)
+        XCTAssertEqual(p.proxima(ligado: true, anunciando: false, agora: t0), [.publicarServico])
+        p.aoPublicar(erro: false)
+        XCTAssertEqual(p.servicosNoRadio, 1)
+    }
+
+    func testAnuncioPedidoQueNaoConfirmaSoVoltaAPedirDepoisDoPrazo() {
+        var p = PlanoDoPeriferico()
+        p.desejado = true
+        _ = p.proxima(ligado: true, anunciando: false, agora: t0)
+        p.aoPublicar(erro: false)
+        XCTAssertEqual(p.proxima(ligado: true, anunciando: false, agora: t0), [.anunciar])
+        XCTAssertEqual(p.proxima(ligado: true, anunciando: false, agora: t0.addingTimeInterval(1)), [], "ainda esperando")
+        XCTAssertEqual(p.proxima(ligado: true, anunciando: false, agora: t0.addingTimeInterval(PlanoDoPeriferico.prazoDoInicioDoAnuncio)), [.anunciar])
+        XCTAssertEqual(p.proxima(ligado: true, anunciando: true, agora: t0.addingTimeInterval(60)), [], "já anunciando")
+    }
+}
