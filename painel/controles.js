@@ -1,4 +1,4 @@
-/* Controles do Mac: volume (com mudo), brilho da tela e brilho do teclado, numa folha cheia. O Mac diz o que este aparelho
+/* Controles do Mac: volume (com mudo), brilho da tela e brilho do teclado, numa folha cheia, um cartão por controle no estilo do Monitor (valor grande que conta, barra que é o controle). O Mac diz o que este aparelho
    oferece em GET /api/controles: o que não vem (sem tela interna, sem luz no teclado, Mac antigo sem a rota) não aparece, em
    vez de fingir. As barras respondem na hora (o valor que o dedo pôs vale até o Mac confirmar) e mandam o último valor,
    nunca dois pedidos ao mesmo tempo. Usa as peças de deck.js (V, canal, avisar, abrirFolha, tratarErro) e paineis.js (msgErro). */
@@ -45,10 +45,18 @@ async function lerControles() {
   pintarControles();
 }
 
-const linhaCtl = c => `<div class="ctl-linha" data-ctl="${c.id}"><span class="ctl-ic" aria-hidden="true">${SVG[c.icone]}</span>
-  <span class="ctl-meio"><span class="ctl-topo"><span class="ctl-nome">${c.nome}</span>${c.id === 'volume' && typeof ct.dados.mudo === 'boolean' ? '<button class="btn secundario pequeno" data-mudo aria-pressed="false">Mudo</button>' : ''}</span><span class="trilho" role="slider" aria-label="${c.nome}" aria-valuemin="0" aria-valuemax="100"><i></i></span></span>
-  <span class="ctl-num"></span></div>`;
-const esqueletoCtl = () => '<div class="esq-lista" aria-hidden="true">' + '<div class="ctl-linha esq"><span class="ctl-ic"></span><span class="ctl-meio"><i class="barra" style="width:30%"></i><i class="barra" style="width:100%"></i></span></div>'.repeat(3) + '</div>';
+const pctCtl = n => `${Math.round(n)}<small>%</small>`;
+/* Um cartão por controle, no estilo do Monitor: ícone e nome cinza em cima, valor grande, e a barra embaixo que é o próprio controle.
+   O Mudo é um cartão que alterna (não um botão solto): ele só existe quando o Mac diz o estado do mudo. */
+const cartaoCtl = c => `<div class="ctl-cartao" data-ctl="${c.id}" role="group" aria-label="${c.nome}">
+  <span class="ctl-topo"><span class="ctl-ic" aria-hidden="true">${SVG[c.icone]}</span><span class="ctl-rot">${c.nome}</span></span>
+  <b class="ctl-num"></b>
+  <span class="trilho" role="slider" aria-label="${c.nome}" aria-valuemin="0" aria-valuemax="100"><i></i></span></div>`;
+const cartaoMudo = () => `<button class="ctl-cartao ctl-mudo" data-mudo aria-pressed="false" aria-label="Mudo">
+  <span class="ctl-topo"><span class="ctl-ic" aria-hidden="true">${SVG.mudo}</span><span class="ctl-rot">Mudo</span></span>
+  <b class="ctl-num ctl-estado"></b>
+  <span class="ctl-chave" aria-hidden="true"><i></i></span></button>`;
+const esqueletoCtl = () => '<div class="ctl-grade" data-n="4" aria-hidden="true">' + '<div class="ctl-cartao esq"><i class="barra" style="width:40%"></i><i class="barra" style="width:70%"></i><i class="barra" style="width:100%"></i></div>'.repeat(4) + '</div>';
 
 function pintarControles() {
   const corpo = $('#ct-corpo');
@@ -58,21 +66,29 @@ function pintarControles() {
     ct.forma = ''; return;
   }
   corpo.setAttribute('aria-busy', 'false');
-  const lista = oferecidos(), forma = JSON.stringify([lista.map(c => c.id), typeof ct.dados.mudo === 'boolean']);
-  if (forma !== ct.forma) { // o que o Mac oferece mudou: refaz as linhas (senão só mexe nos valores, sem soltar o dedo da barra)
+  const lista = oferecidos(), comMudo = typeof ct.dados.mudo === 'boolean', forma = JSON.stringify([lista.map(c => c.id), comMudo]);
+  if (forma !== ct.forma) { // o que o Mac oferece mudou: refaz os cartões (senão só mexe nos valores, sem soltar o dedo da barra)
     ct.forma = forma;
-    corpo.innerHTML = lista.length ? lista.map(linhaCtl).join('') : '<div class="vazio-bloco" style="min-height:160px"><strong>Nada para controlar</strong><span>Este Mac não oferece volume, brilho nem luz de teclado, ou as barras estão desligadas na tecla Controles do Mac, nos Ajustes do Deck.</span></div>';
+    // ordem: Volume, Mudo, Brilho, Luz do teclado
+    const cartoes = lista.map(cartaoCtl); if (comMudo) cartoes.splice(lista[0]?.id === 'volume' ? 1 : 0, 0, cartaoMudo());
+    corpo.innerHTML = cartoes.length ? `<div class="ctl-grade" data-n="${cartoes.length}">${cartoes.join('')}</div>` : '<div class="vazio-bloco" style="min-height:160px"><strong>Nada para controlar</strong><span>Este Mac não oferece volume, brilho nem luz de teclado, ou as barras estão desligadas na tecla Controles do Mac, nos Ajustes do Deck.</span></div>';
   }
   for (const c of lista) {
     if (arrCtl?.id === c.id) continue; // o dedo manda na barra que ele está segurando
-    pintarLinhaCtl(c.id, valorCtl(c.id));
+    pintarLinhaCtl(c.id, valorCtl(c.id), true);
   }
   const mudo = mudoCtl(), b = $('[data-mudo]', corpo);
-  if (b) { b.setAttribute('aria-pressed', String(!!mudo)); $('[data-ctl="volume"]', corpo)?.classList.toggle('mudo', !!mudo) }
+  if (b) {
+    b.setAttribute('aria-pressed', String(!!mudo)); b.classList.toggle('ligado', !!mudo);
+    const t = $('.ctl-estado', b), txt = mudo ? 'Ligado' : 'Desligado'; if (t.textContent !== txt) t.textContent = txt;
+    $('[data-ctl="volume"]', corpo)?.classList.toggle('mudo', !!mudo);
+  }
 }
-function pintarLinhaCtl(id, v) {
+/* `animar` é só para o que o Mac mudou (o número conta e a barra desliza). Com o dedo na barra tudo acompanha na hora */
+function pintarLinhaCtl(id, v, animar = false) {
   const el = $(`#ct-corpo [data-ctl="${id}"]`); if (!el || !Number.isFinite(v)) return;
-  $('i', el).style.width = v + '%'; $('.ctl-num', el).textContent = v; $('.trilho', el).setAttribute('aria-valuenow', v);
+  $('.trilho i', el).style.transform = `scaleX(${v / 100})`; $('.trilho', el).setAttribute('aria-valuenow', v);
+  mostrarNumero($('.ctl-num', el), v, pctCtl, animar);
 }
 
 async function enviarCtl(id, v) {
@@ -91,12 +107,12 @@ async function alternarMudo() {
 
 function moverCtl(ev) {
   const r = arrCtl.tr.getBoundingClientRect(), v = Math.round(Math.min(1, Math.max(0, (ev.clientX - r.left) / r.width)) * 100);
-  arrCtl.v = v; pintarLinhaCtl(arrCtl.id, v);
+  arrCtl.v = v; pintarLinhaCtl(arrCtl.id, v, false);
   if (performance.now() - arrCtl.ultimo > 250) { arrCtl.ultimo = performance.now(); enviarCtl(arrCtl.id, v) } // no máximo 4 por segundo enquanto o dedo anda
 }
 document.addEventListener('pointerdown', ev => {
-  const tr = ev.target.closest('.ctl-linha .trilho'); if (!tr) return;
-  const el = tr.closest('.ctl-linha'); arrCtl = { tr, el, id: el.dataset.ctl, v: 0, ultimo: 0 };
+  const tr = ev.target.closest('.ctl-cartao .trilho'); if (!tr) return;
+  const el = tr.closest('.ctl-cartao'); arrCtl = { tr, el, id: el.dataset.ctl, v: 0, ultimo: 0 };
   el.classList.add('arrastando'); tr.setPointerCapture?.(ev.pointerId); moverCtl(ev); ev.preventDefault();
 });
 document.addEventListener('pointermove', ev => { if (arrCtl) moverCtl(ev) });

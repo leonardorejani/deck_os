@@ -1218,6 +1218,8 @@ tecla", "isso é muito feio, tira eles daí e deixa o usuário fazer a combinaç
   Deck sabe consultar (Safari, Chrome, Arc, Brave, Edge), traz a aba para a frente e aperta Cmd+D ou Cmd+E, igual ao item 35 da
   seção 13. Trocar o app da tecla, ou o tipo, apaga a ação e o desligar que eram do antigo.
 
+Monitor ligado de fábrica e Controles em cartões (13/11/2026, frente monitor-controles). Palavras dele: "monitor aparece que tá desligado, e no painel nao tem configuração pra ligar" e "controles aparece mas achei muito feia a interface". O Monitor vem ligado de fábrica: config nova e config sem a chave mostram o bloco ligado, e o `monitor: false` que a V1.1 gravava sozinha deixa de valer (só vale o `false` de quem desligou, marcado em `blocos.monitorEscolhido`, que a chave do editor da tecla do Monitor de Atividade grava). A chave e os itens continuam no editor dessa tecla. A tela Controles do Mac no iPhone vira uma grade de cartões escuros como a do Monitor: Volume, Mudo, Brilho e Luz do teclado, cada um com ícone, nome, valor grande em porcentagem que conta ao mudar e a barra fina embaixo que é o próprio controle, arrastável por uma área de toque grande. Mudo é um cartão que alterna, sem botão solto. Deitado são quatro colunas e em pé duas.
+
 Conexões e WhatsApp, depois de testar (12/11/2026, frente conexoes-whatsapp). Pedidos dele, resumidos: o aparelho
 conectado pelo QR aparecia como "Outro dispositivo" e tem que aparecer como "Deck OS", a mensagem nova levava cerca de 1 s,
 havia conversa sem nome e sem avatar, e as arquivadas só podem aparecer no filtro "Arquivadas". Decidido: o seletor de Conexões vira Cabo e Bluetooth, PWA, WhatsApp e Spotify (o
