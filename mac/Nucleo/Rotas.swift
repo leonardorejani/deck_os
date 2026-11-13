@@ -180,6 +180,8 @@ struct Roteador: Sendable {
     var controles: (any ControlesDoMac)? = nil
     /// Os processos que mais usam processador e memória, e o encerrar (tela do Monitor de Atividade). Nil: as rotas /api/processos não existem (404).
     var processos: (any ProcessosDoMac)? = nil
+    /// A central do Google Meet (estado, entrar, microfone, câmera e sair). Nil: as rotas /api/meet não existem (404).
+    var meet: (any MeetDoMac)? = nil
 
     func responder(_ r: HttpRequisicao) -> RespostaRota {
         if r.caminho == "/api/parear" {
@@ -271,6 +273,12 @@ struct Roteador: Sendable {
         if r.caminho == "/api/controles" {
             // O que a pessoa desligou na tecla Controles do Mac não sai daqui: a barra some no iPhone, como a que o Mac não oferece.
             return somente(["GET"], r) ?? controles.map { .codificar(200, $0.estado().somente(config.ler().controles)) } ?? .erro(404, "Essa rota não existe.")
+        }
+        if r.caminho == "/api/meet" {
+            return somente(["GET"], r) ?? meet.map { .codificar(200, $0.estado()) } ?? .erro(404, "Essa rota não existe.")
+        }
+        if let nome = sufixo(r.caminho, "/api/meet/") {
+            return somente(["POST"], r) ?? agirNoMeet(nome)
         }
         if r.caminho == "/api/processos" {
             return somente(["GET"], r) ?? processos.map { .codificar(200, $0.maiores()) } ?? .erro(404, "Essa rota não existe.")
@@ -452,6 +460,12 @@ struct Roteador: Sendable {
     }
 
     /// POST /api/controles/<volume|brilho|teclado>?v=0..100 e /api/controles/mudo?v=0|1.
+    private func agirNoMeet(_ nome: String) -> RespostaRota {
+        guard let meet, let acao = AcaoMeet(rawValue: nome) else { return .erro(404, "Essa rota não existe.") }
+        if let erro = meet.agir(acao) { return .erro(422, erro) }
+        return .json(200, Data("{\"ok\":true}".utf8))
+    }
+
     private func controlar(_ item: String, _ r: HttpRequisicao) -> RespostaRota {
         guard let controles, ["volume", "mudo", "brilho", "teclado"].contains(item) else { return .erro(404, "Essa rota não existe.") }
         let erro: String?

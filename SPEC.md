@@ -999,6 +999,8 @@ Mail tirado do iPhone (12/11/2026). Palavras dele: "tira a tela do mail por enqu
     - Precisa atualizar o app do iPhone e o Deck do Mac. Testes: `ios/Pacote/Tests/DeckCascaTests/BluetoothTestes.swift`
       (id que nunca conecta, situação da busca, vizinho que recusa) e `mac/Testes/BluetoothTestes.swift` (vigia do anúncio).
 
+Bluetooth que não volta (13/11/2026, frente bluetooth-volta). Palavras dele: "quando religuei o bluetooth ele ficou carregando e nao conectou mais", "conectando o cabo e tirando depois ele nao conecta mais via bluetooth", "demorou muito tempo" e "eu clico em parear, o spinner reinicia e nao conecta". Pelo diário do iPhone e o log do Mac: ao desligar e ligar o Bluetooth do iPhone o app publicava o serviço de novo sem tirar o anterior, o Mac via o serviço em dobro e assinava o velho, então nenhuma resposta chegava até fechar o app (agora o rádio limpa os serviços antes de publicar, `PlanoDoPeriferico`). A demora e o pareamento que não conectava vinham da espera do Mac: iPhone com o app fechado atendia sem o serviço, a espera dobrava até 30 s e o pareamento do iPhone (15 s) acabava antes de o Mac voltar (agora iPhone sem o serviço espera 5 s fixos, `AgendaDoMac`).
+
 33. Conexões e uma fonte de verdade por estado (12/11/2026, frente mac-conexoes). Palavras dele: "pode manter a conexão
     com spotify entao se a pessoa quiser conectar essas opções aparecem nos controles", "quando ia parear pelo celular
     aparecia um código nada a ver e às vezes era o mesmo do PWA", "os ícones demoram e só aparecem ao alternar de perfil",
@@ -1085,6 +1087,13 @@ Teste do Deck 1.0 (12/11/2026, frente iphone-bugs), dito pelo Leonardo:
   não tem elemento roxo, e o indicador de páginas e o LED ficam no lugar durante e depois do arrasto, coberto por teste).
   O que se achou e corrigiu: soltar o dedo fora da tela deixava o fantasma da tecla e a tecla apagada, e o arrasto agora
   termina em qualquer lugar onde o dedo solte. Pendente: um print do risco, para achar a causa se ele continuar.
+  13/11/2026, com o print: "A linha roxa ainda aparece". O risco (1 pt de altura, entre duas fileiras de teclas) tem a cor da capa do
+  Spotify, e nada no painel é roxo além do fundo da capa. Só o player cheio, parado fora da tela, pinta essa cor fora do card. Não
+  reproduz no Chrome, então a correção é a causa mais provável e não está provada no iPhone: tela fechada não é mais desenhada
+  (`visibility: hidden` depois da saída). Se o risco voltar, mandar outro print.
+- "UI toda em cima da outra" no Novo compromisso (13/11/2026): o iPhone desenha a data por extenso e o campo nativo estourava a
+  coluna. Dia, Início e Fim agora mostram o valor curto ("13 nov.") num campo nosso, e o campo nativo fica por cima, transparente,
+  só para abrir o seletor.
 - Telas abertas (player, relógio, agenda, WhatsApp, sessões, editor): além do X, arrastar de cima para baixo fecha. A tela
   acompanha o dedo e volta se soltar cedo. Lista que ainda rola para cima, barra de tempo, volume e campo de texto
   ficam com o gesto deles.
@@ -1221,6 +1230,8 @@ tecla", "isso é muito feio, tira eles daí e deixa o usuário fazer a combinaç
 
 Monitor ligado de fábrica e Controles em cartões (13/11/2026, frente monitor-controles). Palavras dele: "monitor aparece que tá desligado, e no painel nao tem configuração pra ligar" e "controles aparece mas achei muito feia a interface". O Monitor vem ligado de fábrica: config nova e config sem a chave mostram o bloco ligado, e o `monitor: false` que a V1.1 gravava sozinha deixa de valer (só vale o `false` de quem desligou, marcado em `blocos.monitorEscolhido`, que a chave grava). A chave e os itens moram em Este Mac, nos Ajustes do Mac, para quem não tem a tecla do Monitor de Atividade, e continuam também no editor dessa tecla. A tela Controles do Mac no iPhone vira uma grade de cartões escuros como a do Monitor: Volume, Mudo, Brilho e Luz do teclado, cada um com ícone, nome, valor grande em porcentagem que conta ao mudar e a barra fina embaixo que é o próprio controle, arrastável por uma área de toque grande. Mudo é um cartão que alterna, sem botão solto. Deitado são quatro colunas e em pé duas.
 
+Tecla de comando com liga e desliga (13/11/2026, frente comando-toggle). Palavras dele: "nao tá voltando pro estado origial como pedi e nao fica ligado com indicador de cor como tinha pedido. (quando escrevo o comando e mudo o ícone da tecla ele apaga o comando, nao pode acontecer)". O comando apagado era do editor de tecla do iPhone: escolher um ícone refazia o campo do comando a partir de um rascunho que só recebia o texto no Salvar, então o que a pessoa tinha digitado sumia (agora o texto entra no rascunho antes de o campo ser refeito). Pelo roteador o toque, o estado e o segundo toque já alternavam (teste de ponta a ponta no núcleo). O que ainda quebrava o liga e desliga era o comando que confere: ele rodava num zsh cru e os de ligar e desligar no shell de perfil, então quem usa alias via a tecla sempre desligada e todo toque rodava o comando de ligar. Agora o que confere de uma tecla liga e desliga roda no mesmo shell de perfil.
+
 Conexões e WhatsApp, depois de testar (12/11/2026, frente conexoes-whatsapp). Pedidos dele, resumidos: o aparelho
 conectado pelo QR aparecia como "Outro dispositivo" e tem que aparecer como "Deck OS", a mensagem nova levava cerca de 1 s,
 havia conversa sem nome e sem avatar, e as arquivadas só podem aparecer no filtro "Arquivadas". Decidido: o seletor de Conexões vira Cabo e Bluetooth, PWA, WhatsApp e Spotify (o
@@ -1261,6 +1272,22 @@ ou desligar a câmera da reunião" (item 35) ganham isso, e o Mac só lê quando
   A Acessibilidade lendo a página do Meet direto foi descartada: o Chrome só monta a árvore de acessibilidade da página com um
   modo especial ligado, que deixa o navegador mais lento. Zoom e Teams não foram conferidos numa reunião de verdade (o Deck não
   abre reunião em teste): os títulos acima são os que os apps usam e o primeiro uso real dele confirma.
+
+Central do Google Meet (13/11/2026). O Leonardo pediu: "A tecla do Google Meet pode ser uma só, onde eu clico nela, entro e eu tenho
+essas três opções ali, de entrar no site, poder mutar e poder sair da ligação daí. Coloca uma opção de fechar a câmera também. Vamos
+fazer um aplicativo do Google Meet que tem toda essa central aí por dentro. Igual o calendário, que a gente clica e abre o
+calendário", e "sobre as teclas de abrir/fechar mic e cam, devem ficar verdes quando ativas e vermelhas quando desligadas", e
+"tem que ter uma forma mais fácil pra isso já vir pronto pros usuários". A tecla "Google Meet (navegador)" sem ação abre uma tela
+no iPhone com Entrar no Meet (abre meet.google.com ou traz a aba da reunião que já está aberta), Microfone, Câmera e Sair da
+chamada. Microfone e câmera ficam verdes ligados e vermelhos desligados, e sem reunião aberta os botões dizem "Sem reunião" em
+vez de fingir estado. As teclas avulsas de microfone e câmera seguem existindo (e as que ele já tem na config seguem iguais), e
+agora também ficam verdes e vermelhas. O Mac lê e age pela Acessibilidade (a que o Deck já pede), sem a opção de JavaScript do
+navegador: os botões "Desativar microfone", "Ativar câmera" e "Sair da chamada" (em português, inglês e espanhol) aparecem na árvore
+da aba e o nome do botão diz o estado, e para agir o Deck aperta o botão (AXPress), sem trazer o navegador para a frente. Só a
+aba que está na frente da janela aparece na árvore: reunião atrás de outra aba cai no JavaScript de reserva, e sem ele aparece
+como "Não consegui ler". Isso revisa o descarte da Acessibilidade acima: o Chrome só monta a árvore da página com o
+AXEnhancedUserInterface ligado (o AXManualAccessibility ele recusa, provado em 13/11/2026), então o Deck liga esse modo no
+navegador na primeira leitura e a leitura tem limite de nós e de tempo. Rotas: `GET /api/meet` e `POST /api/meet/entrar|microfone|camera|sair`.
 
 Bluetooth no sentido invertido (12/11/2026). O iPhone achava o Mac, mas toda conexão pelo Bluetooth falhava na cifragem do
 sistema (CBError 15 no iPhone). O log do bluetoothd do Mac mostrou a causa: com o iPhone e o Mac na mesma conta do iCloud, toda

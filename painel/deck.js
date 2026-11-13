@@ -775,7 +775,8 @@ $('#ed-acao').addEventListener('click', e => {
   const a = e.target.closest('[data-app]'); if (a) { rasc.valor = a.dataset.app; rasc.icone = a.dataset.app; if (!$('#ed-nome').value || APPS.some(x => x.nome === $('#ed-nome').value)) $('#ed-nome').value = a.dataset.app; pintarTipo(); return }
   if (e.target.id === 'ed-gravar') avisar('Grave a combinação no editor de teclas do Mac');
 });
-$('#ed-icones').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; rasc.icone = b.dataset.ic; pintarTipo() });
+// pintarTipo refaz o campo da ação a partir do rascunho: o que a pessoa já digitou entra no rascunho antes, senão o ícone apagava o comando
+$('#ed-icones').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; const v = $('#ed-valor'); if (v) rasc.valor = v.value; rasc.icone = b.dataset.ic; pintarTipo() });
 /* Salvar e Excluir são otimistas como o resto: o editor fecha e a tecla muda no toque. Se o Mac recusar, a tela volta
    ao que era e o editor reabre com o que a pessoa tinha digitado, junto com o motivo no aviso. */
 const mudarTecla = (pid, fn) => base => { const p = base.perfis.find(x => x.id === pid); if (!p) throw new Error('Esse perfil não existe mais no Mac.'); fn(p.teclas); return base };

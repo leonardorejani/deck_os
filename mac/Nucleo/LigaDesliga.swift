@@ -50,10 +50,16 @@ extension Tecla {
 }
 
 extension ExecutorAcoes {
+    /// O comando que confere roda no mesmo shell de perfil dos comandos de ligar e desligar (aliases e PATH do .zshrc).
+    /// Rodar "cru" falhava para quem usa alias, e a tecla caía sempre em "desligada".
+    func conferir(_ comando: String) -> Bool {
+        shell.rodar(Shell.limitadoNoPerfil(comando, segundos: limiteSegundos, shell: shellDoUsuario())).status == 0
+    }
+
     /// Um toque numa tecla liga e desliga: ligada agora (pelo comando que confere ou pelo que o Deck guardou), roda o
     /// comando de desligar. Desligada, roda o de ligar. O estado só muda se o comando deu certo.
     func alternar(_ tecla: Tecla, ligar: String) -> String? {
-        let ligadaAgora = tecla.comandoQueConfere.map { shell.rodar($0).status == 0 } ?? memoria.ligada(tecla.id)
+        let ligadaAgora = tecla.comandoQueConfere.map { conferir($0) } ?? memoria.ligada(tecla.id)
         let comando = ligadaAgora ? (tecla.desligar ?? "").trimmingCharacters(in: .whitespacesAndNewlines) : ligar
         if let erro = rodarComando(comando) { return erro }
         if tecla.comandoQueConfere == nil { memoria.definir(tecla.id, ligada: !ligadaAgora) }

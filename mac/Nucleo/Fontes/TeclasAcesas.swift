@@ -16,11 +16,14 @@ enum TeclasAcesas {
     /// conta como apagada, e o comando dela é deixado terminar sozinho.
     /// Tecla liga e desliga sem comando de conferir acende pelo que o Deck guardou (`memoria`).
     static func ler(_ teclas: [Tecla], executor: any Executor, limite: TimeInterval = TeclasAcesas.limite,
-                    memoria: MemoriaLigaDesliga = .compartilhada) -> [String] {
+                    memoria: MemoriaLigaDesliga = .compartilhada, shellDoUsuario: () -> String = { Shell.doUsuario() }) -> [String] {
         let guardadas = Set(teclas.filter { $0.ligaEDesliga && $0.comandoQueConfere == nil && memoria.ligada($0.id) }.map(\.id))
+        // Tecla liga e desliga confere no shell de perfil (o mesmo que a faz ligar e desligar). As de sempre (Manter acordado) seguem cruas.
+        let shell = shellDoUsuario()
+        let segundos = max(1, Int(limite.rounded(.up)))
         let comEstado = teclas.compactMap { t -> (String, String)? in
             guard let e = t.comandoQueConfere else { return nil }
-            return (t.id, e)
+            return (t.id, t.ligaEDesliga ? Shell.limitadoNoPerfil(e, segundos: segundos, shell: shell) : e)
         }
         guard !comEstado.isEmpty else { return teclas.map(\.id).filter { guardadas.contains($0) } }
         let r = Resultados()
