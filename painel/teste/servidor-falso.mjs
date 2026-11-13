@@ -71,6 +71,8 @@ const padrao = () => ({
   acoesAtraso: 0,            // ms de espera antes de o Mac responder o que um app oferece (ler as contas do Mail demora)
   mailAviso: '',             // a lista de contas do Mail não pôde ser lida: o motivo vem no aviso da ação
   comFoco: false,            // o perfil ganha uma tecla de comando com liga e desliga (sem comando de conferir: o Mac guarda o estado)
+  comandoLento: 0,           // ms que o comando da tecla de comando demora no Mac: o Mac responde na hora e mostra `andamento` até acabar
+  comandoFalha: '',          // o comando lento termina com esse erro (vai pelo `andamento`)
   comControles: false,       // o perfil ganha a tecla Controles (abre a tela dos controles do Mac no iPhone)
   controles: 'tudo',         // tudo | sem-brilho (Mac sem tela interna nem luz no teclado) | nada (não oferece nada) | antigo (Mac sem a rota: 404) | erro (500) | recusa (os pedidos de escrita falham com 422)
   comReuniao: false,         // o perfil ganha as teclas Mutar (microfone) e Câmera do Meet no navegador, e o estado delas chega em `reuniao`
@@ -271,6 +273,7 @@ function estado() {
     agenda: c.agenda === 'sem' ? { permissao: false, proximo: null }
       : { permissao: true, proximo: c.agenda === 'vazia' ? null : { titulo: X('Reunião de produto'), inicio: new Date(Date.now() + 2 * 3600000).toISOString(), diaTodo: false, calendario: X('Trabalho'), cor: X('#60A5FA'), local: X('Google Meet') } },
     acesas: c.acesas, selos, avisos: [],
+    ...(c.andamento && Object.keys(c.andamento).length ? { andamento: c.andamento } : {}),
     ...(c.comReuniao && c.reuniaoEstado ? { reuniao: { mic: c.reuniaoEstado.mic, cam: c.reuniaoEstado.cam } } : {}),
   };
 }
@@ -347,6 +350,16 @@ async function api(req, res, url) {
     // o Mac aperta o atalho do app e a leitura seguinte já traz o estado novo
     if ((id === 'mic' || id === 'cam') && c.reuniaoEstado) { const v = c.reuniaoEstado[id]; if (v === 'ligado' || v === 'desligado') c.reuniaoEstado[id] = v === 'ligado' ? 'desligado' : 'ligado' }
     if (id === 'acordado') c.acesas = c.acesas.includes(id) ? [] : [id];
+    // comando lento (o "mudar foco" passa de 10 s): o Mac responde na hora, mostra "ligando" e muda o estado só no fim
+    if (c.comandoLento && tecla.tipo === 'comando') {
+      const ligada = c.acesas.includes(id), fase = tecla.desligar ? (ligada ? 'desligando' : 'ligando') : 'rodando';
+      c.andamento = { ...(c.andamento || {}), [id]: { fase } };
+      setTimeout(() => {
+        if (c.comandoFalha) c.andamento = { ...c.andamento, [id]: { fase: 'falhou', erro: c.comandoFalha, fim: new Date().toISOString() } };
+        else { const { [id]: _, ...resto } = c.andamento; c.andamento = resto; if (tecla.desligar) c.acesas = ligada ? c.acesas.filter(x => x !== id) : [...c.acesas, id] }
+      }, c.comandoLento);
+      return json(res, 200, { ok: true });
+    }
     if (tecla.desligar) c.acesas = c.acesas.includes(id) ? c.acesas.filter(x => x !== id) : [...c.acesas, id]; // o Mac guarda o estado da tecla liga e desliga
     return json(res, 200, { ok: true });
   }
