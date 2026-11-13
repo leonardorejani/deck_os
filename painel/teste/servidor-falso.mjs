@@ -68,20 +68,24 @@ const padrao = () => ({
   controles: 'tudo',         // tudo | sem-brilho (Mac sem tela interna nem luz no teclado) | nada (não oferece nada) | antigo (Mac sem a rota: 404) | erro (500) | recusa (os pedidos de escrita falham com 422)
   comReuniao: false,         // o perfil ganha as teclas Mutar (microfone) e Câmera do Meet no navegador, e o estado delas chega em `reuniao`
   reuniaoEstado: { mic: 'ligado', cam: 'desligado' }, // ligado | desligado | desconhecido | sem-reuniao (o que o Mac leu). null: Mac antigo, não manda `reuniao`
+  comMeet: false,            // o perfil ganha a tecla única "Google Meet" (abre a central do Meet no iPhone)
+  meet: 'normal',            // normal | antigo (Mac sem a rota: 404) | erro (500) | recusa (as ações falham com 422)
+  meetEstado: { aberta: true, naChamada: true, microfone: 'ligado', camera: 'desligado' }, // o que o Mac leu da reunião
+  meetAtraso: 0,             // ms de espera antes de o Mac fazer uma ação do Meet
   comMonitorApp: false,      // o perfil ganha a tecla do app Monitor de Atividade (abre a tela do monitor no iPhone)
   ctVolume: 30, ctMudo: false, ctBrilho: 60, ctTeclado: 20, ctAtraso: 0,
   spotifyModos: 'sim',       // sim | sem (Mac antigo: o estado não traz álbum, repetir nem aleatório)
 });
 let c = padrao();
 let T0 = Date.now(); // as sessões esperam desde um instante fixo (o Mac real manda sempre o mesmo `desde` até a sessão mudar)
-let cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, whatsapp: 0, whatsappV: [], whatsappIguais: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], criados: [], destinosPedidos: 0, controles: [], whatsappAbertas: [], midias: [], fotos: [] };
+let cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, whatsapp: 0, whatsappV: [], whatsappIguais: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], criados: [], destinosPedidos: 0, controles: [], whatsappAbertas: [], midias: [], fotos: [], meetAcoes: [], meetLeituras: 0 };
 let posicaoBase = { s: 132, desde: Date.now() };
 let perfilAtivo = 'trabalho';
 let criadosAgenda = [], padraoAgenda = null, lembretesAcesso = null, liberarEm = 0; // o que o iPhone criou na agenda, o destino padrão e o acesso aos Lembretes
 let codigoAtual = CODIGO, codigoAnterior = null; // rodízio: o atual, e o anterior que ainda vale (a folga de 10 min)
 let parearGasto = false, parearErros = 0; // o código de 6 dígitos serve uma vez e aguenta 5 erros
 let gravada = null; // o que o iPhone gravou: perfis e blocos, como o Mac guardaria no config.json
-const zerar = () => { parearGasto = false; parearErros = 0; codigoAtual = CODIGO; codigoAnterior = null; T0 = Date.now(); gravada = null; c = padrao(); cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, whatsapp: 0, whatsappV: [], whatsappIguais: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], criados: [], destinosPedidos: 0, controles: [], whatsappAbertas: [], midias: [], fotos: [] }; posicaoBase = { s: 132, desde: Date.now() }; perfilAtivo = 'trabalho'; criadosAgenda = []; padraoAgenda = null; lembretesAcesso = null };
+const zerar = () => { parearGasto = false; parearErros = 0; codigoAtual = CODIGO; codigoAnterior = null; T0 = Date.now(); gravada = null; c = padrao(); cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, whatsapp: 0, whatsappV: [], whatsappIguais: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], criados: [], destinosPedidos: 0, controles: [], whatsappAbertas: [], midias: [], fotos: [], meetAcoes: [], meetLeituras: 0 }; posicaoBase = { s: 132, desde: Date.now() }; perfilAtivo = 'trabalho'; criadosAgenda = []; padraoAgenda = null; lembretesAcesso = null };
 
 // com xss ligado, todo texto que a página mostra chega como HTML que tenta executar código
 const X = t => c.xss ? `"><img src=x onerror="window.__xss=(window.__xss||0)+1">${t}` : t;
@@ -95,6 +99,7 @@ function perfisConfig() {
     T('apagar', 'Apagar tela', 'comando', 'pmset displaysleepnow', { icone: 'svg:tela' }),
   ];
   if (c.comReuniao) trabalho.push(T('mic', 'Mutar', 'app', 'Google Meet', { icone: 'svg:video', acao: { id: 'reuniao-microfone' } }), T('cam', 'Câmera', 'app', 'Google Meet', { icone: 'svg:video', acao: { id: 'reuniao-camera' } }));
+  if (c.comMeet) trabalho.push(T('meet', 'Google Meet', 'app', 'Google Meet', { icone: 'svg:video' }));
   if (c.comMonitorApp) trabalho.push(T('monitor', 'Monitor', 'app', 'Activity Monitor', { icone: 'Activity Monitor' }));
   if (c.comFoco) trabalho.push(T('foco', 'Mudar foco', 'comando', 'foco jogo', { icone: 'svg:tela', desligar: 'foco trabalho' }));
   if (c.comControles) trabalho.push(T('controles', 'Controles', 'app', 'Controles', { icone: 'svg:controles' }));
@@ -342,6 +347,26 @@ async function api(req, res, url) {
     if (acao === 'tocar') { c.spotify = 'tocando'; posicaoBase = { s: agora, desde: Date.now() } }
     if (acao === 'pausar') { c.spotify = 'pausado'; posicaoBase = { s: agora, desde: Date.now() } }
     if (acao === 'posicao') posicaoBase = { s: +url.searchParams.get('s'), desde: Date.now() };
+    return json(res, 200, { ok: true });
+  }
+  if (rota === '/api/meet' || rota.startsWith('/api/meet/')) {
+    if (c.meet === 'antigo') return json(res, 404, { erro: 'Essa rota não existe.' });
+    if (c.meet === 'erro') return json(res, 500, { erro: 'O Mac não conseguiu ler o Meet.' });
+    if (rota === '/api/meet') {
+      if (m !== 'GET') return json(res, 405, { erro: 'Esse pedido não é aceito nessa rota.' });
+      cont.meetLeituras++;
+      return json(res, 200, c.meetEstado);
+    }
+    if (m !== 'POST') return json(res, 405, { erro: 'Esse pedido não é aceito nessa rota.' });
+    const acao = rota.slice('/api/meet/'.length);
+    if (!['entrar', 'microfone', 'camera', 'sair'].includes(acao)) return json(res, 404, { erro: 'Essa rota não existe.' });
+    if (c.meet === 'recusa') return json(res, 422, { erro: 'Não achei a chamada do Meet na frente do navegador.' });
+    if (c.meetAtraso) await new Promise(r => setTimeout(r, c.meetAtraso));
+    cont.meetAcoes.push(acao);
+    const e = c.meetEstado, inverte = v => v === 'ligado' ? 'desligado' : v === 'desligado' ? 'ligado' : v;
+    if (acao === 'microfone') e.microfone = inverte(e.microfone);
+    if (acao === 'camera') e.camera = inverte(e.camera);
+    if (acao === 'sair') c.meetEstado = { aberta: false, microfone: 'sem-reuniao', camera: 'sem-reuniao' };
     return json(res, 200, { ok: true });
   }
   if (rota === '/api/controles' || rota.startsWith('/api/controles/')) {

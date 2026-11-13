@@ -4,9 +4,9 @@ import Foundation
 // mostra aceso (SPEC, seção 13, item 35). Só leitura, sempre via Executor e com tempo limite. Nada é pedido em lista de
 // cara: a Automação do navegador e a do System Events são pedidas pelo macOS na hora da primeira leitura (invariante 12).
 //
-// - Meet no navegador: JavaScript na aba da sala por AppleScript, lendo o `data-is-muted` dos botões de microfone e câmera.
-//   Exige que o navegador deixe JavaScript por Apple Events (Chrome: Visualizar > Desenvolvedor > Permitir JavaScript de
-//   Eventos da Apple. Safari: Desenvolvedor > Permitir JavaScript de Eventos da Apple). Sem isso a tecla mostra "?".
+// - Meet no navegador: a Acessibilidade (MeetAcessibilidade.swift) lê os botões "Desativar microfone" e "Ativar câmera"
+//   da aba que está na frente, sem a pessoa ligar nada no navegador. Reserva: JavaScript na aba da sala por AppleScript,
+//   lendo o `data-is-muted`, que exige a opção Permitir JavaScript de Eventos da Apple no navegador. Sem nenhum dos dois, "?".
 // - Zoom e Teams: os itens do menu do app ("Mute audio" / "Unmute audio", "Start video" / "Stop video"), lidos pelo System
 //   Events com a Acessibilidade que o Deck já tem. O título do item diz o que o próximo toque faz, então dele sai o estado.
 
@@ -131,7 +131,7 @@ enum LeituraDeMeet {
         return LeituraDeReuniao(microfone: mic, camera: cam)
     }
 
-    static let avisoJavascript = Aviso(fonte: "reuniao", texto: "Para mostrar se o microfone do Meet está mutado, ligue no navegador a opção Permitir JavaScript de Eventos da Apple (Chrome: Visualizar > Desenvolvedor. Safari: Desenvolvedor). Sem ela a tecla mostra \"?\".")
+    static let avisoJavascript = Aviso(fonte: "reuniao", texto: "Não consegui ler o microfone do Meet. Deixe a aba da reunião na frente do navegador e libere a Acessibilidade para o Deck. Sem isso a tecla mostra \"?\".")
     static func avisoPermissao(_ navegador: String) -> Aviso {
         Aviso(fonte: "reuniao", texto: "Não consegui olhar o \(navegador). Libere o controle dele para o Deck em Ajustes do Mac, Privacidade e Segurança, Automação.")
     }
@@ -228,6 +228,12 @@ enum LeituraDeMenu {
 /// Lê o estado de uma reunião no Meet, no Zoom ou no Teams.
 struct LeitorDeReuniao: Sendable {
     var executor: any Executor
+    /// A árvore de acessibilidade dos navegadores, para ler o Meet sem a opção de JavaScript. Nil: só o Mac de verdade tem
+    /// (com executor falso, de teste, não se consulta o sistema).
+    var acessibilidade: (any AcessibilidadeDoNavegador)? = nil
+    var temAcessibilidade: @Sendable () -> Bool = { AcoesSistema.temAcessibilidade() }
+
+    private var ax: (any AcessibilidadeDoNavegador)? { acessibilidade ?? AcessibilidadePadrao.para(executor) }
 
     /// Nomes de processo de cada app (o Teams novo e o clássico).
     static func processos(_ alvo: ControleDeReuniao.Alvo) -> [String] {
@@ -246,7 +252,18 @@ struct LeitorDeReuniao: Sendable {
         }
     }
 
-    private func lerMeet(_ navegadores: [NavegadorWeb]) -> LeituraDeReuniao {
+    /// O Meet como a Acessibilidade vê, no primeiro navegador que mostra uma sala na frente. Nil: não achou por aqui.
+    func salaDoMeet(_ navegadores: [NavegadorWeb]) -> SalaMeet? {
+        guard let ax else { return nil }
+        for n in navegadores {
+            if case .sala(let s) = LeitorDeMeetAX.ler(n, executor: executor, ax: ax, confiavel: temAcessibilidade()) { return s }
+        }
+        return nil
+    }
+
+    func lerMeet(_ navegadores: [NavegadorWeb]) -> LeituraDeReuniao {
+        // Primeiro a Acessibilidade (não pede nada ao usuário). O JavaScript do navegador fica de reserva.
+        if let sala = salaDoMeet(navegadores) { return sala.leitura }
         var problema: LeituraDeReuniao?
         for n in navegadores {
             switch LeituraDeMeet.ler(n, executor: executor) {

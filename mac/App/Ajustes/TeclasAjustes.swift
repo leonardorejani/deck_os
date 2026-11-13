@@ -143,7 +143,7 @@ struct AjustesDaAgenda: View {
 // MARK: - Monitor
 
 /// Um bloco pequeno no iPhone com processador, memória, bateria e rede, e a tela do Monitor de Atividade, que ainda mostra GPU, disco,
-/// energia, ventoinhas e dispositivos (só o que este Mac conseguir ler). Nasce desligado, e cada item se liga ou desliga aqui,
+/// energia, ventoinhas e dispositivos (só o que este Mac conseguir ler). Vem ligado de fábrica, e cada item se liga ou desliga aqui,
 /// porque a tela do iPhone não tem muito espaço. De fábrica, ligado o bloco, todos os itens aparecem.
 struct AjustesDoMonitor: View {
     @ObservedObject var modelo: ModeloApp
@@ -152,7 +152,7 @@ struct AjustesDoMonitor: View {
         let c = modelo.config
         CartaoDeAjustes(titulo: "Monitor", nota: c.blocos.monitor ? nil : "Um bloco pequeno no iPhone com o que o Mac está usando agora") {
             LinhaComChave(titulo: "Mostrar na tela do iPhone", apoio: "Só aparece o que você deixar ligado abaixo", ligada: c.blocos.monitor) { v in
-                modelo.gravar { $0.blocos.monitor = v }
+                modelo.gravar { $0.blocos.monitor = v; $0.blocos.monitorEscolhido = true }
             }
             if c.blocos.monitor {
                 item("Processador", "Quanto do processador está em uso", c.monitor.cpu) { $0.monitor.cpu = $1 }
@@ -197,13 +197,13 @@ struct AjustesDoMeet: View {
     var tecla: Tecla
 
     private static let opcoes: [(id: String?, texto: String)] = [
-        (nil, "Abrir o Meet no navegador"),
+        (nil, "Abrir a central do Meet (entrar, microfone, câmera e sair)"),
         (IdsDeAcao.reuniaoMicrofone, "Mutar ou desmutar o microfone"),
         (IdsDeAcao.reuniaoCamera, "Ligar ou desligar a câmera"),
     ]
 
     var body: some View {
-        CartaoDeAjustes(titulo: "Google Meet", nota: "Vale para a sala aberta no Safari, Chrome, Arc, Brave ou Edge. Não precisa de app instalado. O Mac pede Acessibilidade e o controle do navegador na primeira vez.") {
+        CartaoDeAjustes(titulo: "Google Meet", nota: "Vale para a sala aberta no Safari, Chrome, Arc, Brave ou Edge. Não precisa de app instalado nem de ligar nada no navegador: o Deck usa a Acessibilidade, que ele já pede. Deixe a aba da reunião na frente da janela dela.") {
             LinhaDeAjuste(titulo: "Ao apertar a tecla", apoio: nil) {
                 Picker("Ao apertar a tecla", selection: Binding(get: { tecla.acao?.id }, set: { id in tela.escolherAcao(id.map { AcaoDeApp(id: $0, valor: nil) }) })) {
                     ForEach(Self.opcoes, id: \.id) { Text($0.texto).tag($0.id) }

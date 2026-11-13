@@ -100,6 +100,7 @@ export default async function (h) {
   await h.reset(); await h.cenario({ comMonitorApp: true });
   p = await h.pagina(); await pronta(h, p); await abrir(h, p);
   h.ok(/O monitor está desligado/.test(await p.evaluate(() => document.querySelector('#mn-corpo').textContent)) && await cartoes(p) === '', 'bloco desligado: a tela diz onde ligar, sem cartão falso');
+  h.ok(/em Este Mac/.test(await p.evaluate(() => document.querySelector('#mn-corpo').textContent)) && !/tecla Monitor de Atividade/.test(await p.evaluate(() => document.querySelector('#mn-corpo').textContent)), 'o aviso manda ligar em Este Mac, que todo perfil tem, e não na tecla do Monitor (que pode não existir)');
   await p.context().close();
 
   await h.reset(); await h.cenario({ comMonitorApp: true, blocos: { monitor: true }, monitorItens: { cpu: false, memoria: false, bateria: false, rede: false, gpu: false, disco: false, energia: false, ventoinhas: false, dispositivos: false } });

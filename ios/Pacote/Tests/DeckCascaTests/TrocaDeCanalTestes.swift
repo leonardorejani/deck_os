@@ -135,6 +135,23 @@ final class TrocaDeCanalTestes: XCTestCase {
         XCTAssertTrue(c.quadro.js.isEmpty)
     }
 
+    /// 13/11/2026: o Bluetooth cai com o cabo plugado (o Mac fechou o enlace) e depois o cabo sai. Sem religar nada, o
+    /// Bluetooth tem que voltar sozinho e virar o canal.
+    func testBluetoothQueCaiuComOCaboPlugadoVoltaSozinhoQuandoOCaboSai() async throws {
+        let c = cenario()
+        c.casca.iniciar()
+        let mac = try MacFalso(porta: c.porta, segredo: "ABCDEFGHIJKLMNOPQRST")
+        await esperar { c.casca.canais.obter()?.tipo == .cabo }
+        await esperar { c.bt.mac != nil }
+        c.macBt.sairDoAlcance()
+        await esperar { c.bt.mac == nil }
+        mac.cair()
+        await esperar { c.casca.canais.obter()?.tipo == .bluetooth }
+        XCTAssertEqual(c.casca.canais.obter()?.tipo, .bluetooth)
+        let r = await requisitar(c.casca)
+        XCTAssertTrue(r.contains("\"status\":200"), r)
+    }
+
     func testSemNenhumDosDoisAPaginaVeSemCanal() async throws {
         let c = cenario()
         c.casca.iniciar()

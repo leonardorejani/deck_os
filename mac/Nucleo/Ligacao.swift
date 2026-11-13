@@ -237,7 +237,8 @@ enum Ligacao {
             reunioes: AbridorDeReuniao(shell: executor), criadorDeAgenda: criadorDeAgenda ?? Self.criadorPadrao(),
             abridorDeSessao: AbridorDeSessaoNoMac(raiz: URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".claude/jobs"), shell: executor),
             apps: apps ?? AppsDoMac(pastaDeCache: AppsDoMac.pastaDeCachePadrao(), executor: executor),
-            controles: ControlesReais(executor: executor), processos: ProcessosReais(executor: executor))
+            controles: ControlesReais(executor: executor), processos: ProcessosReais(executor: executor),
+            meet: MeetReal(executor: executor))
     }
 
     /// Só o Mac grava na agenda: no Linux (CI) a rota fica sem criador e responde 404.
