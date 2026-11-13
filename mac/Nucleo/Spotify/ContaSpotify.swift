@@ -37,11 +37,21 @@ struct DispositivoSpotify: Codable, Equatable, Sendable {
 struct ItemDaFila: Codable, Equatable, Sendable {
     var faixa: String
     var artista: String
+    /// Para pular até a música da fila (confere que a fila não andou entre ver e tocar).
+    var uri: String? = nil
+    /// Capa pequena do Spotify (a menor com pelo menos 128 px, para não ficar borrada na miniatura).
+    var capa: String? = nil
 }
 
 struct FilaSpotify: Codable, Equatable, Sendable {
     var atual: ItemDaFila?
     var proximas: [ItemDaFila]
+    /// Nome da lista, do álbum ou do artista que está tocando ("Próximas de: ..."). nil quando o Spotify não deixa saber.
+    var contexto: String? = nil
+}
+
+struct RecentesSpotify: Codable, Equatable, Sendable {
+    var itens: [ItemDaFila]
 }
 
 /// O que o /me/player sabe e o AppleScript não: repetir a música, aparelho ativo e o volume dele.
@@ -72,7 +82,7 @@ struct LoginPendente: Equatable, Sendable {
 final class ContaSpotify: @unchecked Sendable {
     static let api = "https://api.spotify.com/v1"
     static let contas = "https://accounts.spotify.com"
-    static let escopos = "user-read-playback-state user-modify-playback-state user-read-currently-playing user-library-read user-library-modify"
+    static let escopos = "user-read-playback-state user-modify-playback-state user-read-currently-playing user-library-read user-library-modify user-read-recently-played"
     /// Quanto antes do vencimento o token já é trocado.
     static let folgaDoToken: Double = 60
 
@@ -80,6 +90,7 @@ final class ContaSpotify: @unchecked Sendable {
     private let transporte: TransporteWeb
     private let agora: @Sendable () -> Date
     private let trava = NSLock()
+    private var nomesDeContexto: [String: String] = [:]
     /// A chave do Deck (`ChaveSpotify.embutida`), já validada. Nos testes entra à mão.
     private let embutida: String?
     private let travaAviso = NSLock()
@@ -363,17 +374,69 @@ final class ContaSpotify: @unchecked Sendable {
     // MARK: Fila e repetição
 
     func fila(limite: Int = 20) -> Result<FilaSpotify, ErroSpotify> {
-        chamar("GET", "/me/player/queue").map { r in
+        let r = chamar("GET", "/me/player/queue").map { r in
             let obj = (json(r) as? [String: Any]) ?? [:]
-            func item(_ o: Any?) -> ItemDaFila? {
-                guard let d = o as? [String: Any], let nome = d["name"] as? String else { return nil }
-                let artistas = (d["artists"] as? [[String: Any]])?.compactMap { $0["name"] as? String }.joined(separator: ", ")
-                // Podcast não tem artista: vale o nome do programa.
-                let quem = (artistas?.isEmpty == false ? artistas : nil) ?? ((d["show"] as? [String: Any])?["name"] as? String) ?? ""
-                return ItemDaFila(faixa: nome, artista: quem)
+            let proximas = ((obj["queue"] as? [Any]) ?? []).compactMap(Self.itemDaFila).prefix(limite)
+            return FilaSpotify(atual: Self.itemDaFila(obj["currently_playing"]), proximas: Array(proximas))
+        }
+        guard case .success(var f) = r else { return r }
+        f.contexto = nomeDoContexto()
+        return .success(f)
+    }
+
+    /// Música ou episódio do JSON do Spotify. A capa vem do álbum (ou do programa, no podcast).
+    static func itemDaFila(_ o: Any?) -> ItemDaFila? {
+        guard let d = o as? [String: Any], let nome = d["name"] as? String else { return nil }
+        let artistas = (d["artists"] as? [[String: Any]])?.compactMap { $0["name"] as? String }.joined(separator: ", ")
+        // Podcast não tem artista: vale o nome do programa.
+        let quem = (artistas?.isEmpty == false ? artistas : nil) ?? ((d["show"] as? [String: Any])?["name"] as? String) ?? ""
+        let imagens = ((d["album"] as? [String: Any])?["images"] as? [[String: Any]]) ?? (d["images"] as? [[String: Any]]) ?? []
+        return ItemDaFila(faixa: nome, artista: quem, uri: d["uri"] as? String, capa: capaPequena(imagens))
+    }
+
+    /// Das imagens do Spotify (da maior para a menor), a menor que ainda tem 128 px de largura. Sem tamanho, a última.
+    static func capaPequena(_ imagens: [[String: Any]]) -> String? {
+        let urls = imagens.compactMap { i -> (String, Int)? in (i["url"] as? String).map { ($0, (i["width"] as? Int) ?? 0) } }
+        return (urls.filter { $0.1 >= 128 }.min { $0.1 < $1.1 } ?? urls.last)?.0
+    }
+
+    /// De onde vêm as próximas: a lista, o álbum ou o artista que toca. O nome é pedido uma vez por contexto e guardado.
+    /// Lista privada não deixa ler o nome (falta permissão): fica nil e a tela diz só "Próximas".
+    private func nomeDoContexto() -> String? {
+        guard case .success(let r) = chamar("GET", "/me/player"),
+              let ctx = (json(r) as? [String: Any])?["context"] as? [String: Any],
+              let uri = ctx["uri"] as? String else { return nil }
+        let partes = uri.split(separator: ":").map(String.init)
+        guard partes.count == 3, ["playlist", "album", "artist"].contains(partes[1]) else { return nil }
+        trava.lock(); let guardado = nomesDeContexto[uri]; trava.unlock()
+        if let guardado { return guardado }
+        let caminho = ["playlist": "/playlists/", "album": "/albums/", "artist": "/artists/"][partes[1]]! + partes[2]
+        let query = partes[1] == "playlist" ? [("fields", "name")] : []
+        guard case .success(let n) = chamar("GET", caminho, query), let nome = (json(n) as? [String: Any])?["name"] as? String else { return nil }
+        trava.lock(); nomesDeContexto[uri] = nome; trava.unlock()
+        return nome
+    }
+
+    /// Toca a música da fila que a pessoa escolheu, pulando as de antes dela. `posicao` é a vez dela na fila (1 é a próxima).
+    /// Com `uri`, confere na fila de agora: se ela andou, acha a música onde estiver, e se sumiu, não pula nada.
+    func pularFila(posicao: Int, uri: String?) -> ErroSpotify? {
+        var vezes = posicao
+        if let uri {
+            guard case .success(let f) = fila(limite: 50), let i = f.proximas.firstIndex(where: { $0.uri == uri }) else {
+                return ErroSpotify(texto: "A fila mudou. Abra a fila de novo.")
             }
-            let proximas = ((obj["queue"] as? [Any]) ?? []).compactMap(item).prefix(limite)
-            return FilaSpotify(atual: item(obj["currently_playing"]), proximas: Array(proximas))
+            vezes = i + 1
+        }
+        guard (1...50).contains(vezes) else { return .recusou }
+        for _ in 0..<vezes { if let e = erro(chamar("POST", "/me/player/next")) { return e } }
+        return nil
+    }
+
+    /// O que tocou por último, mais recente primeiro. Pede a permissão de histórico, que logins antigos não têm.
+    func recentes(limite: Int = 20) -> Result<RecentesSpotify, ErroSpotify> {
+        chamar("GET", "/me/player/recently-played", [("limit", String(limite))]).map { r in
+            let itens = ((json(r) as? [String: Any])?["items"] as? [[String: Any]]) ?? []
+            return RecentesSpotify(itens: itens.compactMap { Self.itemDaFila($0["track"]) })
         }
     }
 

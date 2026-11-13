@@ -96,6 +96,11 @@ final class FonteSpotify: @unchecked Sendable {
         return String(h, radix: 16)
     }
 
+    /// O Spotify guarda a mesma capa em três tamanhos, e o que muda na URL é o prefixo do código: 00001e02 (300 px) e 0000b273 (640 px).
+    static func urlDaCapaGrande(_ arte: String) -> String {
+        arte.replacingOccurrences(of: "ab67616d00001e02", with: "ab67616d0000b273")
+    }
+
     /// Bundle id do app do Spotify no Mac.
     static let bundleId = "com.spotify.client"
     /// Tempo máximo de uma leitura por AppleScript. O estado espera 2 s, então 4 s já é folga de sobra.
@@ -206,7 +211,9 @@ final class FonteSpotify: @unchecked Sendable {
             return
         }
         defer { trava.lock(); if baixando == id { baixando = nil }; trava.unlock() }
-        guard let dados = baixar(arte), let px = pixels(dados) else {
+        // A arte do AppleScript vem em 300 px. Pede a de 640 (a images[0] da API do Spotify) e, se não houver, fica com a que veio.
+        let grande = Self.urlDaCapaGrande(arte)
+        guard let dados = (grande != arte ? baixar(grande) : nil) ?? baixar(arte), let px = pixels(dados) else {
             // A faixa já é outra: a imagem e as cores da anterior não podem ir junto com o id novo.
             trava.lock()
             capaAtual = nil; coresAtuais = []; imagemAtual = nil; falhouId = id; falhouEm = agora

@@ -252,7 +252,7 @@ final class SpotifyApiTestes: XCTestCase {
         XCTAssertEqual(q["code_challenge_method"], "S256")
         XCTAssertEqual(q["code_challenge"], Pkce.desafio(p.verificador))
         XCTAssertEqual(q["state"], p.estado)
-        for e in ["user-read-playback-state", "user-modify-playback-state", "user-library-read", "user-library-modify"] {
+        for e in ["user-read-playback-state", "user-modify-playback-state", "user-library-read", "user-library-modify", "user-read-recently-played"] {
             XCTAssertTrue((q["scope"] ?? "").contains(e), e)
         }
         XCTAssertNil(q["client_secret"])
@@ -441,6 +441,70 @@ final class SpotifyApiTestes: XCTestCase {
         let f = try c.fila().get()
         XCTAssertEqual(f.atual, ItemDaFila(faixa: "Agora", artista: "Coral"))
         XCTAssertEqual(f.proximas, [ItemDaFila(faixa: "Próxima", artista: "Ana, Beto"), ItemDaFila(faixa: "Episódio 4", artista: "Podcast")])
+    }
+
+    func testFilaTrazUriCapaPequenaENomeDaLista() throws {
+        let t = TransporteFalso { r in
+            let imagens: [[String: Any]] = [["url": "https://i/640", "width": 640], ["url": "https://i/300", "width": 300], ["url": "https://i/64", "width": 64]]
+            if r.url.hasSuffix("/me/player/queue") {
+                return respostaJson(200, ["currently_playing": ["name": "Agora", "artists": [["name": "Coral"]], "uri": "u:0", "album": ["images": imagens]],
+                                         "queue": [["name": "Depois", "artists": [["name": "Ana"]], "uri": "u:1", "album": ["images": imagens]]]])
+            }
+            if r.url.hasSuffix("/me/player") { return respostaJson(200, ["context": ["uri": "spotify:playlist:abc", "type": "playlist"]]) }
+            if r.url.contains("/playlists/abc") { return respostaJson(200, ["name": "Minha Lista"]) }
+            return nil
+        }
+        let (c, _) = logada(t)
+        let f = try c.fila().get()
+        XCTAssertEqual(f.contexto, "Minha Lista")
+        XCTAssertEqual(f.atual, ItemDaFila(faixa: "Agora", artista: "Coral", uri: "u:0", capa: "https://i/300"))
+        XCTAssertEqual(f.proximas, [ItemDaFila(faixa: "Depois", artista: "Ana", uri: "u:1", capa: "https://i/300")])
+        _ = try c.fila().get()
+        XCTAssertEqual(t.pedidos.filter { $0.url.contains("/playlists/abc") }.count, 1, "o nome da lista é pedido uma vez só")
+    }
+
+    func testFilaSemNomeDeListaSegueSemContexto() throws {
+        let t = TransporteFalso { r in
+            r.url.hasSuffix("/me/player/queue") ? respostaJson(200, ["queue": [["name": "X", "artists": [["name": "A"]]]]])
+                : respostaJson(403, ["error": ["status": 403, "message": "Forbidden"]])
+        }
+        let (c, _) = logada(t)
+        let f = try c.fila().get()
+        XCTAssertNil(f.contexto)
+        XCTAssertEqual(f.proximas.map { $0.faixa }, ["X"])
+    }
+
+    func testPularNaFilaPulaAteAMusicaEscolhida() {
+        let t = TransporteFalso { r in
+            if r.metodo == "GET" { return respostaJson(200, ["queue": ["a", "b", "c"].map { ["name": $0, "artists": [["name": "X"]], "uri": "u:\($0)"] }]) }
+            return respostaJson(204)
+        }
+        let (c, _) = logada(t)
+        XCTAssertNil(c.pularFila(posicao: 1, uri: "u:c"), "a vez certa vem da fila de agora, não do que a tela achava")
+        XCTAssertEqual(t.pedidos.filter { $0.metodo == "POST" }.map { $0.url },
+                       Array(repeating: "https://api.spotify.com/v1/me/player/next", count: 3))
+    }
+
+    func testPularNaFilaQueMudouNaoPulaNada() {
+        let t = TransporteFalso { r in r.metodo == "GET" ? respostaJson(200, ["queue": [["name": "a", "uri": "u:a"]]]) : respostaJson(204) }
+        let (c, _) = logada(t)
+        XCTAssertEqual(c.pularFila(posicao: 2, uri: "u:z")?.texto, "A fila mudou. Abra a fila de novo.")
+        XCTAssertTrue(t.pedidos.filter { $0.metodo == "POST" }.isEmpty)
+    }
+
+    func testPularNaFilaSemUriUsaAPosicaoDaTela() {
+        let t = TransporteFalso { _ in respostaJson(204) }
+        let (c, _) = logada(t)
+        XCTAssertNil(c.pularFila(posicao: 2, uri: nil))
+        XCTAssertEqual(t.pedidos.filter { $0.metodo == "POST" }.count, 2)
+        XCTAssertNotNil(c.pularFila(posicao: 0, uri: nil))
+    }
+
+    func testRecentesTrazAsFaixasDoHistorico() throws {
+        let t = TransporteFalso { _ in respostaJson(200, ["items": [["track": ["name": "Velha", "artists": [["name": "Zé"]], "uri": "u:v"]], ["played_at": "x"]]]) }
+        let (c, _) = logada(t)
+        XCTAssertEqual(try c.recentes().get().itens, [ItemDaFila(faixa: "Velha", artista: "Zé", uri: "u:v")])
+        XCTAssertEqual(t.pedidos.last?.url, "https://api.spotify.com/v1/me/player/recently-played?limit=20")
     }
 
     func testFilaLimitaAQuantidadeDeProximas() throws {

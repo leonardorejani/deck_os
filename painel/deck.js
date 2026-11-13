@@ -167,7 +167,7 @@ function mesCHTML() {
 const usoAtual = () => posicao === 'horizontal' && V.comp === 'a' ? usoCartao() : usoTira();
 const temModos = s => s.repetir !== undefined || s.aleatorio !== undefined; // Mac antigo não manda: sem inventar, os botões não aparecem
 const botaoModo = (k, s, rot) => k === 'repetir' && conectado(s)
-  ? `<button class="modo" data-midia="repetir" data-modo="${modoRepetir(s)}" aria-label="${ROTULO_REPETIR[modoRepetir(s)]}" aria-pressed="${modoRepetir(s) !== 'nao'}">${SVG.repetir}</button>`
+  ? `<button class="modo" data-midia="repetir" data-modo="${modoRepetir(s)}" aria-label="${ROTULO_REPETIR[modoRepetir(s)]}" aria-pressed="${modoRepetir(s) !== 'nao'}">${modoRepetir(s) === 'faixa' ? SVG.repetirFaixa : SVG.repetir}</button>`
   : `<button class="modo" data-midia="${k}" aria-label="${rot}" aria-pressed="${!!s[k]}">${SVG[k]}</button>`;
 const capaEstilo = s => { const c1 = corCapa(s.cores?.[0], .55), c2 = corCapa(s.cores?.[1] || s.cores?.[0], .35); return c1 ? ` style="--capa-1: ${c1}; --capa-2: ${c2}"` : '' };
 function playerHTML() {
@@ -324,7 +324,8 @@ function pintarMidia(raiz, s) {
   if (b && b.classList.contains('play') === t) { b.classList.toggle('play', !t); b.setAttribute('aria-label', t ? 'Pausar' : 'Tocar'); b.innerHTML = t ? SVG.pausar : SVG.tocar }
   $$('.modo', raiz).forEach(m => {
     if (m.dataset.midia !== 'repetir') return m.setAttribute('aria-pressed', String(!!s[m.dataset.midia]));
-    const modo = modoRepetir(s); // com o Spotify conectado são três jeitos: nada, a lista, só a música
+    const modo = modoRepetir(s), eraFaixa = m.dataset.modo === 'faixa'; // com o Spotify conectado são três jeitos: nada, a lista, só a música
+    if (eraFaixa !== (modo === 'faixa')) m.innerHTML = modo === 'faixa' ? SVG.repetirFaixa : SVG.repetir; // só a música leva o 1 dentro
     m.setAttribute('aria-pressed', String(modo !== 'nao')); m.setAttribute('aria-label', conectado(s) ? ROTULO_REPETIR[modo] : 'Repetir a lista ou o álbum');
     if (conectado(s)) m.dataset.modo = modo; else delete m.dataset.modo;
   });

@@ -355,6 +355,8 @@ struct ConversaWhatsApp: Codable, Equatable, Sendable {
 // POST /api/spotify/dispositivo?id=<id>   passa a reprodução para o aparelho (só conectado)
 // POST /api/spotify/curtir?v=1|0   curte ou descurte a faixa que toca (só conectado)
 // GET  /api/spotify/fila           -> FilaSpotify (só conectado)
+// GET  /api/spotify/recentes       -> RecentesSpotify (só conectado)
+// POST /api/spotify/pular?n=3[&uri=...]   toca a música na vez n da fila, pulando as de antes (só conectado)
 // POST /api/spotify/repetir?modo=faixa|nao|contexto   repetir só a música, nada ou a lista pela API (só conectado, senão 409).
 //                                  Sem `modo`, `repetir[?v=1|0]` segue sendo o do AppleScript acima.
 // GET  /api/capa                   PNG ou JPEG da capa atual

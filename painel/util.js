@@ -44,6 +44,7 @@ const SVG = {
   ventoinha: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="1.8"/><path d="M12 10.2c-.6-3.4.3-6 2.6-6.2 2.2-.2 2.7 2.4.6 4.6M13.8 12c3.4-.6 6 .3 6.2 2.6.2 2.2-2.4 2.7-4.6.6M12 13.8c.6 3.4-.3 6-2.6 6.2-2.2.2-2.7-2.4-.6-4.6M10.2 12c-3.4.6-6-.3-6.2-2.6C3.8 7.2 6.4 6.7 8.6 8.8"/></svg>',
   usb: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="19" r="2"/><path d="M12 17V3.5M12 3.5 10 6h4zM12 12.5l4-2.5v-1.5M12 14.5l-4-2.5v-2"/><rect x="14.7" y="6.6" width="2.6" height="2.4" rx=".4"/><circle cx="8" cy="9.4" r="1.2"/></svg>',
   repetir: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4M3 11v-1a4 4 0 0 1 4-4h14M7 22l-4-4 4-4M21 13v1a4 4 0 0 1-4 4H3"/></svg>',
+  repetirFaixa: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4M3 11v-1a4 4 0 0 1 4-4h14M7 22l-4-4 4-4M21 13v1a4 4 0 0 1-4 4H3M11 10h1v4"/></svg>',
 };
 
 // ícones dos apps que o Mac pode ter em uma tecla (o nome vem em tecla.icone)

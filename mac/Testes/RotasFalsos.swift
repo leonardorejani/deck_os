@@ -98,6 +98,14 @@ struct SpotifyFalso: ControleSpotify {
         guard conectado else { return .failure(.naoConectado) }
         return .success(FilaSpotify(atual: ItemDaFila(faixa: "Agora", artista: "Coral"), proximas: [ItemDaFila(faixa: "Depois", artista: "Ana")]))
     }
+    func recentes() -> Result<RecentesSpotify, ErroSpotify> {
+        guard conectado else { return .failure(.naoConectado) }
+        return .success(RecentesSpotify(itens: [ItemDaFila(faixa: "Ontem", artista: "Beto")]))
+    }
+    func pularFila(posicao: Int, uri: String?) -> ErroSpotify? {
+        guard conectado else { return .naoConectado }
+        registro.anotar("pularFila \(posicao) \(uri ?? "-")"); return nil
+    }
     func repetirModo(_ modo: String) -> ErroSpotify? {
         guard conectado else { return .naoConectado }
         registro.anotar("repetirModo \(modo)"); return nil
