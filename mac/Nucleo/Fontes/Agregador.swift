@@ -173,6 +173,11 @@ final class Agregador: @unchecked Sendable {
         }
     }
 
+    /// O uso das contas, do mesmo cache do estado (para o detalhe do uso, que não refaz a leitura).
+    func uso(config: Config, agora: Date = Date()) -> Leitura<[UsoConta]> {
+        cacheUso.obterAgil(chave: config.contas, agora: agora, padrao: Leitura(valor: [], aviso: nil), paciencia: paciencia) { self.fontes.uso(config.contas, agora) }
+    }
+
     func estado(config: Config, agora: Date = Date()) -> Estado {
         let perfil = config.perfis.first { $0.id == config.perfilAtivo }
         let teclas = perfil?.teclas ?? []

@@ -120,14 +120,16 @@ const relogioHTML = () => `<div class="relogio" aria-label="Hora"><div class="pl
 const relogioQHTML = () => `<div class="relogio relogio-q" aria-label="Hora"><div class="placa" data-i="h"></div><div class="placa" data-i="m"></div></div>`;
 const nivel = p => p == null ? '' : p >= 90 ? 'cheio' : p >= 70 ? 'alto' : '';
 const medidor = (rot, p) => `<div class="medidor ${nivel(p)}" aria-label="${rot}: ${p == null ? 'sem medição' : p + '%'}"><span class="trilho"><i style="width:${p ?? 0}%"></i></span><b>${p == null ? '-' : p + '%'}</b></div>`;
+/* o bloco todo é um botão: o toque abre o detalhe do uso (uso.js). O rótulo lê os números, já que o leitor de tela não entra no botão */
+const usoToque = () => `data-abrir-uso role="button" tabindex="0" aria-haspopup="dialog" aria-label="${esc('Uso das IAs: ' + usoVisivel().map(u => `${u.nome} ${u.conta} ${u.semana == null ? 'sem medição' : u.semana + '%'}`).join(', ') + '. Ver detalhes')}"`;
 function usoCartao() {
   if (!usoVisivel().length) return '';
-  return `<div class="cartao uso depende">${esconder('uso')}<div class="cartao-titulo"><span>Uso da semana</span><span class="renova-tit">renova</span></div>
+  return `<div class="cartao uso depende" ${usoToque()}>${esconder('uso')}<div class="cartao-titulo"><span>Uso da semana</span><span class="renova-tit">renova</span></div>
     ${usoVisivel().map(u => `<div class="uso-linha"><span class="uso-nome">${icServico(u.nome)}<span>${esc(u.nome)} <small>${esc(u.conta)}</small></span></span>${medidor('semana', u.semana)}<span class="renova" aria-label="renova ${renovaEm(u.renova, true, V.ref)}">${renovaEm(u.renova, true, V.ref)}</span></div>`).join('')}</div>`;
 }
 function usoTira() {
   if (!usoVisivel().length) return ''; // nenhuma conta para mostrar: a faixa some
-  return `<div class="uso-tira depende">${esconder('uso')}${usoVisivel().map(u => { const p = u.semana, txt = p == null ? '-' : p + '%'; return `<span class="${nivel(p)}" aria-label="${esc(u.nome)} ${esc(u.conta)}: ${p == null ? 'sem medição' : txt}">${icServico(u.nome)}<span class="nome-u">${esc(u.nome === 'Claude' ? u.conta : u.nome)}</span> <span class="mini"><i style="width:${p ?? 0}%"></i></span><b>${txt}</b></span>` }).join('')}</div>`;
+  return `<div class="uso-tira depende" ${usoToque()}>${esconder('uso')}${usoVisivel().map(u => { const p = u.semana, txt = p == null ? '-' : p + '%'; return `<span class="${nivel(p)}" aria-label="${esc(u.nome)} ${esc(u.conta)}: ${p == null ? 'sem medição' : txt}">${icServico(u.nome)}<span class="nome-u">${esc(u.nome === 'Claude' ? u.conta : u.nome)}</span> <span class="mini"><i style="width:${p ?? 0}%"></i></span><b>${txt}</b></span>` }).join('')}</div>`;
 }
 /* Monitor do Mac: uma faixa pequena com o que a pessoa deixou ligado nos Ajustes do Mac (`itens` do estado).
    Bateria some sozinha em Mac sem bateria. Processador, memória e rede ficam com "-" até a primeira medida. */
@@ -560,6 +562,7 @@ tela.addEventListener('click', ev => {
   if (!lp.hidden && !ev.target.closest('#lista-perfis, .tecla.menu')) { lp.hidden = true; return }
   const eb = ev.target.closest('[data-esconder]'); if (eb && organizando) { ev.stopPropagation(); return trocarBloco(eb.dataset.esconder, false) }
   const mb = ev.target.closest('[data-mostrar]'); if (mb) return trocarBloco(mb.dataset.mostrar, true);
+  if (!organizando && ev.target.closest('[data-abrir-uso]')) return abrirUso();
   if (ev.target.closest('#f-relogio')) return fecharRelogio();
   const m = ev.target.closest('[data-midia]'); if (m) return midia(m.dataset.midia);
   if (!organizando && ev.target.closest('[data-abrir-spotify]') && V.spotify) return abrirPlayer();
@@ -572,6 +575,7 @@ tela.addEventListener('click', ev => {
   if (t && ev.detail === 0) return organizando ? abrirEditor(t.dataset.id === 'menu' ? 'nova' : t.dataset.id) : executar(t.dataset.id);
   if (organizando && !t && !ev.target.closest('.barra-organizar, .folha, .veu, #aviso')) sairOrganizar();
 });
+addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && !organizando && e.target.matches?.('[data-abrir-uso]')) { e.preventDefault(); abrirUso() } });
 addEventListener('keydown', e => { if (e.key === 'Escape') { fecharRelogio(); fecharFolha(); sairOrganizar() } });
 
 /* ---------- gravar no Mac: o iPhone só grava pela config inteira (PUT /api/config) ---------- */
