@@ -4,7 +4,15 @@
 const pronta = (h, p) => h.espera(p, () => !document.querySelector('#conteudo.carregando') && !!document.querySelector('.tecla[data-id="apagar"]'));
 const nomes = p => p.evaluate(() => [...document.querySelectorAll('#wa-lista .conversa .nome-c')].map(x => x.childNodes[0].textContent.trim()));
 
+import { readFileSync } from 'node:fs';
 export default async function (h) {
+  /* ---------- o guarda de resposta velha de lerWhats tem que estar no código, não dentro de um comentário ---------- */
+  const fonte = readFileSync(new URL('../paineis.js', import.meta.url), 'utf8').split('\n');
+  const iLer = fonte.findIndex(l => l.startsWith('async function lerWhats'));
+  const iCatch = fonte.findIndex((l, i) => i > iLer && l.includes('} catch'));
+  const ativo = fonte.slice(iLer, iCatch).some(l => /^\s*if \(n !== wa\.seq\) return;\s*$/.test(l) && !l.includes('//'));
+  h.ok(ativo, 'lerWhats descarta resposta de leitura velha (o guarda não está dentro de comentário)');
+
   /* ---------- lista lenta (canal devagar) chega, em vez de virar "sem conexão" ---------- */
   await h.cenario({ whatsappOrigem: 'qr', whatsappRico: true, atrasoListas: 1200 });
   let p = await h.pagina({ ajustes: { tempoLimite: 500 } }); await pronta(h, p);

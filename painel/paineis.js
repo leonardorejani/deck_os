@@ -47,7 +47,8 @@ async function lerWhats() {
   const n = ++wa.seq, t0 = Date.now();
   try {
     /* O Mac por QR dá versão à lista: com a que a tela já tem ele responde só "igual" e não reenvia tudo (o Bluetooth leva uns 25 KB/s) */
-    const l = await canal.whatsapp(wa.lista && wa.versao != null ? wa.versao : -1); // -1: ainda sem versão, o Mac manda a lista e a versão dela if (n !== wa.seq) return;
+    const l = await canal.whatsapp(wa.lista && wa.versao != null ? wa.versao : -1); // -1: ainda sem versão, o Mac manda a lista e a versão dela
+    if (n !== wa.seq) return;
     if (l && l.igual && !wa.lista) { wa.versao = null; return }
     wa.versao = l && !Array.isArray(l) && l.v != null ? l.v : null;
     const lista = l && l.igual ? wa.lista : Array.isArray(l) ? l : Array.isArray(l?.conversas) ? l.conversas : [], j = JSON.stringify([lista, V?.whatsapp || null]); // o total e a origem vêm do estado, não da lista
