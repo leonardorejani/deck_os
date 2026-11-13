@@ -999,6 +999,8 @@ Mail tirado do iPhone (12/11/2026). Palavras dele: "tira a tela do mail por enqu
     - Precisa atualizar o app do iPhone e o Deck do Mac. Testes: `ios/Pacote/Tests/DeckCascaTests/BluetoothTestes.swift`
       (id que nunca conecta, situação da busca, vizinho que recusa) e `mac/Testes/BluetoothTestes.swift` (vigia do anúncio).
 
+Bluetooth que não volta (13/11/2026, frente bluetooth-volta). Palavras dele: "quando religuei o bluetooth ele ficou carregando e nao conectou mais", "conectando o cabo e tirando depois ele nao conecta mais via bluetooth", "demorou muito tempo" e "eu clico em parear, o spinner reinicia e nao conecta". Pelo diário do iPhone e o log do Mac: ao desligar e ligar o Bluetooth do iPhone o app publicava o serviço de novo sem tirar o anterior, o Mac via o serviço em dobro e assinava o velho, então nenhuma resposta chegava até fechar o app (agora o rádio limpa os serviços antes de publicar, `PlanoDoPeriferico`). A demora e o pareamento que não conectava vinham da espera do Mac: iPhone com o app fechado atendia sem o serviço, a espera dobrava até 30 s e o pareamento do iPhone (15 s) acabava antes de o Mac voltar (agora iPhone sem o serviço espera 5 s fixos, `AgendaDoMac`).
+
 33. Conexões e uma fonte de verdade por estado (12/11/2026, frente mac-conexoes). Palavras dele: "pode manter a conexão
     com spotify entao se a pessoa quiser conectar essas opções aparecem nos controles", "quando ia parear pelo celular
     aparecia um código nada a ver e às vezes era o mesmo do PWA", "os ícones demoram e só aparecem ao alternar de perfil",
