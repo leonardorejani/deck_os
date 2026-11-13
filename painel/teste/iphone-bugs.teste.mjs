@@ -128,4 +128,19 @@ export default async function (h) {
   await dedo(p, ctx, { x: wb.x + wb.width / 2, y: wb.y + 40 }, { x: wb.x + wb.width / 2, y: wb.y + wb.height * .8 }, { espera: 30 }); await h.dormir(600);
   h.ok(await aberta(p, '#f-whats'), 'lista rolada: o gesto é da lista e a tela não fecha');
   await ctx.close();
+
+  /* 5. "a linha roxa ainda aparece" (13/11/2026): o risco tinha a cor da capa do Spotify, e a única coisa que pinta a capa fora do card
+     é o fundo do player cheio. Tela fechada não pode ser desenhada (parada fora da tela o iPhone deixava vazar uma fatia dela). */
+  {
+    const c = await h.novoContexto(); const q = await h.pagina({ ctx: c }); await pronta(h, q);
+    const vis = () => q.evaluate(() => [...document.querySelectorAll('.folha')].map(f => getComputedStyle(f).visibility + ':' + f.classList.contains('aberta')));
+    h.ok((await vis()).every(v => v === 'hidden:false'), 'folhas fechadas não são desenhadas (nenhuma fatia do fundo com a cor da capa pode aparecer)');
+    await q.evaluate(() => abrirPlayer()); await h.dormir(80);
+    h.ok(await q.evaluate(() => getComputedStyle(document.querySelector('#f-player')).visibility === 'visible'), 'o player cheio aparece assim que abre');
+    await h.dormir(600); await q.evaluate(() => fecharFolha()); await h.dormir(120);
+    h.ok(await q.evaluate(() => getComputedStyle(document.querySelector('#f-player')).visibility === 'visible'), 'ao fechar a tela ainda desce visível (a animação de saída não some de uma vez)');
+    await h.dormir(900);
+    h.ok(await q.evaluate(() => getComputedStyle(document.querySelector('#f-player')).visibility === 'hidden'), 'terminada a saída a folha deixa de ser desenhada');
+    await c.close();
+  }
 }

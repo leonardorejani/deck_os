@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"sort"
@@ -49,18 +50,34 @@ type Estado struct {
 	mu        sync.Mutex
 	conversas map[string]*Conversa
 	arquivo   string
+	// arquivadas lembra quais conversas o WhatsApp arquivou, mesmo as sem não lidas (que não vão para o conversas.json).
+	// Sem isso, a mensagem nova de uma arquivada nascia como conversa comum e furava Todas e o total.
+	arquivadas    map[string]bool
+	gravadasAntes []byte
 }
 
 func NovoEstado(arquivo string) *Estado {
-	e := &Estado{conversas: map[string]*Conversa{}, arquivo: arquivo}
+	e := &Estado{conversas: map[string]*Conversa{}, arquivo: arquivo, arquivadas: map[string]bool{}}
 	if arquivo == "" {
 		return e
+	}
+	if b, err := os.ReadFile(arquivo + ".arquivadas"); err == nil {
+		var ids []string
+		if json.Unmarshal(b, &ids) == nil {
+			for _, id := range ids {
+				e.arquivadas[id] = true
+			}
+			e.gravadasAntes = b
+		}
 	}
 	if b, err := os.ReadFile(arquivo); err == nil {
 		var lista []*Conversa
 		if json.Unmarshal(b, &lista) == nil {
 			for _, c := range lista {
 				e.conversas[c.ID] = c
+				if c.Arquivada {
+					e.arquivadas[c.ID] = true
+				}
 			}
 		}
 	}
@@ -137,9 +154,12 @@ func (e *Estado) Nome(id, nome string) {
 func (e *Estado) Limpar() {
 	e.mu.Lock()
 	e.conversas = map[string]*Conversa{}
+	e.arquivadas = map[string]bool{}
+	e.gravadasAntes = nil
 	e.mu.Unlock()
 	if e.arquivo != "" {
 		_ = os.Remove(e.arquivo)
+		_ = os.Remove(e.arquivo + ".arquivadas")
 	}
 }
 
@@ -152,7 +172,7 @@ func (e *Estado) Remover(id string) {
 func (e *Estado) obter(id, nome string, grupo bool) *Conversa {
 	c, ok := e.conversas[id]
 	if !ok {
-		c = &Conversa{ID: id}
+		c = &Conversa{ID: id, Arquivada: e.arquivadas[id]}
 		e.conversas[id] = c
 	}
 	if nome != "" {
@@ -220,9 +240,23 @@ func (e *Estado) Salvar() error {
 		}
 	}
 	b, err := json.Marshal(lista)
+	ids := make([]string, 0, len(e.arquivadas))
+	for id := range e.arquivadas {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	arq, errArq := json.Marshal(ids)
+	igual := bytes.Equal(arq, e.gravadasAntes)
 	e.mu.Unlock()
 	if err != nil {
 		return err
+	}
+	if errArq == nil && !igual {
+		if os.WriteFile(e.arquivo+".arquivadas", arq, 0o600) == nil {
+			e.mu.Lock()
+			e.gravadasAntes = arq
+			e.mu.Unlock()
+		}
 	}
 	tmp := e.arquivo + ".tmp"
 	if err := os.WriteFile(tmp, b, 0o600); err != nil {
@@ -235,7 +269,16 @@ func (e *Estado) Salvar() error {
 func (e *Estado) Arquivar(id string, sim bool) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	e.obter(id, "", false).Arquivada = sim
+	if sim {
+		e.arquivadas[id] = true
+		e.obter(id, "", false).Arquivada = true
+		return
+	}
+	// Desarquivar conversa que nunca vimos não cria linha vazia (o app state manda isso para todas as conversas comuns).
+	delete(e.arquivadas, id)
+	if c, ok := e.conversas[id]; ok {
+		c.Arquivada = false
+	}
 }
 
 // Numero guarda os dígitos do telefone da conversa, quando se descobre.

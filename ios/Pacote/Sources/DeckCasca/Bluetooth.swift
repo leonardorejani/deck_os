@@ -207,7 +207,7 @@ public final class GerenteBluetooth: @unchecked Sendable {
         Task.detached { [self] in
             do {
                 let entrada = try EnlaceSeguro.entrar(fluxo, codigoAcesso: pareado.codigoAcesso)
-                let nova = ConexaoCabo(fluxo: entrada.fluxo, segredo: { nil }, confiavel: true, nomeDoCanal: "O Bluetooth")
+                let nova = ConexaoCabo.bluetooth(fluxo: entrada.fluxo)
                 if reivindicar(nova, id: rotulo, nome: entrada.nomeMac) {
                     log("bluetooth: Mac \"\(entrada.nomeMac)\" conectado (cifrado), pelo sentido invertido")
                 } else {
@@ -323,7 +323,7 @@ public final class GerenteBluetooth: @unchecked Sendable {
                 tentativa = 0
                 espera = Self.esperaMinima
                 // O sentido invertido pode ter fechado o aperto de mão enquanto este conectava: o primeiro vale.
-                guard reivindicar(ConexaoCabo(fluxo: entrada.fluxo, segredo: { nil }, confiavel: true, nomeDoCanal: "O Bluetooth"), id: id, nome: entrada.nomeMac) else {
+                guard reivindicar(ConexaoCabo.bluetooth(fluxo: entrada.fluxo), id: id, nome: entrada.nomeMac) else {
                     log("bluetooth: aperto de mão com \(id.prefix(8)) fechou, mas o sentido invertido chegou antes: fechei este")
                     entrada.fluxo.fechar()
                     continue
@@ -553,7 +553,7 @@ public final class GerenteBluetooth: @unchecked Sendable {
             throw ErroPareamento.recusado(Self.texto(error))
         }
         log("bluetooth: pareado com \"\(p.mac.nome)\"")
-        ativar(ConexaoCabo(fluxo: p.pareando.fluxo, segredo: { nil }, confiavel: true, nomeDoCanal: "O Bluetooth"), id: p.mac.id, nome: p.mac.nome)
+        ativar(ConexaoCabo.bluetooth(fluxo: p.pareando.fluxo), id: p.mac.id, nome: p.mac.nome)
         return PareamentoFeito(pareado: Pareado(codigoAcesso: codigo, nomeMac: p.mac.nome, idBluetooth: p.mac.id), canal: CanalBluetooth(self))
     }
 

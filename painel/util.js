@@ -30,6 +30,7 @@ const SVG = {
   luzTeclado: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="9" width="20" height="11" rx="2"/><path d="M6 13h.01M10 13h.01M14 13h.01M18 13h.01M7 17h10M9 2v3M12 1v4M15 2v3"/></svg>',
   video: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="13" height="12" rx="2"/><path d="m15 10 6-3v10l-6-3"/></svg>',
   controles: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg>',
+  mudo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4zM22 9l-6 6M16 9l6 6"/></svg>',
   volume: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4zM15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg>',
   curtir: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.5-1.5 3-3.2 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.8 0-3 .5-4.5 2-1.5-1.5-2.7-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4 3 5.5l7 7z"/></svg>',
   aparelhos: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="16" height="20" x="4" y="2" rx="2"/><circle cx="12" cy="14" r="4"/><path d="M12 6h.01"/></svg>',
@@ -42,6 +43,10 @@ const SVG = {
   disco: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="15" rx="3"/><path d="M3 14.5h18M7 17.2v.01"/></svg>',
   ventoinha: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="1.8"/><path d="M12 10.2c-.6-3.4.3-6 2.6-6.2 2.2-.2 2.7 2.4.6 4.6M13.8 12c3.4-.6 6 .3 6.2 2.6.2 2.2-2.4 2.7-4.6.6M12 13.8c.6 3.4-.3 6-2.6 6.2-2.2.2-2.7-2.4-.6-4.6M10.2 12c-3.4.6-6-.3-6.2-2.6C3.8 7.2 6.4 6.7 8.6 8.8"/></svg>',
   usb: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="19" r="2"/><path d="M12 17V3.5M12 3.5 10 6h4zM12 12.5l4-2.5v-1.5M12 14.5l-4-2.5v-2"/><rect x="14.7" y="6.6" width="2.6" height="2.4" rx=".4"/><circle cx="8" cy="9.4" r="1.2"/></svg>',
+  microfoneCortado: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 3 18 18M9 9v2a3 3 0 0 0 5.1 2.1M15 9.3V5a3 3 0 0 0-5.7-1.3M5 10a7 7 0 0 0 11.2 5.6M19 10a7 7 0 0 1-.6 2.8M12 19v3"/></svg>',
+  camera: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="13" height="12" rx="2"/><path d="m15 10 6-3v10l-6-3"/></svg>',
+  cameraCortada: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 3 18 18M15 15v1a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h1M9.5 6H13a2 2 0 0 1 2 2v3.5M15 10l6-3v10"/></svg>',
+  desligar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.6 15.2C2.6 14 2 13 2 12c0-3 4.5-5 10-5s10 2 10 5c0 1-.6 2-1.6 3.2l-2.6-1.3a1.2 1.2 0 0 1-.7-1.1V10.5a14 14 0 0 0-10.2 0v2.3c0 .5-.3.9-.7 1.1z"/></svg>',
   repetir: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4M3 11v-1a4 4 0 0 1 4-4h14M7 22l-4-4 4-4M21 13v1a4 4 0 0 1-4 4H3"/></svg>',
 };
 
@@ -61,7 +66,7 @@ const icApp = n => (APPS.find(a => a.nome === n) || {}).ic;
 const IC_SERVICO = { Claude: 'icones/claude.png', Codex: 'icones/codex.png', Spotify: 'icones/spotify.png' };
 const icServico = n => IC_SERVICO[n] ? `<img class="ic-mini" src="${IC_SERVICO[n]}" alt="">` : `<span class="ic-mini svg" aria-hidden="true">${SVG.terminal}</span>`;
 // teclas de app que abrem uma lista no próprio iPhone (WhatsApp, Calendário, Monitor de Atividade e Controles)
-const PAINEL_DO_APP = { WhatsApp: 'whatsapp', Calendar: 'calendario', 'Activity Monitor': 'monitor', [CONTROLES_DO_MAC.valor]: 'controles' };
+const PAINEL_DO_APP = { WhatsApp: 'whatsapp', Calendar: 'calendario', 'Activity Monitor': 'monitor', [CONTROLES_DO_MAC.valor]: 'controles', [MEET_NAVEGADOR.valor]: 'meet' };
 // tecla com ação (abrir a caixa de entrada, o dia da agenda) vai pro Mac: a lista do iPhone é só da tecla sem ação
 const painelDe = t => t.tipo === 'app' && !t.acao ? PAINEL_DO_APP[t.valor] : undefined;
 

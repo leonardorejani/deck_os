@@ -54,6 +54,17 @@ final class LigaDesligaTestes: XCTestCase {
         XCTAssertFalse(m.ligada("foco"), "com comando de conferir o Deck não guarda estado nenhum")
     }
 
+    /// O que confere roda no mesmo shell de perfil que o comando (aliases e PATH do .zshrc): conferir "cru" dava sempre
+    /// "desligado" para quem usa alias, e todo toque rodava o comando de ligar.
+    func testComandoDeConferirRodaNoShellDePerfilComoOsOutros() {
+        let f = ShellGravador(), m = MemoriaLigaDesliga()
+        f.respostas = [(" -l ", SaidaShell(status: 0, saida: "")), ("checar-foco", SaidaShell(status: 1, saida: "alias não existe aqui"))]
+        let t = tecla(estado: "checar-foco")
+        XCTAssertNil(executor(f, m).executar(t))
+        XCTAssertTrue(f.comandos.last!.contains("foco trabalho"), "conferir saiu 0 no shell de perfil: está ligado, então desliga")
+        XCTAssertEqual(TeclasAcesas.ler([t], executor: f, memoria: m), ["foco"], "a tecla acende pelo mesmo conferir")
+    }
+
     func testTeclaDeComandoSemDesligarContinuaRodandoSoOComando() {
         let f = ShellGravador(), m = MemoriaLigaDesliga()
         var t = tecla(); t.desligar = nil

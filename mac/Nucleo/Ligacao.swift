@@ -17,6 +17,8 @@ struct PaineisReais: ProvedorPaineis {
 
     func estado() -> Estado { agregador.estado(config: armazem.ler()) }
     func whatsapp() -> [ConversaWhatsApp] { agregador.conversasWhatsApp() }
+    /// Só a origem QR tem lista com versão: nas outras o conteúdo muda sem a versão mudar.
+    func versaoWhatsApp() -> Int? { armazem.ler().whatsapp.origem == "qr" ? ponteQR?.versao : nil }
     func fotoWhatsApp(arquivo: String) -> MidiaBaixada? { ponteQR?.foto(arquivo: arquivo) }
     func midiaWhatsApp(chat: String, id: String) -> ResultadoMidia {
         guard let ponteQR else { return .erro("O WhatsApp por QR não está ligado.") }
@@ -255,7 +257,8 @@ enum Ligacao {
             reunioes: AbridorDeReuniao(shell: executor), criadorDeAgenda: criadorDeAgenda ?? Self.criadorPadrao(),
             abridorDeSessao: AbridorDeSessaoNoMac(raiz: URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".claude/jobs"), shell: executor),
             apps: apps ?? AppsDoMac(pastaDeCache: AppsDoMac.pastaDeCachePadrao(), executor: executor),
-            controles: ControlesReais(executor: executor), processos: ProcessosReais(executor: executor))
+            controles: ControlesReais(executor: executor), processos: ProcessosReais(executor: executor),
+            meet: MeetReal(executor: executor))
     }
 
     /// Só o Mac grava na agenda: no Linux (CI) a rota fica sem criador e responde 404.

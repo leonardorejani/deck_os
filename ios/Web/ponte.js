@@ -73,7 +73,7 @@
     repetirModo: modo => pedir('POST', '/api/spotify/repetir', { modo: String(modo) }),
     config: () => pedir('GET', '/api/config'),
     gravarConfig: config => pedir('PUT', '/api/config', undefined, config),
-    whatsapp: () => pedir('GET', '/api/whatsapp'),
+    whatsapp: versao => pedir('GET', '/api/whatsapp', versao != null ? { v: String(versao) } : undefined, undefined, tempoLimite * 5), // o Bluetooth leva uns 25 KB/s: a lista de uma conversa cheia passa dos 5 s
     whatsappFoto: arquivo => pedir('GET', '/api/whatsapp/foto/' + encodeURIComponent(arquivo)),
     whatsappMidia: (chat, id) => pedir('GET', '/api/whatsapp/midia', { chat: String(chat), id: String(id) }, undefined, 45000), // o Mac baixa da internet antes de responder
     abrirConversa: id => pedir('POST', '/api/whatsapp/abrir', undefined, { id }),
@@ -84,6 +84,8 @@
     entrarNaReuniao: link => pedir('POST', '/api/reuniao/entrar', undefined, { link }),
     controles: () => pedir('GET', '/api/controles'),
     controle: (item, v) => pedir('POST', '/api/controles/' + encodeURIComponent(item), { v: String(v) }),
+    meet: () => pedir('GET', '/api/meet'),
+    meetAcao: acao => pedir('POST', '/api/meet/' + encodeURIComponent(acao), undefined, undefined, 20000),
     agendaDestinos: pedirAcesso => pedir('GET', '/api/agenda/destinos', pedirAcesso ? { pedir: '1' } : undefined),
     criarCompromisso: dados => pedir('POST', '/api/agenda/criar', undefined, dados, 15000),
     apps: () => pedir('GET', '/api/apps'),

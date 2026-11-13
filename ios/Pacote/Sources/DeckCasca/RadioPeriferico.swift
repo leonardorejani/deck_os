@@ -20,6 +20,65 @@ protocol PerifericoBle: AnyObject, Sendable {
     func anunciar(_ ligado: Bool)
 }
 
+/// O que o rádio do iPhone (periférico) tem que fazer a seguir, decidido sem rádio para ter teste. Em 13/11/2026, no diário:
+/// ao desligar e ligar o Bluetooth do iPhone, o serviço era publicado de novo sem tirar o anterior, que o iOS mantém no
+/// gerenciador. O Mac então via o serviço duas vezes, assinava o do primeiro (que o app já não usava) e as notificações
+/// nunca chegavam ("sem resposta do Mac" até o app ser fechado). Por isso publicar de novo sempre começa limpando.
+struct PlanoDoPeriferico {
+    enum Acao: Equatable {
+        /// Tira do gerenciador todo serviço que o app já publicou antes de publicar o novo.
+        case limparServicos
+        case publicarServico
+        case anunciar
+    }
+
+    /// Quanto um anúncio pedido que não confirmou espera até ser pedido de novo.
+    static let prazoDoInicioDoAnuncio: TimeInterval = 5
+
+    private(set) var servicosNoRadio = 0
+    private(set) var montado = false
+    private(set) var publicado = false
+    var desejado = false
+    private(set) var pedidoDeAnuncioEm: Date?
+
+    /// O rádio mudou de estado. Fora do ar, o serviço precisa ser publicado de novo ao voltar, mas continua no gerenciador.
+    mutating func aoMudarEstado(ligado: Bool) {
+        guard !ligado else { return }
+        montado = false
+        publicado = false
+        pedidoDeAnuncioEm = nil
+    }
+
+    /// A próxima coisa a fazer com o rádio no estado `ligado`, ou nil se não há nada. Quem chama executa e confirma com
+    /// `aoPublicar`/`aoAnunciar`.
+    mutating func proxima(ligado: Bool, anunciando: Bool, agora: Date) -> [Acao] {
+        guard ligado else { return [] }
+        if !montado {
+            montado = true
+            var acoes: [Acao] = []
+            if servicosNoRadio > 0 { acoes.append(.limparServicos) }
+            acoes.append(.publicarServico)
+            return acoes
+        }
+        guard publicado, desejado, !anunciando else { return [] }
+        if let em = pedidoDeAnuncioEm, agora.timeIntervalSince(em) < Self.prazoDoInicioDoAnuncio { return [] }
+        pedidoDeAnuncioEm = agora
+        return [.anunciar]
+    }
+
+    mutating func aoLimpar() { servicosNoRadio = 0 }
+
+    /// O gerenciador respondeu à publicação. Com erro, o serviço pode não ter entrado: tenta de novo na próxima conferência.
+    mutating func aoPublicar(erro: Bool) {
+        if erro { montado = false; return }
+        servicosNoRadio += 1
+        publicado = true
+    }
+
+    mutating func aoAnunciar() { pedidoDeAnuncioEm = nil }
+    mutating func aoDispensar() { pedidoDeAnuncioEm = nil }
+}
+
 #if canImport(CoreBluetooth)
 final class RadioPerifericoIphone: NSObject, PerifericoBle, CBPeripheralManagerDelegate, @unchecked Sendable {
     private final class Sessao: @unchecked Sendable {
@@ -33,17 +92,11 @@ final class RadioPerifericoIphone: NSObject, PerifericoBle, CBPeripheralManagerD
         init(_ c: CBCentral) { central = c }
     }
 
-    /// Um anúncio pedido que não confirmou em tanto tempo é pedido de novo.
-    static let prazoDoInicioDoAnuncio: TimeInterval = 5
-
     private let fila = DispatchQueue(label: "deck.bluetooth.periferico-iphone")
     private let log: @Sendable (String) -> Void
     private var gerente: CBPeripheralManager?
     private var pedido: CBMutableCharacteristic?
-    private var montado = false
-    private var publicado = false
-    private var desejado = false
-    private var pedidoDeAnuncioEm: Date?
+    private var plano = PlanoDoPeriferico()
     private var sessoes: [UUID: Sessao] = [:]
     /// Avisos de fechar que não couberam na fila de notificações: vão quando o rádio liberar.
     private var avisosPendentes: [UUID: CBCentral] = [:]
@@ -62,16 +115,16 @@ final class RadioPerifericoIphone: NSObject, PerifericoBle, CBPeripheralManagerD
 
     func anunciar(_ ligado: Bool) {
         fila.async { [self] in
-            if ligado != desejado {
-                desejado = ligado
+            if ligado != plano.desejado {
+                plano.desejado = ligado
                 log("bluetooth/periférico: anúncio \(ligado ? "pedido (esperando o Mac conectar)" : "dispensado")")
             }
             if ligado {
                 garantir()
                 conferir()
-            } else if let g = gerente, g.isAdvertising || pedidoDeAnuncioEm != nil {
+            } else if let g = gerente, g.isAdvertising || plano.pedidoDeAnuncioEm != nil {
                 g.stopAdvertising()
-                pedidoDeAnuncioEm = nil
+                plano.aoDispensar()
                 log("bluetooth/periférico: anúncio parado")
             }
         }
@@ -98,17 +151,24 @@ final class RadioPerifericoIphone: NSObject, PerifericoBle, CBPeripheralManagerD
 
     /// Roda na fila: publica o serviço se falta e anuncia se o anúncio foi pedido e não está no ar.
     private func conferir() {
-        guard let g = gerente, g.state == .poweredOn else { return }
-        if !montado { return montar(g) }
-        guard publicado, desejado, !g.isAdvertising else { return }
-        if let em = pedidoDeAnuncioEm, Date().timeIntervalSince(em) < Self.prazoDoInicioDoAnuncio { return }
-        pedidoDeAnuncioEm = Date()
-        log("bluetooth/periférico: iniciando o anúncio do serviço \(uuidServico.uuidString)")
-        g.startAdvertising([CBAdvertisementDataServiceUUIDsKey: [uuidServico]])
+        guard let g = gerente else { return }
+        for acao in plano.proxima(ligado: g.state == .poweredOn, anunciando: g.isAdvertising, agora: Date()) {
+            switch acao {
+            case .limparServicos:
+                log("bluetooth/periférico: tirando o serviço publicado antes (o iOS o guarda quando o rádio reinicia)")
+                g.removeAllServices()
+                pedido = nil
+                plano.aoLimpar()
+            case .publicarServico:
+                montar(g)
+            case .anunciar:
+                log("bluetooth/periférico: iniciando o anúncio do serviço \(uuidServico.uuidString)")
+                g.startAdvertising([CBAdvertisementDataServiceUUIDsKey: [uuidServico]])
+            }
+        }
     }
 
     private func montar(_ g: CBPeripheralManager) {
-        montado = true
         let pedido = CBMutableCharacteristic(type: uuidPedido, properties: [.notify], value: nil, permissions: [.readable])
         let resposta = CBMutableCharacteristic(type: uuidResposta, properties: [.write, .writeWithoutResponse], value: nil, permissions: [.writeable])
         self.pedido = pedido
@@ -136,10 +196,8 @@ final class RadioPerifericoIphone: NSObject, PerifericoBle, CBPeripheralManagerD
         if g.state == .poweredOn {
             conferir()
         } else {
-            // Desligado ou reiniciando: o iOS tira o serviço do ar, então publica de novo quando voltar.
-            montado = false
-            publicado = false
-            pedidoDeAnuncioEm = nil
+            // Desligado ou reiniciando: o serviço sai do ar, então publica de novo quando voltar (limpando o antigo antes).
+            plano.aoMudarEstado(ligado: false)
             fecharTodas("rádio fora (\(Self.texto(g.state)))")
         }
     }
@@ -147,23 +205,23 @@ final class RadioPerifericoIphone: NSObject, PerifericoBle, CBPeripheralManagerD
     func peripheralManager(_ g: CBPeripheralManager, didAdd service: CBService, error: Error?) {
         if let error {
             log("bluetooth/periférico: não consegui publicar o serviço (\(error.localizedDescription))")
-            montado = false
+            plano.aoPublicar(erro: true)
             return
         }
         log("bluetooth/periférico: serviço publicado")
-        publicado = true
+        plano.aoPublicar(erro: false)
         conferir()
     }
 
     func peripheralManagerDidStartAdvertising(_ g: CBPeripheralManager, error: Error?) {
-        pedidoDeAnuncioEm = nil
+        plano.aoAnunciar()
         if let error {
             log("bluetooth/periférico: não consegui anunciar (\(error.localizedDescription))")
         } else {
             log("bluetooth/periférico: anunciando (isAdvertising=\(g.isAdvertising))")
         }
         // O pedido pode ter sido dispensado enquanto o anúncio subia.
-        if !desejado, g.isAdvertising { g.stopAdvertising(); log("bluetooth/periférico: anúncio parado") }
+        if !plano.desejado, g.isAdvertising { g.stopAdvertising(); log("bluetooth/periférico: anúncio parado") }
     }
 
     // MARK: Enlaces

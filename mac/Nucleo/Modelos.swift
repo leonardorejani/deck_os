@@ -57,8 +57,11 @@ struct Blocos: Codable, Equatable, Sendable {
     var whatsapp = true
     var sessoes = true
     var uso = true
-    /// O monitor do Mac nasce desligado: ligar é escolha de quem usa (SPEC, seção 13, 12/11/2026).
-    var monitor = false
+    /// O monitor do Mac vem ligado de fábrica (SPEC, seção 13, 13/11/2026). A pessoa desliga na tecla do Monitor de Atividade.
+    var monitor = true
+    /// Se a pessoa mexeu na chave do monitor. Config gravada antes da V1.1.1 trazia `monitor: false` sem ninguém ter escolhido
+    /// (era o padrão antigo), então só vale o `false` de quem escolheu.
+    var monitorEscolhido = false
 }
 
 /// Quais itens o monitor do Mac mostra no iPhone ("não tem mais espaço": quem usa escolhe o que fica na tela).
@@ -363,6 +366,8 @@ struct ConversaWhatsApp: Codable, Equatable, Sendable {
 // GET  /api/sessoes                -> [Sessao]
 // POST /api/sessoes/<id>/abrir     traz para a frente o terminal da sessão no Mac -> SessaoAberta {"ok", "como": "terminal"|"pasta", "app"}
 // POST /api/reuniao/entrar         <- {"link": "https://..."} abre a reunião no Mac (Meet e Teams no navegador padrão, Zoom no app se houver). Só Meet, Zoom e Teams, senão 400.
+// GET  /api/meet                   -> EstadoMeet {"aberta", "naChamada"?, "microfone", "camera" (ligado|desligado|desconhecido|sem-reuniao), "aviso"?}  a central do Google Meet
+// POST /api/meet/entrar|microfone|camera|sair  traz a aba da reunião (ou abre o Meet), alterna o microfone ou a câmera, sai da chamada -> {"ok": true}
 // POST /api/parear                 <- {"codigo": "<6 dígitos mostrados no Mac>"} -> {"codigoAcesso"}
 // GET  /ca.crt                     o certificado do CA do Deck (application/x-x509-ca-cert), sem código de acesso
 // GET  /<arquivo>                  a página do painel

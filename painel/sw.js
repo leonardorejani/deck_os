@@ -9,7 +9,7 @@ const CASCA = `deck-casca-${VERSAO}`
 // ou se o index.html passar a carregar algo que não está na lista.
 const ESSENCIAIS = [
   '/', '/manifest.webmanifest',
-  '/deck.css', '/util.js', '/canal.js', '/pwa.js', '/pareamento.js', '/paineis.js', '/player.js', '/controles.js', '/monitor.js', '/uso.js', '/apps.js', '/deck.js',
+  '/deck.css', '/util.js', '/canal.js', '/pwa.js', '/pareamento.js', '/paineis.js', '/player.js', '/controles.js', '/meet.js', '/monitor.js', '/uso.js', '/apps.js', '/deck.js',
   '/tatile/cor.css', '/tatile/tipo.css', '/tatile/espaco.css', '/tatile/forma.css', '/tatile/movimento.css',
   '/icones/deck.png', '/icones/deck-128.png', '/icones/claude.png', '/icones/codex.png', '/icones/spotify.png',
   '/icones/whatsapp.png', '/icones/calendario.png', '/icones/safari.png', '/icones/notas.png',

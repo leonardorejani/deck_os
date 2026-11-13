@@ -58,6 +58,8 @@ struct CapaAtual: Equatable, Sendable {
 protocol ProvedorPaineis: Sendable {
     func estado() -> Estado
     func whatsapp() -> [ConversaWhatsApp]
+    /// Muda a cada lista nova do WhatsApp por QR. nil: a lista não tem versão (banco do app, Web), então vai sempre inteira.
+    func versaoWhatsApp() -> Int?
     /// A foto de perfil de uma conversa do WhatsApp por QR (nil: sem foto).
     func fotoWhatsApp(arquivo: String) -> MidiaBaixada?
     /// A foto ou o áudio de uma mensagem do WhatsApp por QR, baixado agora (só leitura, com limite de tamanho).
@@ -73,6 +75,7 @@ protocol ProvedorPaineis: Sendable {
 
 extension ProvedorPaineis {
     func usoDetalhe(periodo: PeriodoUso) -> DetalheUso? { nil }
+    func versaoWhatsApp() -> Int? { nil }
     func fotoWhatsApp(arquivo: String) -> MidiaBaixada? { nil }
     func midiaWhatsApp(chat: String, id: String) -> ResultadoMidia { .erro("Essa mídia não abre aqui.") }
     func abrirConversaWhatsApp(id: String) -> AberturaDeConversa { .falhou("Não consegui abrir a conversa.") }
@@ -175,6 +178,8 @@ struct Roteador: Sendable {
     var controles: (any ControlesDoMac)? = nil
     /// Os processos que mais usam processador e memória, e o encerrar (tela do Monitor de Atividade). Nil: as rotas /api/processos não existem (404).
     var processos: (any ProcessosDoMac)? = nil
+    /// A central do Google Meet (estado, entrar, microfone, câmera e sair). Nil: as rotas /api/meet não existem (404).
+    var meet: (any MeetDoMac)? = nil
 
     func responder(_ r: HttpRequisicao) -> RespostaRota {
         if r.caminho == "/api/parear" {
@@ -229,7 +234,7 @@ struct Roteador: Sendable {
             guard let capa = paineis.capa() else { return .erro(404, "Nenhuma capa tocando agora.") }
             return RespostaRota(status: 200, tipo: capa.tipo, corpo: capa.dados, extras: ["Cache-Control": "no-store"])
         case "/api/whatsapp":
-            return somente(["GET"], r) ?? .codificar(200, paineis.whatsapp())
+            return somente(["GET"], r) ?? listaDoWhatsApp(r)
         case "/api/whatsapp/midia":
             return somente(["GET"], r) ?? midiaDoWhatsApp(r)
         case "/api/whatsapp/abrir":
@@ -270,6 +275,12 @@ struct Roteador: Sendable {
         if r.caminho == "/api/controles" {
             // O que a pessoa desligou na tecla Controles do Mac não sai daqui: a barra some no iPhone, como a que o Mac não oferece.
             return somente(["GET"], r) ?? controles.map { .codificar(200, $0.estado().somente(config.ler().controles)) } ?? .erro(404, "Essa rota não existe.")
+        }
+        if r.caminho == "/api/meet" {
+            return somente(["GET"], r) ?? meet.map { .codificar(200, $0.estado()) } ?? .erro(404, "Essa rota não existe.")
+        }
+        if let nome = sufixo(r.caminho, "/api/meet/") {
+            return somente(["POST"], r) ?? agirNoMeet(nome)
         }
         if r.caminho == "/api/processos" {
             return somente(["GET"], r) ?? processos.map { .codificar(200, $0.maiores()) } ?? .erro(404, "Essa rota não existe.")
@@ -323,6 +334,17 @@ struct Roteador: Sendable {
         return .json(200, Data("{\"ok\":true}".utf8))
     }
 
+
+    /// GET /api/whatsapp: a lista inteira, como sempre. Com `?v=<versão>` (o iPhone manda a que já tem) o Mac responde
+    /// {"v", "conversas"} e, se nada mudou, só {"v", "igual": true}. Pelo Bluetooth (uns 25 KB/s) reenviar a lista a cada
+    /// segundo entupia o canal e estourava o tempo do pedido. Sem versão no Mac (banco do app, Web), vai a lista de sempre.
+    private func listaDoWhatsApp(_ r: HttpRequisicao) -> RespostaRota {
+        guard r.query["v"] != nil, let versao = paineis.versaoWhatsApp() else { return .codificar(200, paineis.whatsapp()) }
+        if r.query["v"] == String(versao) { return .codificar(200, ListaComVersao(v: versao, igual: true)) }
+        return .codificar(200, ListaComVersao(v: versao, conversas: paineis.whatsapp()))
+    }
+
+    private struct ListaComVersao: Encodable { var v: Int; var conversas: [ConversaWhatsApp]? = nil; var igual: Bool? = nil }
 
     /// GET /api/whatsapp/foto/<arquivo>: a foto de perfil, em base64 (a mesma forma serve ao Wi-Fi, ao cabo e ao Bluetooth).
     private func fotoDoWhatsApp(_ arquivo: String) -> RespostaRota {
@@ -439,6 +461,12 @@ struct Roteador: Sendable {
     }
 
     /// POST /api/controles/<volume|brilho|teclado>?v=0..100 e /api/controles/mudo?v=0|1.
+    private func agirNoMeet(_ nome: String) -> RespostaRota {
+        guard let meet, let acao = AcaoMeet(rawValue: nome) else { return .erro(404, "Essa rota não existe.") }
+        if let erro = meet.agir(acao) { return .erro(422, erro) }
+        return .json(200, Data("{\"ok\":true}".utf8))
+    }
+
     private func controlar(_ item: String, _ r: HttpRequisicao) -> RespostaRota {
         guard let controles, ["volume", "mudo", "brilho", "teclado"].contains(item) else { return .erro(404, "Essa rota não existe.") }
         let erro: String?

@@ -784,6 +784,83 @@ final class AgendaDoMacTestes: XCTestCase {
         a.terminou("i", duracao: AgendaDoMac.sessaoBoa, agora: t0)
         XCTAssertEqual(a.espera("i"), AgendaDoMac.esperaMinima)
     }
+
+    /// 13/11/2026: o Mac já estava a 30 s de espera (iPhone sem o app aberto, sem o serviço) quando o app abriu e o pareamento,
+    /// que espera 15 s, acabava antes de o Mac voltar. Iphone sem o serviço não é aperto de mão falhando: espera curta e fixa.
+    func testIphoneSemOServicoNaoCresceAEsperaEVoltaEmPoucosSegundos() {
+        var a = AgendaDoMac()
+        for _ in 0..<8 {
+            a.conectando("i")
+            a.terminou("i", duracao: nil, semServico: true, agora: t0)
+            XCTAssertFalse(a.podeConectar("i", agora: t0.addingTimeInterval(AgendaDoMac.esperaSemServico - 1)))
+            XCTAssertTrue(a.podeConectar("i", agora: t0.addingTimeInterval(AgendaDoMac.esperaSemServico)))
+        }
+        XCTAssertLessThan(AgendaDoMac.esperaSemServico, 15, "o pareamento do iPhone espera 15 s pelo Mac")
+        // O aperto de mão que falha de verdade continua dobrando.
+        a.conectando("i")
+        a.terminou("i", duracao: 1, agora: t0)
+        XCTAssertEqual(a.espera("i"), 2)
+    }
+
+    /// 13/11/2026, 13:09Z: o app abriu, o connect() levou didFailToConnect e o Mac esperou 30 s. Connect que nem abriu o
+    /// enlace tem teto menor que os 15 s do pareamento.
+    func testConnectQueNaoAbriuNaoPassaDoTetoCurto() {
+        var a = AgendaDoMac()
+        for _ in 0..<8 {
+            a.conectando("i")
+            a.terminou("i", duracao: nil, agora: t0)
+        }
+        XCTAssertEqual(a.espera("i"), AgendaDoMac.esperaMaximaSemAbrir)
+        XCTAssertLessThan(AgendaDoMac.esperaMaximaSemAbrir, 15)
+        XCTAssertTrue(a.podeConectar("i", agora: t0.addingTimeInterval(AgendaDoMac.esperaMaximaSemAbrir)))
+    }
+
+    /// Sessões curtas seguidas empurram a espera para o teto. O iPhone some (app fechado) e volta: começa do zero.
+    func testIphoneQueVoltaDepoisDeSumirZeraAEspera() {
+        var a = AgendaDoMac()
+        for _ in 0..<5 {
+            a.conectando("i")
+            a.terminou("i", duracao: 3, agora: t0)
+        }
+        XCTAssertEqual(a.espera("i"), AgendaDoMac.esperaMaxima)
+        XCTAssertFalse(a.podeConectar("i", agora: t0.addingTimeInterval(10)))
+        // Anunciando sem parar: a espera vale.
+        a.anunciou("i", agora: t0.addingTimeInterval(5))
+        XCTAssertFalse(a.podeConectar("i", agora: t0.addingTimeInterval(10)))
+        // Sumiu por mais que o silêncio e voltou.
+        a.anunciou("i", agora: t0.addingTimeInterval(5 + AgendaDoMac.silencioQueZera))
+        XCTAssertTrue(a.podeConectar("i", agora: t0.addingTimeInterval(5 + AgendaDoMac.silencioQueZera)))
+        a.conectando("i")
+        a.terminou("i", duracao: 1, agora: t0.addingTimeInterval(20))
+        XCTAssertEqual(a.espera("i"), 2, "recomeça do mínimo")
+    }
+
+    /// O tempo de enlace aberto (iPhone não anuncia conectado) não conta como silêncio.
+    func testSessaoLongaNaoContaComoSilencio() {
+        var a = AgendaDoMac()
+        a.anunciou("i", agora: t0)
+        a.conectando("i")
+        a.terminou("i", duracao: 3, agora: t0.addingTimeInterval(60))
+        a.conectando("i")
+        a.terminou("i", duracao: 3, agora: t0.addingTimeInterval(62))
+        a.anunciou("i", agora: t0.addingTimeInterval(64))
+        XCTAssertEqual(a.espera("i"), 4, "continua dobrando")
+    }
+
+    /// Serviço em dobro no iPhone: cada enlace que abriu sem receber pedido passa para o próximo serviço, e um que recebeu volta ao primeiro.
+    func testServicoEmDobroTentaOOutroDepoisDeUmEnlaceSemPedido() {
+        var a = AgendaDoMac()
+        XCTAssertEqual(a.indiceDoServico("i", de: 2), 0)
+        a.semPedido("i", true)
+        XCTAssertEqual(a.indiceDoServico("i", de: 2), 1)
+        a.semPedido("i", true)
+        XCTAssertEqual(a.indiceDoServico("i", de: 2), 0)
+        a.semPedido("i", true)
+        a.semPedido("i", false)
+        XCTAssertEqual(a.indiceDoServico("i", de: 2), 0)
+        a.semPedido("i", true)
+        XCTAssertEqual(a.indiceDoServico("i", de: 1), 0, "um serviço só: sempre o primeiro")
+    }
 }
 
 /// A sessão inteira pelo sentido invertido, na mesma PortaDoBluetooth do sentido antigo.

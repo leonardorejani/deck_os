@@ -13,7 +13,7 @@ const reduzido = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 const teclaDoPainel = {};
 function abrirPainel(qual, idTecla) {
   if (idTecla) teclaDoPainel[qual] = idTecla;
-  if (qual === 'whatsapp') abrirWhats(); else if (qual === 'calendario') abrirCal(); else if (qual === 'sessoes') abrirSessoes(); else if (qual === 'controles') abrirControles(); else if (qual === 'monitor') abrirMonitor();
+  if (qual === 'whatsapp') abrirWhats(); else if (qual === 'calendario') abrirCal(); else if (qual === 'sessoes') abrirSessoes(); else if (qual === 'controles') abrirControles(); else if (qual === 'monitor') abrirMonitor(); else if (qual === 'meet') abrirMeet();
 }
 async function abrirNoMac(qual, texto) {
   const id = V.teclas.some(t => t.id === teclaDoPainel[qual]) ? teclaDoPainel[qual] : V.teclas.find(t => painelDe(t) === qual)?.id;
@@ -29,33 +29,39 @@ const erroLista = (msg, min = 160) => `<div class="vazio-bloco" style="min-heigh
 /* esqueleto da lista enquanto o Mac lê (SPEC 6): invisível nos primeiros 200 ms, depois com a forma das linhas */
 const esqueletoWa = () => '<div class="esq-lista" aria-hidden="true">' + '<div class="conversa esq"><span class="avatar"></span><span><i class="barra" style="width:50%"></i><i class="barra" style="width:80%"></i></span><i class="barra" style="width:32px"></i></div>'.repeat(6) + '</div>';
 const esqueletoCal = () => '<div class="esq-lista" aria-hidden="true"><section class="grupo-data"><h3><i class="barra" style="width:40%"></i></h3>' + '<div class="ev-linha esq"><i class="barra" style="width:44px;align-self:center"></i><i style="background:var(--superficie-2)"></i><span class="tx"><i class="barra" style="width:60%"></i><i class="barra" style="width:35%"></i></span></div>'.repeat(4) + '</section></div>';
-const msgErro = e => e.rede ? 'Sem conexão com o Mac. Confira o Wi-Fi.' : e.message;
+/* no app nativo o canal é cabo ou Bluetooth: mandar conferir o Wi-Fi seria mentira */
+const msgErro = e => e.rede ? (canal.nativo ? 'O Mac não respondeu a tempo. Tente de novo.' : 'Sem conexão com o Mac. Confira o Wi-Fi.') : e.message;
 
 /* ---------- WhatsApp ---------- */
-const wa = { lista: null, json: '', filtro: 'todas', aberta: null, erro: '', mexendo: false, seq: 0, pendente: false, lendo: false, total: null, abrindo: false };
+const wa = { dur: 0, fim: 0, versao: null, lista: null, json: '', filtro: 'todas', aberta: null, erro: '', mexendo: false, seq: 0, pendente: false, lendo: false, total: null, abrindo: false };
 function horaConversa(iso) {
   const d = new Date(iso); if (isNaN(d)) return '';
   const dias = diasEntre(d, V?.ref || Date.now());
   return dias <= 0 ? hhmm(d) : dias === 1 ? 'ontem' : dias < 7 ? d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '') : d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 }
-function abrirWhats() { wa.aberta = null; wa.filtro = 'todas'; wa.lista = null; wa.json = ''; wa.erro = ''; wa.pendente = false; wa.total = null; pintarWhats(); abrirFolha('#f-whats'); lerWhats() }
+function abrirWhats() { wa.aberta = null; wa.filtro = 'todas'; wa.lista = null; wa.versao = null; wa.json = ''; wa.erro = ''; wa.pendente = false; wa.total = null; pintarWhats(); abrirFolha('#f-whats'); lerWhats() }
 /* um player tocando não pode ser derrubado por uma mensagem nova: a lista repinta quando ele pausa ou acaba */
 const waTocando = () => [...document.querySelectorAll('#wa-lista audio')].some(a => !a.paused && !a.ended);
 async function lerWhats() {
   if (wa.lendo) return; wa.lendo = true;
-  const n = ++wa.seq;
+  const n = ++wa.seq, t0 = Date.now();
   try {
-    const l = await canal.whatsapp(); if (n !== wa.seq) return;
-    const lista = Array.isArray(l) ? l : [], j = JSON.stringify([lista, V?.whatsapp || null]); // o total e a origem vêm do estado, não da lista
+    /* O Mac por QR dá versão à lista: com a que a tela já tem ele responde só "igual" e não reenvia tudo (o Bluetooth leva uns 25 KB/s) */
+    const l = await canal.whatsapp(wa.lista && wa.versao != null ? wa.versao : -1); // -1: ainda sem versão, o Mac manda a lista e a versão dela
+    if (n !== wa.seq) return;
+    if (l && l.igual && !wa.lista) { wa.versao = null; return }
+    wa.versao = l && !Array.isArray(l) && l.v != null ? l.v : null;
+    const lista = l && l.igual ? wa.lista : Array.isArray(l) ? l : Array.isArray(l?.conversas) ? l.conversas : [], j = JSON.stringify([lista, V?.whatsapp || null]); // o total e a origem vêm do estado, não da lista
     if (j !== wa.json || wa.erro) { wa.json = j; wa.lista = lista; wa.erro = ''; if (!wa.mexendo && !waTocando()) pintarWhats(); else wa.pendente = true }
   } catch (e) {
     if (n !== wa.seq) return;
     if (e.status === 401) return tratarErro(e);
     const era = wa.erro; wa.erro = msgErro(e); if (!wa.lista) { if (wa.erro !== era) pintarWhats() } else if (!era) avisar(wa.erro, { erro: true }); // o aviso dura 4 s uma vez, não a cada leitura. A lista de erro só repinta se o motivo mudou (o botão não pode sumir debaixo do dedo)
-  } finally { wa.lendo = false }
+  } finally { wa.lendo = false; wa.dur = Date.now() - t0; wa.fim = Date.now() }
 }
-/* Com a lista de pé a folha acompanha a cada 1 s (o Mac já empurra a mensagem nova na hora, o resto era a espera daqui). Em erro vale só a leitura de 4 s abaixo */
-setInterval(() => { if (folhaAberta?.id === 'f-whats' && wa.lista && !wa.erro && !document.hidden && V && !V.carregando && !semAcesso && !offline) lerWhats() }, 1000);
+/* Com a lista de pé a folha acompanha a cada 1 s (o Mac já empurra a mensagem nova na hora, o resto era a espera daqui). Em erro vale só a leitura de 4 s abaixo.
+   Canal lento (Bluetooth): espera, depois de cada leitura, o tempo que ela levou, senão a lista toma o canal inteiro e o resto do painel fica sem resposta */
+setInterval(() => { if (folhaAberta?.id === 'f-whats' && wa.lista && !wa.erro && !document.hidden && V && !V.carregando && !semAcesso && !offline && Date.now() - wa.fim >= wa.dur) lerWhats() }, 1000);
 $('#wa-lista').addEventListener('pause', () => { if (wa.pendente && !waTocando()) { wa.pendente = false; pintarWhats() } }, true);
 $('#wa-lista').addEventListener('ended', () => { if (wa.pendente && !waTocando()) { wa.pendente = false; pintarWhats() } }, true);
 /* Pelo WhatsApp Web o Mac só enxerga o total (o título da aba), sem lista por conversa: a folha diz isso em vez de inventar linhas */
@@ -523,10 +529,18 @@ function pintarAlertas() {
   sel.innerHTML = lista.map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
   sel.value = lista.some(([v]) => v === antes) ? antes : '';
 }
+const MESES_CURTOS = ['jan.', 'fev.', 'mar.', 'abr.', 'mai.', 'jun.', 'jul.', 'ago.', 'set.', 'out.', 'nov.', 'dez.'];
+// o iPhone desenha a data por extenso ("13 de nov. de 2026") e ela não cabe na coluna: mostramos "13 nov." e o campo nativo só recebe o toque
+function pintarValoresNovo() {
+  for (const v of document.querySelectorAll('#ca-form .nc-vis')) {
+    const x = $('#' + v.dataset.de).value, d = /^(\d{4})-(\d{2})-(\d{2})$/.exec(x);
+    v.textContent = d ? Number(d[3]) + ' ' + MESES_CURTOS[Number(d[2]) - 1] + (Number(d[1]) !== new Date(V.ref).getFullYear() ? ' ' + String(d[1]).slice(2) : '') : x || '--';
+  }
+}
 function pintarTipoNovo() {
   $('#nc-todo').checked = fo.todo;
   $('#nc-inicio').disabled = $('#nc-fim').disabled = fo.todo;
-  pintarAlertas();
+  pintarAlertas(); pintarValoresNovo();
 }
 function pintarPadrao() {
   const v = $('#nc-destino').value, p = fo.destinos?.padrao, caixa = $('#nc-padrao'), ehPadrao = !!p && v === chaveDestino(p);
@@ -632,6 +646,7 @@ $('#ca-form').addEventListener('submit', e => { e.preventDefault(); salvarCompro
 $('#ca-form').addEventListener('click', e => {
   if (e.target.closest('[data-nc-cancelar]')) return fecharFormNovo();
 });
+for (const i of ['#nc-dia', '#nc-inicio', '#nc-fim']) { $(i).addEventListener('input', pintarValoresNovo); $(i).addEventListener('change', pintarValoresNovo) }
 $('#nc-todo').addEventListener('change', e => { fo.todo = e.target.checked; pintarTipoNovo() });
 $('#nc-destino').addEventListener('change', e => {
   mensagemNovo('');
