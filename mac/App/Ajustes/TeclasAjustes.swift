@@ -197,13 +197,13 @@ struct AjustesDoMeet: View {
     var tecla: Tecla
 
     private static let opcoes: [(id: String?, texto: String)] = [
-        (nil, "Abrir o Meet no navegador"),
+        (nil, "Abrir a central do Meet (entrar, microfone, câmera e sair)"),
         (IdsDeAcao.reuniaoMicrofone, "Mutar ou desmutar o microfone"),
         (IdsDeAcao.reuniaoCamera, "Ligar ou desligar a câmera"),
     ]
 
     var body: some View {
-        CartaoDeAjustes(titulo: "Google Meet", nota: "Vale para a sala aberta no Safari, Chrome, Arc, Brave ou Edge. Não precisa de app instalado. O Mac pede Acessibilidade e o controle do navegador na primeira vez.") {
+        CartaoDeAjustes(titulo: "Google Meet", nota: "Vale para a sala aberta no Safari, Chrome, Arc, Brave ou Edge. Não precisa de app instalado nem de ligar nada no navegador: o Deck usa a Acessibilidade, que ele já pede. Deixe a aba da reunião na frente da janela dela.") {
             LinhaDeAjuste(titulo: "Ao apertar a tecla", apoio: nil) {
                 Picker("Ao apertar a tecla", selection: Binding(get: { tecla.acao?.id }, set: { id in tela.escolherAcao(id.map { AcaoDeApp(id: $0, valor: nil) }) })) {
                     ForEach(Self.opcoes, id: \.id) { Text($0.texto).tag($0.id) }
