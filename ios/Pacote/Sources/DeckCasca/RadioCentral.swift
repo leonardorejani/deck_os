@@ -24,15 +24,64 @@ public struct AnuncioBle: Equatable, Sendable {
     public static let sinalDePerto = -75
 }
 
+/// O iOS achou o Mac e abriu o rádio, mas a cifragem do enlace falhou. Quem cifra é o próprio sistema, antes de o Deck
+/// trocar um byte: as características do Mac não pedem cifragem, mas o iPhone e o Mac do mesmo iCloud já se conhecem
+/// e o iOS cifra sozinho com a chave que guarda. Códigos do CBError: 14 (o outro lado apagou o pareamento) e 15 (a
+/// cifragem passou do tempo, "Failed to encrypt the connection"). Visto no iPhone em 12/11/2026, todo ciclo, com o
+/// Mac anunciando a um palmo. Insistir no mesmo Mac não resolve: o app avisa e espera mais entre as tentativas.
+public struct ErroCifragemBluetooth: Error, Equatable, Sendable {
+    public let codigo: Int
+    public init(codigo: Int) { self.codigo = codigo }
+    static let codigos: Set<Int> = [14, 15]
+    public static let mensagem = "O iPhone acha o Mac, mas o iOS não consegue cifrar a conexão Bluetooth com ele. Reinicie o iPhone e depois o Mac. Se o Mac aparecer em Ajustes > Bluetooth do iPhone, toque no (i) dele e em Esquecer Este Dispositivo. Enquanto isso, o cabo funciona."
+    public var mensagem: String { Self.mensagem }
+}
+
+/// A última lista de Macs que cada ouvinte da procura recebeu. O sinal oscila a cada anúncio, então só se avisa quem
+/// escuta quando a lista mudou para ele. Uma lista só para todos fazia a procura nova (que entrou com a lista vazia)
+/// nunca saber de um Mac que a procura anterior já tinha recebido: "a procura terminou com 0 Mac(s)" com o Mac no ar.
+struct UltimaListaPorOuvinte {
+    private struct Chave: Equatable {
+        var id: String
+        var nome: String
+        var perto: Bool
+    }
+    private var enviada: [UUID: [Chave]] = [:]
+
+    private static func chaves(_ lista: [AnuncioBle]) -> [Chave] { lista.map { Chave(id: $0.id, nome: $0.nome, perto: $0.perto) } }
+
+    mutating func entrou(_ ouvinte: UUID, recebeu lista: [AnuncioBle]) { enviada[ouvinte] = Self.chaves(lista) }
+    mutating func saiu(_ ouvinte: UUID) { enviada[ouvinte] = nil }
+
+    /// Quem precisa receber `lista` agora. Já marca como recebida.
+    mutating func quemAvisar(_ lista: [AnuncioBle], ouvintes: [UUID]) -> [UUID] {
+        let nova = Self.chaves(lista)
+        return ouvintes.filter { o in
+            guard enviada[o] != nova else { return false }
+            enviada[o] = nova
+            return true
+        }
+    }
+}
+
 protocol RadioBle: Sendable {
     /// Os Macs com Deck no ar, a cada mudança. Cancelar a tarefa para a procura.
     func procurar() -> AsyncStream<[AnuncioBle]>
     /// Conecta no Mac e devolve o fio (serviço achado e resposta assinada). O texto do erro é o que a pessoa lê.
-    func conectar(id: String) async throws -> FluxoBytes
+    func conectar(id: String, prazo: TimeInterval) async throws -> FluxoBytes
     /// Por que o rádio não serve agora (desligado, sem permissão), ou nil.
     var indisponivel: String? { get }
     /// O rádio está ligado, liberado e pronto para procurar.
     var pronto: Bool { get }
+    /// Nome do Mac pareado: na varredura sem filtro, um anúncio com esse nome vale mesmo sem o UUID do Deck à vista.
+    func confiarNoNome(_ nome: String)
+}
+
+extension RadioBle {
+    func confiarNoNome(_ nome: String) {}
+    /// Tempo limite padrão para o Mac responder à conexão.
+    static var prazoDeConexao: TimeInterval { 15 }
+    func conectar(id: String) async throws -> FluxoBytes { try await conectar(id: id, prazo: Self.prazoDeConexao) }
 }
 
 #if canImport(CoreBluetooth)
@@ -56,7 +105,6 @@ final class RadioCentral: NSObject, RadioBle, CBCentralManagerDelegate, CBPeriph
         init(_ p: CBPeripheral) { peripheral = p }
     }
 
-    static let prazoDeConexao: TimeInterval = 15
     /// Um Mac que sumiu do ar há mais que isso sai da lista.
     static let validadeDoAnuncio: TimeInterval = 6
 
@@ -66,15 +114,27 @@ final class RadioCentral: NSObject, RadioBle, CBCentralManagerDelegate, CBPeriph
     private var vistos: [String: Visto] = [:]
     private var ouvintes: [UUID: AsyncStream<[AnuncioBle]>.Continuation] = [:]
     private var conexoes: [String: Conexao] = [:]
-    private var ultimaLista: [AnuncioBle] = []
+    private var ultimaLista = UltimaListaPorOuvinte()
     /// O Mac não anuncia o nome no ar: o iOS só o conhece depois de conectar. Na primeira vez que aparece um Mac
     /// sem nome, o rádio conecta um instante só para ler o nome e solta (um de cada vez).
     private var sondando: Set<String> = []
     private var sondados: Set<String> = []
+    /// Macs que o sistema já tem conectados com o serviço do Deck (já anotados no diário).
+    private var conectadosAnotados: Set<String> = []
     private var limpeza: DispatchSourceTimer?
     private let uuidServico = CBUUID(string: EnlaceBle.servico)
     private let uuidPedido = CBUUID(string: EnlaceBle.pedido)
     private let uuidResposta = CBUUID(string: EnlaceBle.resposta)
+    /// A varredura com filtro de serviço não viu nada por um tempo: passa a varrer sem filtro e conferir o anúncio aqui.
+    private var semFiltro = false
+    private var viuNestaVarredura = false
+    private var inicioDaVarredura = Date()
+    private var nomesConhecidos: Set<String> = []
+    private var ultimoRegistro: [String: (quando: Date, resumo: String, repetidos: Int)] = [:]
+    /// Sem anúncio do Deck por tanto tempo, a varredura troca o filtro de serviço pela conferência no app.
+    static let esperaParaVarrerSemFiltro: TimeInterval = 3
+    /// Um mesmo anúncio repetido só entra de novo no diário depois disso (o Mac anuncia várias vezes por segundo).
+    static let intervaloDoRegistroRepetido: TimeInterval = 5
 
     init(log: @escaping @Sendable (String) -> Void = { _ in }) {
         self.log = log
@@ -82,6 +142,30 @@ final class RadioCentral: NSObject, RadioBle, CBCentralManagerDelegate, CBPeriph
     }
 
     var pronto: Bool { fila.sync { central?.state == .poweredOn } }
+
+    func confiarNoNome(_ nome: String) { fila.async { [self] in nomesConhecidos.insert(nome) } }
+
+    private static func texto(_ e: CBManagerState) -> String {
+        switch e {
+        case .unknown: return "desconhecido"
+        case .resetting: return "reiniciando"
+        case .unsupported: return "sem suporte"
+        case .unauthorized: return "sem permissão"
+        case .poweredOff: return "desligado"
+        case .poweredOn: return "ligado"
+        @unknown default: return "?"
+        }
+    }
+
+    private static func texto(_ e: CBManagerAuthorization) -> String {
+        switch e {
+        case .notDetermined: return "não decidida"
+        case .restricted: return "restrita"
+        case .denied: return "negada"
+        case .allowedAlways: return "liberada"
+        @unknown default: return "?"
+        }
+    }
 
     var indisponivel: String? {
         fila.sync {
@@ -98,6 +182,7 @@ final class RadioCentral: NSObject, RadioBle, CBCentralManagerDelegate, CBPeriph
     /// "Procurar por perto" (ou quando já pareada o app abre), não antes. Roda na fila.
     private func garantir() -> CBCentralManager {
         if let c = central { return c }
+        log("bluetooth: criando o CBCentralManager (autorização \(Self.texto(CBCentralManager.authorization)))")
         let c = CBCentralManager(delegate: self, queue: fila, options: [CBCentralManagerOptionShowPowerAlertKey: true])
         central = c
         return c
@@ -110,13 +195,18 @@ final class RadioCentral: NSObject, RadioBle, CBCentralManagerDelegate, CBPeriph
             let id = UUID()
             fila.async { [self] in
                 ouvintes[id] = continuacao
-                continuacao.yield(listaAtual())
+                let lista = listaAtual()
+                ultimaLista.entrou(id, recebeu: lista)
+                log("bluetooth: procura pedida (\(ouvintes.count) ouvinte(s), \(lista.count) Mac(s) ainda válidos)")
+                continuacao.yield(lista)
                 iniciarVarredura()
             }
             continuacao.onTermination = { [weak self] _ in
                 self?.fila.async {
                     guard let self else { return }
                     self.ouvintes[id] = nil
+                    self.ultimaLista.saiu(id)
+                    self.log("bluetooth: procura encerrada (\(self.ouvintes.count) ouvinte(s) restantes)")
                     if self.ouvintes.isEmpty { self.pararVarredura() }
                 }
             }
@@ -125,19 +215,54 @@ final class RadioCentral: NSObject, RadioBle, CBCentralManagerDelegate, CBPeriph
 
     private func iniciarVarredura() {
         let c = garantir()
-        guard c.state == .poweredOn, !c.isScanning else { return }
+        guard c.state == .poweredOn, !c.isScanning else {
+            log("bluetooth: varredura não iniciada (estado \(Self.texto(c.state)), varrendo=\(c.isScanning))")
+            return
+        }
+        semFiltro = false
+        viuNestaVarredura = false
+        inicioDaVarredura = Date()
         c.scanForPeripherals(withServices: [uuidServico], options: [CBCentralManagerScanOptionAllowDuplicatesKey: true])
+        log("bluetooth: varredura iniciada com filtro do serviço \(uuidServico.uuidString)")
+        trazerConectadosAoSistema()
         let t = DispatchSource.makeTimerSource(queue: fila)
-        t.schedule(deadline: .now() + 2, repeating: 2)
-        t.setEventHandler { [weak self] in self?.publicar() }
+        t.schedule(deadline: .now() + 1, repeating: 1)
+        t.setEventHandler { [weak self] in self?.passoDaVarredura() }
         t.resume()
         limpeza = t
     }
 
+    /// A cada segundo: atualiza a lista e, se o filtro de serviço do iOS não trouxe nenhum Mac, varre sem filtro.
+    private func passoDaVarredura() {
+        trazerConectadosAoSistema()
+        publicar()
+        guard !semFiltro, !viuNestaVarredura, let c = central, c.isScanning,
+              Date().timeIntervalSince(inicioDaVarredura) >= Self.esperaParaVarrerSemFiltro else { return }
+        c.stopScan()
+        semFiltro = true
+        c.scanForPeripherals(withServices: nil, options: [CBCentralManagerScanOptionAllowDuplicatesKey: true])
+        log("bluetooth: o filtro de serviço não trouxe nenhum anúncio em \(Int(Self.esperaParaVarrerSemFiltro)) s, varrendo SEM filtro e conferindo o anúncio no app")
+    }
+
+    /// Um Mac que o sistema já mantém conectado (e com o serviço do Deck descoberto) entra na lista mesmo sem anúncio:
+    /// conectar nele aproveita o enlace que já está cifrado, sem cifrar de novo. Aposta contra o CBError 15.
+    private func trazerConectadosAoSistema() {
+        guard let c = central, c.state == .poweredOn else { return }
+        for p in c.retrieveConnectedPeripherals(withServices: [uuidServico]) {
+            let id = p.identifier.uuidString
+            if conectadosAnotados.insert(id).inserted {
+                log("bluetooth: \(id.prefix(8)) \"\(p.name ?? "-")\" já está conectado ao sistema com o serviço do Deck (retrieveConnectedPeripherals)")
+            }
+            vistos[id] = Visto(peripheral: p, nome: p.name ?? vistos[id]?.nome ?? "Mac", rssi: vistos[id]?.rssi ?? -60, quando: Date())
+        }
+    }
+
     private func pararVarredura() {
+        log("bluetooth: varredura parada (viu anúncio do Deck=\(viuNestaVarredura), sem filtro=\(semFiltro))")
         central?.stopScan()
         limpeza?.cancel()
         limpeza = nil
+        semFiltro = false
     }
 
     private func listaAtual() -> [AnuncioBle] {
@@ -147,18 +272,14 @@ final class RadioCentral: NSObject, RadioBle, CBCentralManagerDelegate, CBPeriph
             .sorted { ($0.rssi, $1.nome) > ($1.rssi, $0.nome) }
     }
 
-    /// Só avisa quem escuta quando a lista mudou de verdade (o sinal oscila a cada anúncio).
+    /// Só avisa quem escuta quando a lista mudou de verdade para ele (o sinal oscila a cada anúncio).
     private func publicar() {
         let lista = listaAtual()
-        let resumo = lista.map { ($0.id, $0.nome, $0.perto) }
-        let antes = ultimaLista.map { ($0.id, $0.nome, $0.perto) }
-        guard resumo.count != antes.count || zip(resumo, antes).contains(where: { $0 != $1 }) else { return }
-        ultimaLista = lista
-        for o in ouvintes.values { o.yield(lista) }
+        for o in ultimaLista.quemAvisar(lista, ouvintes: Array(ouvintes.keys)) { ouvintes[o]?.yield(lista) }
     }
 
     func centralManagerDidUpdateState(_ c: CBCentralManager) {
-        log("bluetooth: estado do rádio \(c.state.rawValue)")
+        log("bluetooth: estado do rádio \(c.state.rawValue) (\(Self.texto(c.state))), autorização \(Self.texto(CBCentralManager.authorization))")
         if c.state == .poweredOn, !ouvintes.isEmpty { iniciarVarredura() }
         if c.state != .poweredOn {
             for conexao in conexoes.values { falhar(conexao, "O Bluetooth do iPhone foi desligado.") }
@@ -167,20 +288,41 @@ final class RadioCentral: NSObject, RadioBle, CBCentralManagerDelegate, CBPeriph
 
     func centralManager(_ c: CBCentralManager, didDiscover p: CBPeripheral, advertisementData: [String: Any], rssi RSSI: NSNumber) {
         let id = p.identifier.uuidString
-        // O nome pode vir só no pacote de resposta da procura: guarda o último que apareceu.
-        let nome = (advertisementData[CBAdvertisementDataLocalNameKey] as? String) ?? p.name ?? vistos[id]?.nome ?? "Mac"
-        if vistos[id] == nil { log("bluetooth: anúncio visto com as chaves \(advertisementData.keys.sorted())") }
         let rssi = RSSI.intValue
-        guard rssi != 127 else { return }
+        let nomeNoAr = advertisementData[CBAdvertisementDataLocalNameKey] as? String
+        let servicos = (advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID])?.map(\.uuidString) ?? []
+        let extras = (advertisementData[CBAdvertisementDataOverflowServiceUUIDsKey] as? [CBUUID])?.map(\.uuidString) ?? []
+        let av = AvaliacaoDeAnuncio.avaliar(servicos: servicos, extras: extras, nome: nomeNoAr ?? p.name, rssi: rssi, uuidDoDeck: uuidServico.uuidString,
+                                            nomesConhecidos: nomesConhecidos, comFiltro: !semFiltro)
+        registrarAnuncio(id: id, p: p, nomeNoAr: nomeNoAr, servicos: servicos, extras: extras, chaves: advertisementData.keys.sorted(), rssi: rssi, av: av)
+        guard av.aceito else { return }
+        viuNestaVarredura = true
+        // O nome pode vir só no pacote de resposta da procura: guarda o último que apareceu.
+        let nome = nomeNoAr ?? p.name ?? vistos[id]?.nome ?? "Mac"
         vistos[id] = Visto(peripheral: p, nome: nome, rssi: rssi, quando: Date())
         if nome == "Mac", !sondados.contains(id), sondando.isEmpty, conexoes[id] == nil { sondar(p) }
         publicar()
+    }
+
+    /// Um anúncio por linha, mas o mesmo anúncio repetido (o Mac manda vários por segundo) só a cada alguns segundos.
+    private func registrarAnuncio(id: String, p: CBPeripheral, nomeNoAr: String?, servicos: [String], extras: [String], chaves: [String], rssi: Int, av: AvaliacaoDeAnuncio.Resultado) {
+        let resumo = "\(av.aceito ? "ACEITO" : "DESCARTADO") nome=\(nomeNoAr ?? "-") nomeIOS=\(p.name ?? "-") servicos=\(servicos) extras=\(extras) chaves=\(chaves) (\(av.motivo))"
+        let agora = Date()
+        if var antes = ultimoRegistro[id], antes.resumo == resumo, agora.timeIntervalSince(antes.quando) < Self.intervaloDoRegistroRepetido {
+            antes.repetidos += 1
+            ultimoRegistro[id] = antes
+            return
+        }
+        let repetidos = ultimoRegistro[id]?.repetidos ?? 0
+        ultimoRegistro[id] = (agora, resumo, 0)
+        log("bluetooth: anúncio \(id.prefix(8)) rssi=\(rssi) \(resumo)\(repetidos > 0 ? " (+\(repetidos) iguais antes)" : "")")
     }
 
     private func sondar(_ p: CBPeripheral) {
         let id = p.identifier.uuidString
         sondados.insert(id)
         sondando.insert(id)
+        log("bluetooth: sonda para ler o nome de \(id.prefix(8)) (connect)")
         p.delegate = self
         central?.connect(p)
         fila.asyncAfter(deadline: .now() + 8) { [weak self] in self?.terminarSonda(p) }
@@ -190,6 +332,7 @@ final class RadioCentral: NSObject, RadioBle, CBCentralManagerDelegate, CBPeriph
     private func terminarSonda(_ p: CBPeripheral) {
         let id = p.identifier.uuidString
         guard sondando.remove(id) != nil else { return }
+        log("bluetooth: sonda de \(id.prefix(8)) terminou, nome=\(p.name ?? "-")")
         if let nome = p.name, !nome.isEmpty, var v = vistos[id] {
             v.nome = nome
             vistos[id] = v
@@ -200,17 +343,22 @@ final class RadioCentral: NSObject, RadioBle, CBCentralManagerDelegate, CBPeriph
 
     // MARK: Conexão
 
-    func conectar(id: String) async throws -> FluxoBytes {
+    func conectar(id: String, prazo: TimeInterval) async throws -> FluxoBytes {
         try await withCheckedThrowingContinuation { (c: CheckedContinuation<FluxoBytes, Error>) in
-            fila.async { [self] in abrir(id, c) }
+            fila.async { [self] in abrir(id, prazo, c) }
         }
     }
 
-    private func abrir(_ id: String, _ c: CheckedContinuation<FluxoBytes, Error>) {
+    private func abrir(_ id: String, _ prazo: TimeInterval, _ c: CheckedContinuation<FluxoBytes, Error>) {
         let gerente = garantir()
-        if let motivo = motivoDeIndisponivel(gerente.state) { return c.resume(throwing: ErroPareamento.recusado(motivo)) }
+        log("bluetooth: conectar \(id.prefix(8)) (prazo \(Int(prazo)) s, estado \(Self.texto(gerente.state)))")
+        if let motivo = motivoDeIndisponivel(gerente.state) { log("bluetooth: conectar recusado: \(motivo)"); return c.resume(throwing: ErroPareamento.recusado(motivo)) }
+        let doSistema = gerente.retrieveConnectedPeripherals(withServices: [uuidServico])
+        if !doSistema.isEmpty { log("bluetooth: conectados ao sistema com o serviço do Deck: \(doSistema.map { $0.identifier.uuidString.prefix(8) })") }
+        let visto = doSistema.first { $0.identifier.uuidString == id } ?? vistos[id]?.peripheral
         guard let uuid = UUID(uuidString: id),
-              let p = vistos[id]?.peripheral ?? gerente.retrievePeripherals(withIdentifiers: [uuid]).first else {
+              let p = visto ?? gerente.retrievePeripherals(withIdentifiers: [uuid]).first else {
+            log("bluetooth: conectar \(id.prefix(8)): o iOS não conhece esse identificador (retrievePeripherals vazio)")
             return c.resume(throwing: ErroPareamento.recusado("Não achei esse Mac. Abra o Deck nele e tente de novo."))
         }
         if let velha = conexoes[id] { falhar(velha, "Outra conexão abriu.") }
@@ -218,9 +366,11 @@ final class RadioCentral: NSObject, RadioBle, CBCentralManagerDelegate, CBPeriph
         conexao.continuacao = c
         conexoes[id] = conexao
         p.delegate = self
+        log("bluetooth: connect() em \(id.prefix(8)) (\(visto != nil ? "visto na varredura" : "recuperado pelo id guardado"), estado do periférico \(p.state.rawValue))")
         gerente.connect(p)
-        fila.asyncAfter(deadline: .now() + Self.prazoDeConexao) { [weak self, weak conexao] in
+        fila.asyncAfter(deadline: .now() + prazo) { [weak self, weak conexao] in
             guard let self, let conexao, conexao.continuacao != nil else { return }
+            log("bluetooth: TEMPO LIMITE de \(Int(prazo)) s na conexão com \(id.prefix(8)) (estado do periférico \(conexao.peripheral.state.rawValue))")
             falhar(conexao, "O Mac não respondeu. Confira se ele está perto e com o Deck aberto.")
         }
     }
@@ -236,10 +386,13 @@ final class RadioCentral: NSObject, RadioBle, CBCentralManagerDelegate, CBPeriph
     }
 
     /// Termina a conexão com erro (ainda esperando o fio) ou só a derruba (já com fio).
-    private func falhar(_ conexao: Conexao, _ texto: String) {
+    private func falhar(_ conexao: Conexao, _ texto: String) { falhar(conexao, ErroPareamento.recusado(texto), texto) }
+
+    private func falhar(_ conexao: Conexao, _ erro: Error, _ texto: String) {
         let c = conexao.continuacao
         conexao.continuacao = nil
-        c?.resume(throwing: ErroPareamento.recusado(texto))
+        log("bluetooth: conexão com \(conexao.peripheral.identifier.uuidString.prefix(8)) falhou: \(texto)")
+        c?.resume(throwing: erro)
         encerrar(conexao)
     }
 
@@ -254,7 +407,11 @@ final class RadioCentral: NSObject, RadioBle, CBCentralManagerDelegate, CBPeriph
     private func conexao(de p: CBPeripheral) -> Conexao? { conexoes[p.identifier.uuidString] }
 
     func centralManager(_ c: CBCentralManager, didConnect p: CBPeripheral) {
-        if sondando.contains(p.identifier.uuidString) {
+        let id = p.identifier.uuidString
+        log("bluetooth: didConnect \(id.prefix(8)) (sonda=\(sondando.contains(id)), conexão=\(conexoes[id] != nil))")
+        // Com uma conexão de verdade pedida para este Mac, o didConnect é dela: tratar como sonda deixava a conexão parada
+        // sem descobrir o serviço até o tempo limite.
+        if sondando.contains(id), conexoes[id] == nil {
             // O nome chega junto com a conexão, mas dá uma folga de 1 s se ainda não chegou.
             if p.name != nil { terminarSonda(p) } else { fila.asyncAfter(deadline: .now() + 1) { [weak self] in self?.terminarSonda(p) } }
             return
@@ -264,22 +421,32 @@ final class RadioCentral: NSObject, RadioBle, CBCentralManagerDelegate, CBPeriph
 
     func centralManager(_ c: CBCentralManager, didFailToConnect p: CBPeripheral, error: Error?) {
         sondando.remove(p.identifier.uuidString)
-        if let x = conexao(de: p) { falhar(x, "Não consegui conectar no Mac.") }
+        log("bluetooth: didFailToConnect \(p.identifier.uuidString.prefix(8)) erro=\(error.map { "\($0)" } ?? "-")")
+        guard let x = conexao(de: p) else { return }
+        if let ns = error as NSError?, ns.domain == CBErrorDomain, ErroCifragemBluetooth.codigos.contains(ns.code) {
+            let doSistema = c.retrieveConnectedPeripherals(withServices: [uuidServico]).map { $0.identifier.uuidString.prefix(8) }
+            log("bluetooth: CIFRAGEM do enlace falhou com \(p.identifier.uuidString.prefix(8)) (CBError \(ns.code)). Quem cifra é o iOS, não o Deck. Conectados ao sistema com o serviço: \(doSistema)")
+            return falhar(x, ErroCifragemBluetooth(codigo: ns.code), "cifragem do enlace (CBError \(ns.code))")
+        }
+        falhar(x, "Não consegui conectar no Mac.")
     }
 
     func centralManager(_ c: CBCentralManager, didDisconnectPeripheral p: CBPeripheral, error: Error?) {
+        log("bluetooth: didDisconnect \(p.identifier.uuidString.prefix(8)) erro=\(error.map { "\($0)" } ?? "-")")
         guard let x = conexao(de: p) else { return }
         log("bluetooth: Mac desconectou")
         falhar(x, "O Mac desconectou.")
     }
 
     func peripheral(_ p: CBPeripheral, didDiscoverServices error: Error?) {
+        log("bluetooth: serviços de \(p.identifier.uuidString.prefix(8)): \(p.services?.map { $0.uuid.uuidString } ?? []) erro=\(error.map { "\($0)" } ?? "-")")
         guard let x = conexao(de: p) else { return }
         guard error == nil, let s = p.services?.first(where: { $0.uuid == uuidServico }) else { return falhar(x, "Esse Mac não tem o Deck aberto.") }
         p.discoverCharacteristics([uuidPedido, uuidResposta], for: s)
     }
 
     func peripheral(_ p: CBPeripheral, didDiscoverCharacteristicsFor s: CBService, error: Error?) {
+        log("bluetooth: características de \(p.identifier.uuidString.prefix(8)): \(s.characteristics?.map { $0.uuid.uuidString } ?? []) erro=\(error.map { "\($0)" } ?? "-")")
         guard let x = conexao(de: p) else { return }
         let pedido = s.characteristics?.first { $0.uuid == uuidPedido }
         let resposta = s.characteristics?.first { $0.uuid == uuidResposta }
@@ -291,6 +458,7 @@ final class RadioCentral: NSObject, RadioBle, CBCentralManagerDelegate, CBPeriph
 
     func peripheral(_ p: CBPeripheral, didUpdateNotificationStateFor c: CBCharacteristic, error: Error?) {
         guard let x = conexao(de: p), c.uuid == uuidResposta else { return }
+        log("bluetooth: inscrição na resposta de \(p.identifier.uuidString.prefix(8)): notificando=\(c.isNotifying) erro=\(error.map { "\($0)" } ?? "-")")
         guard error == nil, c.isNotifying else { return falhar(x, "Não consegui abrir a conversa com o Mac.") }
         guard let cont = x.continuacao else { return }
         x.continuacao = nil

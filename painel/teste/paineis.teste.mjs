@@ -79,6 +79,37 @@ export default async function (h) {
   const fechadoTxt = await texto(p, '#wa-lista .vazio-bloco');
   h.ok(fechadoTxt.startsWith('WhatsApp Web fechadoO WhatsApp Web não está aberto no navegador (Arc). Abra web.whatsapp.com') && await texto(p, '#wa-titulo') === 'WhatsApp', `sem aba, diz que o WhatsApp Web está fechado e não "0 não lidas" (${fechadoTxt})`);
   await p.context().close();
+  // aparelho conectado por QR: lista por conversa igual ao app, com a origem "qr"
+  await h.cenario({ whatsappOrigem: 'qr' });
+  p = await h.pagina(); await pronta(h, p);
+  await p.click('.tecla[data-id="whatsapp"]');
+  h.ok(await h.espera(p, () => document.querySelectorAll('#wa-lista .conversa').length === 5), 'WhatsApp por QR conectado: a lista por conversa aparece, como no app');
+  h.ok(await p.evaluate(() => !document.querySelector('#wa-filtro').hidden), 'WhatsApp por QR conectado: o filtro de grupos fica');
+  await p.context().close();
+  // QR caído: o 0 não é medição, a folha manda abrir os Ajustes no Mac
+  await h.cenario({ whatsappOrigem: 'qr-caido' });
+  p = await h.pagina(); await pronta(h, p);
+  await p.click('.tecla[data-id="whatsapp"]');
+  h.ok(await h.espera(p, () => !!document.querySelector('#wa-lista .vazio-bloco')), 'WhatsApp por QR caído: a folha abre');
+  const qrTxt = await texto(p, '#wa-lista .vazio-bloco');
+  h.ok(qrTxt.startsWith('WhatsApp por QR sem conexão') && qrTxt.includes('Ajustes do Deck no Mac') && await texto(p, '#wa-titulo') === 'WhatsApp', `QR caído diz que está sem conexão e não "0 não lidas" (${qrTxt})`);
+  await p.context().close();
+  // Subindo ou queda curta: o Mac reconecta sozinho, então a folha NÃO manda ler o QR de novo
+  await h.cenario({ whatsappOrigem: 'qr-reconectando' });
+  p = await h.pagina(); await pronta(h, p);
+  await p.click('.tecla[data-id="whatsapp"]');
+  h.ok(await h.espera(p, () => !!document.querySelector('#wa-lista .vazio-bloco')), 'WhatsApp por QR reconectando: a folha abre');
+  const reTxt = await texto(p, '#wa-lista .vazio-bloco');
+  h.ok(reTxt.startsWith('Reconectando ao WhatsApp') && !reTxt.includes('Ajustes'), `reconectando diz que volta sozinho (${reTxt})`);
+  h.ok(reTxt.includes('Não precisa ler o QR'), 'reconectando diz que não precisa ler o QR');
+  await p.context().close();
+  await h.cenario({ whatsappOrigem: 'qr-reconectando-lista' });
+  p = await h.pagina(); await pronta(h, p);
+  await p.click('.tecla[data-id="whatsapp"]');
+  h.ok(await h.espera(p, () => document.querySelectorAll('#wa-lista .conversa').length === 5), 'queda curta: a lista de antes continua à vista');
+  h.ok(await p.evaluate(() => !document.querySelector('#wa-filtro').hidden), 'queda curta: o filtro de grupos fica');
+  h.ok((await texto(p, '#wa-lista')).includes('Reconectando ao WhatsApp'), 'queda curta: a nota de reconexão aparece');
+  await p.context().close();
   await h.cenario({ whatsappOrigem: 'app' });
 
   /* lista maior que a folha rola sem barra, e a leitura de 4 s não puxa para o topo */
@@ -114,6 +145,9 @@ export default async function (h) {
   await p.click('.tecla[data-id="whatsapp"]'); await h.espera(p, () => document.querySelectorAll('#wa-lista .conversa').length === 5);
   await p.click('#wa-lista [data-wa="w1"]'); await h.dormir(700);
   h.ok(await p.evaluate(() => !window.__xss && document.querySelectorAll('#wa-lista img').length === 0), 'texto do WhatsApp com HTML aparece como texto e não executa');
+  // marcação que sobrava: cerca de código, link, itálico, __forte__ e citação
+  const lim = await p.evaluate(() => limparContexto('Veja:\n```bash\nls -la | grep x\n# comentario do shell\n```\n\n- item *italico* e [link](https://x.com) e __forte__\n\n> citacao'));
+  h.ok(lim === 'Veja:\nls -la | grep x\n# comentario do shell\n\n- item italico e link e forte\n\ncitacao', `contexto sem cerca de código, link, itálico nem citação, e o comando dentro da cerca fica intacto (${JSON.stringify(lim)})`);
   await p.context().close(); await h.cenario({ xss: false });
 
   /* ---------- Agenda ---------- */
@@ -124,7 +158,7 @@ export default async function (h) {
   h.ok(await h.espera(p, () => document.querySelectorAll('#ca-grade .sb-dia.tem').length > 0), 'tocar na tecla da Agenda abre o mês com pontos nos dias com evento');
   c = await h.contadores();
   h.ok(c.botoes.length === 0 && await aberta(p, '#f-cal'), 'a tecla abre a agenda no iPhone, sem mandar nada ao Mac');
-  h.ok(c.agenda.includes(`${iso(mes0)}|${diasDoMes}`) && c.agenda.includes(`${iso(hoje)}|30`), `pede agenda(1º do mês, dias do mês) e agenda(hoje, 30) (${c.agenda.join(' ')})`);
+  h.ok(c.agenda.includes(`${iso(mes0)}|${diasDoMes}`) && c.agenda.includes(`${iso(hoje)}|${diasDoMes - hoje.getDate() + 1}`), `pede agenda(1º do mês, dias do mês) e agenda(hoje, dias até o fim do mês) (${c.agenda.join(' ')})`);
   const esperados = new Set(); // dias com evento neste mês, pela mesma regra do Mac de mentira
   for (let d = 1; d <= diasDoMes; d++) { const dow = new Date(hoje.getFullYear(), hoje.getMonth(), d).getDay(); if (dow === 0 || dow === 2 || dow === 4 || AVULSOS.includes(d)) esperados.add(d) }
   const tem = await p.evaluate(() => [...document.querySelectorAll('#ca-grade .sb-dia.tem')].map(x => +x.textContent));
@@ -139,7 +173,7 @@ export default async function (h) {
   await p.click('#ca-prox'); await h.dormir(500);
   const prox = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 1);
   c = await h.contadores();
-  h.ok(await texto(p, '#ca-titulo') !== titulo0 && c.agenda.length === n0 + 1 && c.agenda[n0] === `${iso(prox)}|${new Date(prox.getFullYear(), prox.getMonth() + 1, 0).getDate()}`, `a seta troca o mês e pede só a agenda do mês novo (${c.agenda[n0]})`);
+  h.ok(await texto(p, '#ca-titulo') !== titulo0 && c.agenda.length === n0 + 2 && c.agenda.slice(n0).sort().join() === [`${iso(prox)}|${new Date(prox.getFullYear(), prox.getMonth() + 1, 0).getDate()}`, `${iso(prox)}|${new Date(prox.getFullYear(), prox.getMonth() + 1, 0).getDate()}`].join(), `a seta troca o mês e recarrega a agenda do mês novo (grade e lista) (${c.agenda.slice(n0).join(' ')})`);
   h.ok(await p.evaluate(() => document.querySelector('.sb-dia.hoje') === null), 'em outro mês, o "hoje" não aparece');
   await p.click('#ca-ant'); await h.dormir(500);
   h.ok(await texto(p, '#ca-titulo') === titulo0, 'a seta de trás volta ao mês de hoje');
@@ -160,7 +194,7 @@ export default async function (h) {
   const nomeEsperado = `${alvo.getDate()} de ${alvo.toLocaleDateString('pt-BR', { month: 'long' })}`;
   h.ok(await h.espera(p, n => document.querySelector('#ca-lista h3')?.textContent.endsWith(n), nomeEsperado, 3000), `tocar no dia ${nomeEsperado} pede a lista dele e ela começa nele (${await texto(p, '#ca-lista h3')})`);
   c = await h.contadores();
-  h.ok(c.agenda.at(-1) === `${iso(alvo)}|30`, `pede agenda(dia tocado, 30) (${c.agenda.at(-1)})`);
+  h.ok(c.agenda.at(-1) === `${iso(alvo)}|${new Date(alvo.getFullYear(), alvo.getMonth() + 1, 0).getDate() - alvo.getDate() + 1}`, `pede agenda(dia tocado, dias até o fim do mês) (${c.agenda.at(-1)})`);
   h.ok(await p.evaluate(() => document.querySelectorAll('#ca-grade .sb-dia.sel').length === 1), 'o dia tocado fica marcado');
   // tocar no evento abre "Abrir no Calendário do Mac"
   await p.click('#ca-lista .ev-linha');
@@ -186,7 +220,7 @@ export default async function (h) {
   await h.cenario({ agenda: 'vazia' });
   p = await h.pagina(); await pronta(h, p);
   await p.click('.tecla[data-id="calendario"]');
-  h.ok(await h.espera(p, () => document.querySelector('#ca-lista')?.textContent.includes('Nada nos próximos 30 dias')), 'agenda vazia: "Nada nos próximos 30 dias"');
+  h.ok(await h.espera(p, () => document.querySelector('#ca-lista')?.textContent.includes('Nada neste mês a partir deste dia')), 'agenda vazia: "Nada neste mês a partir deste dia"');
   h.ok(await p.evaluate(() => document.querySelectorAll('#ca-grade .sb-dia.tem').length === 0 && document.querySelectorAll('#ca-grade .sb-dia').length >= 28), 'agenda vazia: o mês aparece sem pontos');
   await h.foto(p, 'agenda-vazia');
   await p.context().close();
@@ -263,6 +297,38 @@ export default async function (h) {
     await h.foto(p, `sessoes-aberta-${w}`);
     await p.context().close();
   }
+
+  /* Contexto da sessão aberta: o pedido em destaque, a resposta sugerida, Abrir no Mac e o contexto legível embaixo */
+  for (const [w, alt, nome] of [[932, 430, 'deitado'], [430, 932, 'em pé']]) {
+    await h.reset();
+    p = await h.pagina({ w, h: alt }); await pronta(h, p);
+    await p.click('.sessoes'); await h.espera(p, () => document.querySelectorAll('#se-lista .cartao-sessao').length === 5);
+    await abrirSessaoPor('s2'); await h.dormir(700);
+    const d = await p.evaluate(() => { const q = x => document.querySelector('#se-lista ' + x); const rot = [...document.querySelectorAll('#se-lista .rotulo')].map(e => e.textContent);
+      return { pergunta: q('.pergunta')?.textContent, sugestao: q('.sugestao p')?.textContent, rotulos: rot, ctx: q('.texto-contexto')?.innerText, paras: document.querySelectorAll('#se-lista .texto-contexto p').length,
+        ordem: ['.pede', '[data-sessao-mac]', '.contexto'].map(x => q(x)?.getBoundingClientRect().top), cru: /\*\*|`|^#|\|---/m.test(q('.texto-contexto')?.textContent || '') } });
+    h.ok(d.pergunta.startsWith('Escolha: A reserva 2 das 4 vagas') && d.sugestao === 'A, e pode abrir o PR rascunho', `${nome}: o pedido inteiro (needs) aparece em destaque, com a resposta sugerida (${d.pergunta.slice(0, 30)})`);
+    h.ok(d.rotulos.join() === 'Pede a sua resposta,Resposta sugerida pela sessão,Contexto', `${nome}: blocos por assunto com rótulo (${d.rotulos})`);
+    h.ok(d.ctx.includes('Com A sobram 2 vagas') && d.ctx.includes('1080p · 4 vagas') && !d.cru && d.paras >= 3, `${nome}: o contexto vem legível, sem marcação solta e com a tabela em linhas (${d.paras} parágrafos)`);
+    h.ok(d.ordem[0] < d.ordem[1] && d.ordem[1] < d.ordem[2], `${nome}: ordem pedido, Abrir no Mac, contexto`);
+    await p.click('#se-lista [data-sessao-mac]'); await h.dormir(300);
+    h.ok((await h.contadores()).sessoesAbertas.includes('s2'), `${nome}: Abrir no Mac continua abrindo a sessão`);
+    await h.foto(p, `sessoes-contexto-${w}`);
+    await p.context().close();
+  }
+  // sessão de Mac antigo (sem pedido, contexto nem sugestão) continua abrindo com a pergunta
+  await h.reset(); p = await h.pagina(); await pronta(h, p);
+  await p.click('.sessoes'); await h.espera(p, () => document.querySelectorAll('#se-lista .cartao-sessao').length === 5);
+  await abrirSessaoPor('s3'); await h.dormir(300);
+  h.ok(await p.evaluate(() => document.querySelector('#se-lista .pergunta').textContent === 'Você aprova o plano do runner 02 (e2e do ci-1)?' && !document.querySelector('#se-lista .contexto, #se-lista .sugestao')), 'sessão sem contexto: mostra a pergunta e não abre bloco vazio');
+  await p.context().close();
+  // texto do contexto com HTML malicioso aparece como texto
+  await h.reset(); await h.cenario({ xss: true });
+  p = await h.pagina(); await pronta(h, p);
+  await p.click('.sessoes'); await h.espera(p, () => document.querySelectorAll('#se-lista .cartao-sessao').length === 5);
+  await abrirSessaoPor('s2'); await h.dormir(300);
+  h.ok(await p.evaluate(() => !window.__xss && document.querySelectorAll('#se-lista .texto-contexto img').length === 0 && document.querySelector('#se-lista .texto-contexto').textContent.includes('<img')), 'contexto com HTML aparece como texto e não executa');
+  await p.context().close(); await h.cenario({ xss: false });
 
   /* Dispensar (na sessão aberta): some da lista e do bloco, fica guardado, volta quando a sessão muda */
   await h.reset();

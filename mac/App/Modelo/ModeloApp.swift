@@ -25,6 +25,8 @@ final class ModeloApp: ObservableObject {
     /// Só os recusados: o selo da barra lateral e o aviso do menu leem daqui.
     @Published var acessosRecusados: [AcessoMac] = []
     @Published var secao: SecaoAjustes = .teclas
+    /// O método de conexão aberto em Conexões (o seletor do topo). Vale só enquanto o app está aberto.
+    @Published var metodoDeConexao: MetodoDeConexao = .cabo
     /// O macOS escondeu o item do Deck na barra: os Ajustes mostram como liberar.
     @Published var iconeEscondido = false
     /// Reconfere o item da barra a cada poucos segundos enquanto o aviso está na tela (Modelo/ItemDaBarra.swift).
@@ -46,6 +48,8 @@ final class ModeloApp: ObservableObject {
     let pareamento = Pareamento()
     /// O login do Spotify (Ajustes > Este Mac). A conta dele é a mesma que o servidor usa.
     let spotify: ModeloSpotify
+    /// O WhatsApp por QR (ajudante de leitura). Desligado até a pessoa escolher a origem QR nos Ajustes.
+    let whatsappQR: ModeloWhatsAppQR
     let abrirComMac: AbrirComMac
     /// Compartilhado com o roteador: a trava dele evita duas trocas do código ao mesmo tempo.
     let rodizio = Rodizio()
@@ -66,7 +70,7 @@ final class ModeloApp: ObservableObject {
     var registrar: @Sendable (String) -> Void = { _ in }
     var pastaDoProjeto: String?
     var portaDoCabo: PortaDoCabo?
-    var radio: RadioPeriferico?
+    var radio: RadiosDoBluetooth?
     /// O nome que o iPhone deu ao pedir pareamento por Bluetooth, para o primeiro pedido dele já aparecer com nome.
     var nomeAprovado: String?
     /// Só as fotos: o relógio parado do protótipo (10/11/2026, 12h), para "vence em 2 dias" sair igual.
@@ -103,6 +107,7 @@ final class ModeloApp: ObservableObject {
         self.defaults = defaults
         // Sem Chaveiro nem internet: as fotos e os testes nunca tocam no login de verdade.
         self.spotify = ModeloSpotify(conta: ContaSpotify(armazem: ArmazemSpotifyMemoria(), transporte: TransporteUrlSession()))
+        self.whatsappQR = ModeloWhatsAppQR.semAjudante()
         self.spotify.avisar = { [weak self] texto, falha in self?.avisar(texto, falha: falha) }
     }
 
@@ -131,6 +136,8 @@ final class ModeloApp: ObservableObject {
             self.registrar = { LogDoDeck.padrao.escrever($0) }
             self.spotify.registrar = { LogDoDeck.padrao.escrever($0) }
         }
+        // Hospedeiro de teste não abre o ajudante do WhatsApp (nem a sessão do dono).
+        self.whatsappQR = testando ? ModeloWhatsAppQR.semAjudante() : ModeloWhatsAppQR.padrao()
         self.spotify.avisar = { [weak self] texto, falha in self?.avisar(texto, falha: falha) }
         ligarDecisao()
         // O núcleo só entrega o código: quem o recebeu é lembrado aqui, e vale enquanto o código for o mesmo.
@@ -147,6 +154,8 @@ final class ModeloApp: ObservableObject {
         vigiarAcessos()
         vigiarRodizio(cada: intervaloDoRodizio)
         if comServidor { subirServidor(armazem) }
+        // Origem QR escolhida antes: volta a conectar sozinha (a sessão já está guardada).
+        if config.whatsapp.origem == "qr", whatsappQR.disponivel, whatsappQR.ponte.temSessao { whatsappQR.ligar() }
     }
 
     func encerrar() {
@@ -156,6 +165,8 @@ final class ModeloApp: ObservableObject {
         vigia?.parar()
         servidorHttps?.parar()
         servidorHttps = nil
+        // Fecha o ajudante com o app, sem apagar a sessão.
+        whatsappQR.ponte.desligar()
         portaDoCabo?.parar(); portaDoCabo = nil
         radio?.parar(); radio = nil
         servidor = .parado
@@ -236,7 +247,7 @@ final class ModeloApp: ObservableObject {
     /// Um iPhone acertou o código de pareamento. O nome só o aparelho sabe e o núcleo não recebe:
     /// até ele mandar, vale "iPhone".
     func iphonePareou(agora: Date = Date()) {
-        let novo = IphonePareado(nome: "iPhone", canal: .wifi, desde: agora)
+        let novo = IphonePareado(nome: "iPhone", canal: .wifi, desde: agora, visto: agora)
         iphone = novo
         IphoneLembrado.gravar(novo, codigo: config.codigoAcesso, defaults)
         avisar("iPhone pareado")
@@ -266,6 +277,24 @@ final class ModeloApp: ObservableObject {
         }
     }
 
+    /// O uso por token que a seção Uso das IAs já sabe medir, entregue ao estado do iPhone. A leitura roda no
+    /// fio de fundo do agregador (cache de 15 s), por isso espera a resposta aqui. O leitor guarda o resultado.
+    nonisolated static func usoMedidoPorToken() -> @Sendable ([ContaIA], Date) -> [String: UsoConta] {
+        let cofre: CofreDeToken = AmbienteDeTeste.ativo ? CofreEmMemoria() : Chaveiro()
+        let leitor = LeitorComCache()
+        let casa = FileManager.default.homeDirectoryForCurrentUser
+        return { contas, agora in
+            let pronto = DispatchSemaphore(value: 0)
+            let caixa = CaixaDeUso()
+            Task.detached {
+                caixa.valor = await PainelUso.lerUso(contas: contas, casa: casa, cofre: cofre, leitor: leitor, agora: agora)
+                pronto.signal()
+            }
+            _ = pronto.wait(timeout: .now() + 25)
+            return caixa.valor
+        }
+    }
+
     private func subirServidor(_ armazem: ArmazemEmDisco) {
         guard let pasta = PastaDaPagina.daInstalacao() else {
             servidor = .falhou("Não achei a página do iPhone dentro do app.")
@@ -273,11 +302,17 @@ final class ModeloApp: ObservableObject {
             return
         }
         let roteador = Ligacao.roteador(armazem: armazem, pareamento: pareamento, pagina: ArquivosPagina(raiz: pasta),
-                                        rodizio: rodizio, certificadoCA: GeradorCertificado().arquivos.ca, contaSpotify: spotify.conta)
-        ligarNativo(roteador: roteador)
-        let portaInicial = config.porta
+                                        rodizio: rodizio, certificadoCA: GeradorCertificado().arquivos.ca, contaSpotify: spotify.conta,
+                                        usoMedido: ModeloApp.usoMedidoPorToken(), ponteQR: whatsappQR.ponte)
+        // A bancada não tem iPhone: nada de cabo nem Bluetooth.
+        if Variante.atual.ligaIphone { ligarNativo(roteador: roteador) }
+        let portaInicial = Variante.atual.portaFixa ?? config.porta
+        // Cada resposta da API pelo Wi-Fi diz que o iPhone está falando agora (a mesma fonte do cabo e do Bluetooth).
+        let atendeu: @Sendable (String, Int) -> Void = { [weak self] caminho, status in
+            Task { @MainActor in self?.wifiAtendeu(caminho: caminho, status: status) }
+        }
         Task.detached(priority: .userInitiated) { [weak self] in
-            let resultado = Result { try ModeloApp.abrirPorta(roteador: roteador, a: portaInicial) }
+            let resultado = Result { try ModeloApp.abrirPorta(roteador: roteador, a: portaInicial, aoAtender: atendeu) }
             await self?.servidorPronto(resultado)
         }
     }
@@ -306,12 +341,12 @@ final class ModeloApp: ObservableObject {
     }
 
     /// Certificado e primeira porta livre a partir da pedida. Bloqueia: roda fora da tela.
-    nonisolated private static func abrirPorta(roteador: Roteador, a partir: Int) throws -> (ServidorHttps, Int) {
+    nonisolated private static func abrirPorta(roteador: Roteador, a partir: Int, aoAtender: (@Sendable (String, Int) -> Void)? = nil) throws -> (ServidorHttps, Int) {
         let gerador = GeradorCertificado()
         let identidade = try gerador.carregarIdentidade(try gerador.garantir())
         var ultimo: Error = ErroServidor(description: "Não achei uma porta livre para o Deck.")
         for porta in Portas.candidatas(a: partir) {
-            let s = ServidorHttps(roteador: roteador, identidade: identidade, porta: UInt16(porta))
+            let s = ServidorHttps(roteador: roteador, identidade: identidade, porta: UInt16(porta), somenteLocal: Variante.atual.somenteLocal, aoAtender: aoAtender)
             do { try s.iniciar(); return (s, porta) } catch { ultimo = error }
         }
         throw ultimo
@@ -365,10 +400,21 @@ enum IphoneLembrado {
 
     static func ler(_ defaults: UserDefaults, codigoAtual: String) -> IphonePareado? {
         guard defaults.string(forKey: chaveCodigo) == codigoAtual, let nome = defaults.string(forKey: chaveNome) else { return nil }
-        return IphonePareado(nome: nome, canal: .wifi, desde: defaults.object(forKey: chaveDesde) as? Date)
+        // Lembrado não é conectado: só passa a "ao vivo" quando o iPhone falar com o Mac de novo.
+        return IphonePareado(nome: nome, canal: .wifi, desde: defaults.object(forKey: chaveDesde) as? Date, visto: .distantPast)
     }
 
     static func esquecer(_ defaults: UserDefaults) {
         for c in [chaveNome, chaveDesde, chaveCodigo] { defaults.removeObject(forKey: c) }
+    }
+}
+
+/// Leva o resultado da leitura assíncrona de volta ao fio que esperou por ele.
+private final class CaixaDeUso: @unchecked Sendable {
+    private let trava = NSLock()
+    private var guardado: [String: UsoConta] = [:]
+    var valor: [String: UsoConta] {
+        get { trava.lock(); defer { trava.unlock() }; return guardado }
+        set { trava.lock(); guardado = newValue; trava.unlock() }
     }
 }

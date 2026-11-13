@@ -54,7 +54,8 @@ export default async function (h) {
   /* ---------- Agenda: Entrar na reunião (Meet, Zoom, Teams) ---------- */
   await h.reset(); await h.cenario({ reunioes: true });
   p = await h.pagina(); await pronta(h, p);
-  await p.click('.tecla[data-id="calendario"]');
+  await p.click('.tecla[data-id="calendario"]'); await h.espera(p, () => document.querySelectorAll('#ca-grade .sb-dia').length > 27);
+  await p.click('#ca-prox'); await h.dormir(500);
   await h.espera(p, () => document.querySelectorAll('#ca-lista .ev-linha').length > 3);
   const abrirEvento = async titulo => { await p.locator(`#ca-lista .ev-linha:has(b:text-is("${titulo}"))`).first().click(); await h.dormir(250) };
   const botao = '#ca-lista [data-ev-reuniao]';
@@ -86,7 +87,7 @@ export default async function (h) {
   /* o Mac recusa: o aviso traz o motivo */
   await h.reset(); await h.cenario({ reunioes: true, reuniaoRecusa: 'O Mac não conseguiu abrir o link da reunião.' });
   p = await h.pagina(); await pronta(h, p);
-  await p.click('.tecla[data-id="calendario"]'); await h.espera(p, () => document.querySelectorAll('#ca-lista .ev-linha').length > 3);
+  await p.click('.tecla[data-id="calendario"]'); await h.espera(p, () => document.querySelectorAll('#ca-grade .sb-dia').length > 27); await p.click('#ca-prox'); await h.dormir(500); await h.espera(p, () => document.querySelectorAll('#ca-lista .ev-linha').length > 3);
   await p.locator('#ca-lista .ev-linha:has(b:text-is("Reunião de produto"))').first().click(); await h.dormir(250);
   await p.click(botao); await h.dormir(400);
   let a = await aviso(p);
@@ -96,7 +97,7 @@ export default async function (h) {
   /* Mac antigo (sem link no evento) e link que não é de reunião: nada de botão */
   await h.reset();
   p = await h.pagina(); await pronta(h, p);
-  await p.click('.tecla[data-id="calendario"]'); await h.espera(p, () => document.querySelectorAll('#ca-lista .ev-linha').length > 3);
+  await p.click('.tecla[data-id="calendario"]'); await h.espera(p, () => document.querySelectorAll('#ca-grade .sb-dia').length > 27); await p.click('#ca-prox'); await h.dormir(500); await h.espera(p, () => document.querySelectorAll('#ca-lista .ev-linha').length > 3);
   await p.locator('#ca-lista .ev-linha:has(b:text-is("Reunião de produto"))').first().click(); await h.dormir(250);
   h.ok(await p.locator(botao).count() === 0, 'Mac que ainda não manda o link: o evento abre sem o botão e sem erro');
   const falso = await p.evaluate(() => ['https://golpe.com/meet.google.com/x', 'http://meet.google.com/abc', 'javascript:alert(1)', 'https://meet.google.com.golpe.com/abc', ''].map(l => reuniaoDe({ link: l })));
@@ -244,7 +245,7 @@ export default async function (h) {
   h.ok((await spot()).at(-1) === 'dispositivo:d-sala', 'o Mac recebeu dispositivo:d-sala');
   await p.click('#pc-lista-corpo [data-aparelho="d-tv"]', { force: true }).catch(() => {}); await h.dormir(300);
   h.ok((await spot()).at(-1) === 'dispositivo:d-sala', 'o aparelho que o Spotify não deixa controlar não manda nada');
-  await p.click('#pc-lista [data-pc-voltar]'); await h.dormir(300);
+  await p.click('#pc-lista [data-pc-voltar]'); await h.dormir(500);
   h.ok(await p.evaluate(() => document.querySelector('#pc-lista').hidden) && await p.evaluate(() => !!document.querySelector('#f-player .capa-grande')), 'Voltar fecha a lista e mostra o player');
   await p.context().close();
 
@@ -260,8 +261,8 @@ export default async function (h) {
   for (const [w, alt, nome] of [[932, 430, 'deitado'], [430, 932, 'em pé']]) {
     p = await abrirPlayer({ spotifyExtras: 'login' }, { w, h: alt });
     await p.click('#f-player [data-fila]'); await h.dormir(600);
-    const fl = await p.evaluate(() => ({ titulo: document.querySelector('#pc-lista-titulo').textContent, grupos: [...document.querySelectorAll('#pc-lista-corpo h3')].map(x => x.textContent), itens: document.querySelectorAll('#pc-lista-corpo .item-lista').length, primeira: document.querySelector('#pc-lista-corpo .item-lista b').textContent }));
-    h.ok(fl.titulo === 'Na fila' && fl.grupos.join() === 'Tocando agora,Próximas' && fl.itens === 10 && fl.primeira === 'Faixa de Exemplo', `${nome}: a fila mostra o que toca agora e as 9 próximas (${fl.itens} itens)`);
+    const fl = await p.evaluate(() => ({ titulo: document.querySelector('#pc-lista-titulo').textContent, grupos: [...document.querySelectorAll('#pc-lista-corpo h3')].map(x => x.textContent), itens: document.querySelectorAll('#pc-lista-corpo .item-lista').length, primeira: document.querySelector('#pc-lista-corpo .item-lista b').textContent, agora: document.querySelector('#pc-lista-topo b')?.textContent }));
+    h.ok(fl.titulo === 'Na fila' && fl.grupos.join() === 'Próximas' && fl.itens === 9 && fl.primeira === 'Próxima música 1' && fl.agora === 'Faixa de Exemplo', `${nome}: a fila mostra o que toca agora no alto, fixo, e as 9 próximas embaixo (${fl.itens} itens)`);
     if (nome === 'deitado') {
       const rolagem = await p.evaluate(() => { const e = document.querySelector('#pc-lista-corpo'); return { passa: e.scrollHeight > e.clientHeight + 20, semBarra: getComputedStyle(e).scrollbarWidth === 'none' } });
       h.ok(rolagem.passa && rolagem.semBarra, 'a fila longa rola sem barra visível');
@@ -281,7 +282,7 @@ export default async function (h) {
   await h.reset(); await h.cenario({ spotifyExtras: 'login', xss: true });
   p = await h.pagina(); await pronta(h, p); await h.dormir(400); await p.click('.player .capa'); await h.dormir(800);
   await p.click('#f-player [data-fila]'); await h.dormir(500); await p.click('#pc-lista [data-pc-voltar]'); await p.click('#f-player [data-aparelhos]'); await h.dormir(500);
-  h.ok(await p.evaluate(() => !window.__xss && document.querySelectorAll('#pc-lista img').length === 0), 'nome de aparelho e de música com HTML aparece como texto e não executa');
+  h.ok(await p.evaluate(() => !window.__xss && document.querySelectorAll('#pc-lista img:not(.capa-mini)').length === 0), 'nome de aparelho e de música com HTML aparece como texto e não executa');
   await p.context().close();
 
   /* ---------- Editor de tecla: os apps do Mac de quem usa, com busca, ícone e ações ---------- */
@@ -311,13 +312,13 @@ export default async function (h) {
   p = await h.pagina(); await pronta(h, p);
   await novaTecla(p);
   const lista = await p.evaluate(() => [...document.querySelectorAll('#ed-lista-apps [data-app-bundle]')].map(b => [b.querySelector('span:not(.svg)').textContent, b.dataset.appBundle, b.querySelector('img')?.getAttribute('src') || 'svg', b.querySelector('img')?.getAttribute('loading')]));
-  h.ok(lista.length === 11 && lista[0][0] === 'Navegador padrão' && lista[0][2] === 'svg' && lista.slice(1).map(a => a[0]).join() === 'Calculadora,Calendário,Finder,Google Chrome,Mail,Notas,Safari,Spotify,Terminal,WhatsApp', `a lista vem do Mac, de A a Z, com o Navegador padrão no começo (${lista.map(a => a[0]).join(', ')})`);
-  h.ok(lista.slice(1).every(a => /^\/api\/apps\/[A-Za-z0-9.]+\/icone\?codigo=/.test(a[2]) && a[3] === 'lazy'), 'cada app mostra o ícone que o Mac entrega (carregado só quando aparece)');
+  h.ok(lista.length === 13 && lista.slice(0, 3).map(a => a[0]).join() === 'Controles do Mac,Google Meet (navegador),Navegador padrão' && lista.slice(0, 3).every(a => a[2] === 'svg') && lista.slice(3).map(a => a[0]).join() === 'Calculadora,Calendário,Finder,Google Chrome,Mail,Notas,Safari,Spotify,Terminal,WhatsApp', `a lista vem do Mac, de A a Z, com os especiais (Controles, Meet, Navegador padrão) no começo (${lista.map(a => a[0]).join(', ')})`);
+  h.ok(lista.slice(3).every(a => /^\/api\/apps\/[A-Za-z0-9.]+\/icone\?codigo=/.test(a[2]) && a[3] === 'lazy'), 'cada app mostra o ícone que o Mac entrega (carregado só quando aparece)');
   await h.foto(p, 'editor-apps');
   await p.fill('#ed-busca', 'CALEND'); await h.dormir(150);
   h.ok(await p.evaluate(() => [...document.querySelectorAll('#ed-lista-apps [data-app-bundle] span')].map(x => x.textContent).join()) === 'Calendário', 'a busca acha sem ligar para caixa nem acento ("CALEND" acha Calendário)');
   await p.fill('#ed-busca', 'navega'); await h.dormir(150);
-  h.ok(await p.evaluate(() => document.querySelectorAll('#ed-lista-apps [data-app-bundle]').length) === 1, 'a busca também acha o Navegador padrão');
+  h.ok(await p.evaluate(() => document.querySelectorAll('#ed-lista-apps [data-app-bundle]').length) === 2, 'a busca também acha os especiais ("navega" acha Google Meet (navegador) e Navegador padrão)');
   await p.fill('#ed-busca', 'xyzxyz'); await h.dormir(150);
   h.ok((await texto(p, '#ed-lista-apps')) === 'Nenhum app com esse nome.', 'sem resultado: "Nenhum app com esse nome."');
   await p.fill('#ed-busca', ''); await h.dormir(150);
@@ -408,7 +409,7 @@ export default async function (h) {
   await tocar(p, '.tecla.menu'); await h.dormir(700);
   h.ok((await texto(p, '#ed-acao')).includes('Não deu para ler os apps do Mac') && await p.locator('#ed-acao [data-app]').count() === 8 && await p.locator('[data-apps-tentar]').count() === 1, 'a lista do Mac falhando: aviso, a lista curta e "Tentar de novo"');
   await h.cenario({ apps: 'normal' }); await p.click('[data-apps-tentar]'); await h.dormir(700);
-  h.ok(await p.evaluate(() => document.querySelectorAll('#ed-lista-apps [data-app-bundle]').length) === 11, '"Tentar de novo" traz a lista do Mac');
+  h.ok(await p.evaluate(() => document.querySelectorAll('#ed-lista-apps [data-app-bundle]').length) === 13, '"Tentar de novo" traz a lista do Mac');
   await p.context().close();
 
   /* muitos apps: a lista rola sem barra, e o editor cabe nas duas posições */
@@ -417,7 +418,7 @@ export default async function (h) {
     p = await h.pagina({ w, h: alt }); await pronta(h, p);
     await novaTecla(p); await h.dormir(700); // a folha termina de subir
     const rol = await p.evaluate(() => { const e = document.querySelector('#ed-lista-apps'), f = document.querySelector('#f-editor').getBoundingClientRect(); return { passa: e.scrollHeight > e.clientHeight + 20, semBarra: getComputedStyle(e).scrollbarWidth === 'none', dentro: f.left >= 0 && f.right <= innerWidth + 1 && f.top >= 0 && f.bottom <= innerHeight + 1 && e.getBoundingClientRect().bottom <= innerHeight, n: e.querySelectorAll('[data-app-bundle]').length }; });
-    h.ok(rol.n === 141 && rol.passa && rol.semBarra && rol.dentro, `${nome}: 140 apps, a lista rola sem barra e o editor cabe (${JSON.stringify(rol)})`);
+    h.ok(rol.n === 143 && rol.passa && rol.semBarra && rol.dentro, `${nome}: 140 apps mais 3 especiais, a lista rola sem barra e o editor cabe (${JSON.stringify(rol)})`);
     await h.foto(p, nome === 'deitado' ? 'editor-apps-muitos' : 'editor-apps-em-pe');
     await escolherApp('Mail').catch(() => {});
     await p.fill('#ed-busca', 'mail').catch(() => {});

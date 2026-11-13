@@ -5,6 +5,8 @@
      estado()                  -> Estado
      botao(id)                 -> {ok: true}
      spotify(acao, valor?)     -> {ok: true}     acao: tocar, pausar, anterior, proxima, posicao (segundos), repetir e aleatorio (true liga, false desliga)
+     controles()               -> {volume?, mudo?, brilho?, teclado?}  o que o Mac oferece (0 a 100), campo que falta = não oferece
+     controle(item, v)         -> {ok: true}     item: volume, mudo (v 0 ou 1), brilho ou teclado
      spotifyVolume(v, alvo)    -> {ok: true}     v de 0 a 100, alvo: spotify, mac ou aparelho
      aparelhos()               -> [Aparelho]     só com o Spotify conectado (senão 409)
      transferir(id)            -> {ok: true}     passa a música para o aparelho (só conectado)
@@ -14,10 +16,15 @@
      config()                  -> Config sem o codigoAcesso
      gravarConfig(config)      -> Config
      whatsapp()                -> [ConversaWhatsApp]
+     whatsappFoto(arquivo)     -> {tipo, dados}    a foto de perfil de uma conversa (dados em base64, 404 sem foto)
+     whatsappMidia(chat, id)   -> {tipo, dados}    a foto ou o áudio de uma mensagem, baixado agora (só aparelho conectado, até 8 MB, nunca visualização única)
+     abrirConversa(id)         -> {ok, aviso?}     "Responder no Mac": abre a conversa no WhatsApp Web do Mac (404 em Mac antigo)
      agenda(de, dias)          -> [Evento]
      sessoes()                 -> [Sessao]
      abrirSessao(id)           -> {ok, como, app}  traz o terminal da sessão para a frente no Mac (como: "terminal" ou "pasta")
      entrarNaReuniao(link)     -> {ok: true}       abre no Mac o link de reunião do evento (Meet, Zoom ou Teams)
+     agendaDestinos(pedir?)    -> {calendarios, listas, permissaoCalendario, permissaoLembretes, padrao}  onde dá para salvar um compromisso (404 em Mac antigo). pedir=true abre no Mac o pedido de acesso aos Lembretes
+     criarCompromisso(dados)   -> {ok, padraoSalvo}  cria no Calendário ou nos Lembretes do Mac: {titulo, dia, diaTodo, inicio, fim, destino: {tipo, id}, alertaMin, padrao}
      capaUrl(capaId)           -> endereço da imagem da capa
      apps()                    -> [{nome, valor, bundle, navegador}]  os apps instalados no Mac (404 em Mac antigo)
      acoesDoApp(bundle)        -> {bundle, acoes: [Acao]}  o que o app oferece além de abrir (ler as contas do Mail pode levar uns 8 s)
@@ -87,10 +94,17 @@ function criarCanalHttps() {
     config: () => pedir('GET', '/api/config'),
     gravarConfig: config => pedir('PUT', '/api/config', config),
     whatsapp: () => pedir('GET', '/api/whatsapp'),
+    whatsappFoto: arquivo => pedir('GET', '/api/whatsapp/foto/' + encodeURIComponent(arquivo)),
+    whatsappMidia: (chat, id) => pedir('GET', `/api/whatsapp/midia?chat=${encodeURIComponent(chat)}&id=${encodeURIComponent(id)}`, undefined, 45000), // o Mac baixa da internet antes de responder
+    abrirConversa: id => pedir('POST', '/api/whatsapp/abrir', { id }),
     agenda: (de, dias) => pedir('GET', `/api/agenda?de=${encodeURIComponent(de)}&dias=${encodeURIComponent(dias)}`),
     sessoes: () => pedir('GET', '/api/sessoes'),
     abrirSessao: id => pedir('POST', '/api/sessoes/' + encodeURIComponent(id) + '/abrir'),
     entrarNaReuniao: link => pedir('POST', '/api/reuniao/entrar', { link }),
+    controles: () => pedir('GET', '/api/controles'),
+    controle: (item, v) => pedir('POST', `/api/controles/${encodeURIComponent(item)}?v=${encodeURIComponent(v)}`),
+    agendaDestinos: pedirAcesso => pedir('GET', '/api/agenda/destinos' + (pedirAcesso ? '?pedir=1' : '')),
+    criarCompromisso: dados => pedir('POST', '/api/agenda/criar', dados, 15000), // o Mac grava pelo EventKit, que pode demorar com a conta na nuvem
     apps: () => pedir('GET', '/api/apps'),
     acoesDoApp: bundle => pedir('GET', `/api/apps/${encodeURIComponent(bundle)}/acoes`, undefined, 15000), // o Mac lê a lista de dentro do app, e o macOS pode pedir permissão no meio
     appIconeUrl: bundle => `/api/apps/${encodeURIComponent(bundle)}/icone?codigo=${encodeURIComponent(codigo || '')}`,

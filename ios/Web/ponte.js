@@ -74,10 +74,17 @@
     config: () => pedir('GET', '/api/config'),
     gravarConfig: config => pedir('PUT', '/api/config', undefined, config),
     whatsapp: () => pedir('GET', '/api/whatsapp'),
+    whatsappFoto: arquivo => pedir('GET', '/api/whatsapp/foto/' + encodeURIComponent(arquivo)),
+    whatsappMidia: (chat, id) => pedir('GET', '/api/whatsapp/midia', { chat: String(chat), id: String(id) }, undefined, 45000), // o Mac baixa da internet antes de responder
+    abrirConversa: id => pedir('POST', '/api/whatsapp/abrir', undefined, { id }),
     agenda: (de, dias) => pedir('GET', '/api/agenda', { de: String(de), dias: String(dias) }),
     sessoes: () => pedir('GET', '/api/sessoes'),
     abrirSessao: id => pedir('POST', '/api/sessoes/' + encodeURIComponent(id) + '/abrir'),
     entrarNaReuniao: link => pedir('POST', '/api/reuniao/entrar', undefined, { link }),
+    controles: () => pedir('GET', '/api/controles'),
+    controle: (item, v) => pedir('POST', '/api/controles/' + encodeURIComponent(item), { v: String(v) }),
+    agendaDestinos: pedirAcesso => pedir('GET', '/api/agenda/destinos', pedirAcesso ? { pedir: '1' } : undefined),
+    criarCompromisso: dados => pedir('POST', '/api/agenda/criar', undefined, dados, 15000),
     apps: () => pedir('GET', '/api/apps'),
     acoesDoApp: bundle => pedir('GET', '/api/apps/' + encodeURIComponent(bundle) + '/acoes', undefined, undefined, 15000), // ler as contas do Mail pode levar uns 8 s
     // o ícone de um app do Mac (editor de tecla): também numa <img>, pelo mesmo esquema. O app do iPhone guarda por um dia

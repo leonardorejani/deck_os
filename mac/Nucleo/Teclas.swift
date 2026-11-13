@@ -55,6 +55,41 @@ enum Teclas {
     }
 }
 
+/// Um passo do envio da combinação: a tecla desce ou sobe com as flags dos modificadores.
+struct PassoDeTecla: Equatable {
+    let codigo: UInt16
+    let descendo: Bool
+    let modificadores: Modificadores
+}
+
+extension Teclas {
+    /// O que o Deck posta no HID para apertar a combinação: a tecla desce e sobe, e os dois eventos
+    /// levam os modificadores (um app que escuta o atalho global confere as flags de cada evento).
+    static func passos(_ c: Combinacao) -> [PassoDeTecla] {
+        [true, false].map { PassoDeTecla(codigo: c.codigo, descendo: $0, modificadores: c.modificadores) }
+    }
+
+    /// Ordem fixa do texto gravado: o mesmo "ctrl+opt+cmd+shift" que o gravador sempre escreveu.
+    private static let ordemDoTexto: [(Modificadores, String)] = [(.fn, "fn"), (.controle, "ctrl"), (.opcao, "opt"), (.comando, "cmd"), (.shift, "shift")]
+
+    /// Escreve a combinação no formato do config.json. Nil se a tecla não existe ou se faltou modificador
+    /// (combinação sem modificador dispararia a tecla solta em qualquer app).
+    static func escrever(modificadores: Modificadores, tecla: String) -> String? {
+        guard !modificadores.isEmpty, codigos[tecla] != nil else { return nil }
+        return (ordemDoTexto.filter { modificadores.contains($0.0) }.map(\.1) + [tecla]).joined(separator: "+")
+    }
+}
+
+extension Teclas {
+    /// Nome da tecla a partir do código virtual (o inverso de `codigos`). O nome mais legível quando há apelidos.
+    static func nome(doCodigo codigo: UInt16) -> String? {
+        let preferidos = ["return", "left", "right", "down", "up", "space"]
+        let candidatos = codigos.filter { $0.value == codigo }.map(\.key)
+        if let p = preferidos.first(where: candidatos.contains) { return p }
+        return candidatos.min { ($0.count, $0) < ($1.count, $1) }
+    }
+}
+
 #if canImport(CoreGraphics)
 import CoreGraphics
 

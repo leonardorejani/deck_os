@@ -327,6 +327,48 @@ final class FontesWhatsAppWebTestes: XCTestCase {
         XCTAssertTrue(ex.comandos.last!.contains("set active tab index of window 1 to 2"))
         XCTAssertFalse(ex.comandos.contains { $0.contains("open -a 'WhatsApp'") })
     }
+    // MARK: Responder no Mac (12/11/2026): abre a conversa do contato no WhatsApp Web
+
+    func testResponderAbreAConversaDoNumeroNoNavegadorPadrao() {
+        let ex = ExecutorFalso([("open 'https", SaidaShell(status: 0, saida: ""))])
+        let abridor = AbridorWhatsApp(origem: origem(ConfigWhatsApp(origem: "qr", navegador: nil), ex), executor: ex)
+        XCTAssertEqual(abridor.abrirConversa(numero: "5544984097902", grupo: false), .aberta(aviso: nil))
+        XCTAssertEqual(ex.comandos, ["open 'https://web.whatsapp.com/send?phone=5544984097902'"])
+    }
+
+    func testResponderUsaONavegadorEscolhido() {
+        let ex = ExecutorFalso([("open -a", SaidaShell(status: 0, saida: ""))])
+        let abridor = AbridorWhatsApp(origem: origem(ConfigWhatsApp(origem: "qr", navegador: "Arc"), ex), executor: ex)
+        XCTAssertEqual(abridor.abrirConversa(numero: "5544984097902", grupo: false), .aberta(aviso: nil))
+        XCTAssertEqual(ex.comandos, ["open -a 'Arc' 'https://web.whatsapp.com/send?phone=5544984097902'"])
+    }
+
+    func testResponderEmGrupoAbreOWebEDizQueNaoTemLinkDireto() {
+        let ex = ExecutorFalso([("open", SaidaShell(status: 0, saida: ""))])
+        let abridor = AbridorWhatsApp(origem: origem(ConfigWhatsApp(origem: "qr", navegador: nil), ex), executor: ex)
+        XCTAssertEqual(abridor.abrirConversa(numero: nil, grupo: true), .aberta(aviso: AbridorWhatsApp.avisoDoGrupo))
+        XCTAssertEqual(ex.comandos, ["open 'https://web.whatsapp.com'"])
+    }
+
+    func testResponderSemNumeroAbreOWebEAvisa() {
+        let ex = ExecutorFalso([("open", SaidaShell(status: 0, saida: ""))])
+        let abridor = AbridorWhatsApp(origem: origem(ConfigWhatsApp(origem: "qr", navegador: nil), ex), executor: ex)
+        XCTAssertEqual(abridor.abrirConversa(numero: nil, grupo: false), .aberta(aviso: AbridorWhatsApp.avisoSemNumero))
+    }
+
+    func testNumeroComLixoNuncaViraParteDoComando() {
+        for ruim in ["5544'; rm -rf ~; '", "55 44984097902", "123", "1234567890123456", "+5544984097902", "55４４984097902"] {
+            XCTAssertNil(WhatsAppWeb.enderecoDaConversa(numero: ruim), ruim)
+        }
+        XCTAssertEqual(WhatsAppWeb.enderecoDaConversa(numero: "5544984097902"), "https://web.whatsapp.com/send?phone=5544984097902")
+    }
+
+    func testResponderFalhaDaErroEmPortugues() {
+        let ex = ExecutorFalso([("open", SaidaShell(status: 1, saida: "x"))])
+        let abridor = AbridorWhatsApp(origem: origem(ConfigWhatsApp(origem: "qr", navegador: nil), ex), executor: ex)
+        XCTAssertEqual(abridor.abrirConversa(numero: "5544984097902", grupo: false), .falhou(AbridorWhatsApp.erro))
+    }
+
 }
 
 final class ConfigWhatsAppTestes: XCTestCase {

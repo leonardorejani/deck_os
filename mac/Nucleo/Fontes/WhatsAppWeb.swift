@@ -102,8 +102,20 @@ enum WhatsAppWeb {
 
     /// Sem aba aberta: abre o WhatsApp Web no navegador escolhido, ou no padrão do Mac.
     static func comandoAbrir(navegador: NavegadorWeb?) -> String {
+        comandoAbrir(endereco: endereco, navegador: navegador)
+    }
+
+    static func comandoAbrir(endereco: String, navegador: NavegadorWeb?) -> String {
         guard let n = navegador else { return "open \(Shell.aspas(endereco))" }
         return "open -a \(Shell.aspas(n.nome)) \(Shell.aspas(endereco))"
+    }
+
+    /// O link que abre a conversa de um número direto no WhatsApp Web. Só dígitos entram (de 8 a 15), então nada vindo
+    /// de fora vira parte do endereço ou do comando.
+    static func enderecoDaConversa(numero: String) -> String? {
+        let d = numero.filter { $0.isASCII && $0.isNumber }
+        guard d == numero, (8...15).contains(d.count) else { return nil }
+        return "\(endereco)/send?phone=\(d)"
     }
 
     enum Busca: Equatable {
@@ -156,6 +168,9 @@ final class OrigemWhatsApp: @unchecked Sendable {
         self.relogio = relogio
     }
 
+    /// O navegador fixado na config (nil: o padrão do Mac).
+    func navegadorEscolhido() -> NavegadorWeb? { NavegadorWeb.chamado(config().navegador) }
+
     func decidir() -> DecisaoWhatsApp {
         let cfg = config()
         let agora = relogio()
@@ -167,6 +182,8 @@ final class OrigemWhatsApp: @unchecked Sendable {
         switch cfg.origem {
         case "app":
             return DecisaoWhatsApp(origem: "app")
+        case "qr":
+            return DecisaoWhatsApp(origem: "qr")
         case "web":
             let b = procurar(preferido: escolhido)
             return DecisaoWhatsApp(origem: "web", aba: b.aba, navegadorEscolhido: escolhido,
@@ -220,9 +237,19 @@ final class OrigemWhatsApp: @unchecked Sendable {
 struct FonteWhatsAppEscolhida: Sendable {
     var origem: OrigemWhatsApp
     var app: FonteWhatsApp
+    /// O WhatsApp por QR (ajudante). Nil: sem ele, a origem "qr" só avisa que não está disponível.
+    var qr: PonteWhatsAppQR? = nil
 
     func ler() -> Leitura<WhatsAppDados?> {
         let d = origem.decidir()
+        if d.origem == "qr" {
+            guard let qr else {
+                return Leitura(valor: nil, aviso: Aviso(fonte: "whatsapp", texto: "O WhatsApp por QR não está disponível nesta versão do Deck."))
+            }
+            return qr.ler()
+        }
+        // Saiu da origem QR: a conexão não fica ocupando um dos 4 aparelhos do WhatsApp à toa.
+        if let qr, qr.ligada { qr.desligar() }
         guard d.origem == "web" else {
             var l = app.ler()
             l.valor?.resumo.origem = "app"
@@ -232,6 +259,13 @@ struct FonteWhatsAppEscolhida: Sendable {
                                     navegador: (d.aba?.navegador ?? d.navegadorEscolhido)?.nome, aberto: d.aba != nil)
         return Leitura(valor: WhatsAppDados(resumo: resumo, conversas: []), aviso: d.aviso)
     }
+}
+
+/// O resultado de "Responder no Mac".
+enum AberturaDeConversa: Equatable, Sendable {
+    /// Abriu a conversa. `aviso` diz o que a pessoa ainda precisa fazer (grupo, ou número que não se achou).
+    case aberta(aviso: String?)
+    case falhou(String)
 }
 
 enum AberturaWhatsApp: Equatable, Sendable {
@@ -248,6 +282,21 @@ struct AbridorWhatsApp: Sendable {
     var executor: any Executor
 
     static let erro = "Não consegui abrir o WhatsApp Web no navegador."
+
+    static let avisoDoGrupo = "Abri o WhatsApp Web. Grupo não tem link direto: procure o grupo na lista."
+    static let avisoSemNumero = "Abri o WhatsApp Web, mas não achei o número desse contato: procure a conversa na lista."
+
+    /// "Responder no Mac": abre a conversa do contato no WhatsApp Web, no navegador escolhido nos Ajustes ou no padrão do Mac.
+    /// Vale para qualquer origem de leitura. Grupo (ou contato sem número) não tem link direto: abre o Web e avisa.
+    func abrirConversa(numero: String?, grupo: Bool) -> AberturaDeConversa {
+        var aviso: String? = grupo ? Self.avisoDoGrupo : nil
+        var endereco = WhatsAppWeb.endereco
+        if !grupo {
+            if let numero, let link = WhatsAppWeb.enderecoDaConversa(numero: numero) { endereco = link } else { aviso = Self.avisoSemNumero }
+        }
+        let r = executor.rodar(WhatsAppWeb.comandoAbrir(endereco: endereco, navegador: origem.navegadorEscolhido()))
+        return r.status == 0 ? .aberta(aviso: aviso) : .falhou(Self.erro)
+    }
 
     func abrir() -> AberturaWhatsApp {
         let d = origem.decidir()

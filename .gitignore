@@ -23,6 +23,7 @@ provas/casca/build/
 # app do Mac: o projeto é gerado pelo xcodegen
 mac/App/Deck.xcodeproj/
 mac/App/build/
+mac/App/build-bancada/
 # app do iPhone: página empacotada, projeto gerado pelo xcodegen e build
 ios/Pagina/
 ios/Deck.xcodeproj/
@@ -30,6 +31,7 @@ ios/build/
 ios/Pacote/.build/
 # gerado pelo build.sh
 dist/
+helpers/whatsapp/build/
 
 # cache do auditor de PWA da tatile
 .pwa-nativo/

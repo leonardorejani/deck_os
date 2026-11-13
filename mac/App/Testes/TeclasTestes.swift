@@ -239,6 +239,72 @@ final class ModeloTeclasTestes: XCTestCase {
         XCTAssertEqual(k.nome, "a", "nome próprio não é trocado")
     }
 
+    func testTeclasDeFabricaEntramNaListaESaoDeFabrica() {
+        XCTAssertEqual(TeclasDeFabrica.todas.map(\.nome), ["Controles do Mac", "Google Meet (navegador)"])
+        XCTAssertEqual(AjusteDeApp.de("Calendar"), .agenda)
+        XCTAssertEqual(AjusteDeApp.de("Activity Monitor"), .monitor)
+        XCTAssertEqual(AjusteDeApp.de("Controles"), .controles)
+        XCTAssertEqual(AjusteDeApp.de("Google Meet"), .meet)
+        XCTAssertNil(AjusteDeApp.de("Safari"))
+    }
+
+    /// O perfil "ensaio" do cenário tem a tecla "e1" vazia de propósito, então a validação olha só o resto.
+    private func semEnsaio(_ config: Config) -> Config {
+        var c = config
+        c.perfis.removeAll { $0.id == "ensaio" }
+        return c
+    }
+
+    func testEscolherOMeetDaListaDaNomeCurtoIconeEAcaoLimpaAoTrocarDeApp() {
+        let m = modelo()
+        let tl = tela(m)
+        tl.escolherApp(TeclasDeFabrica.meet)
+        tl.escolherAcao(AcaoDeApp(id: "reuniao-microfone", valor: nil))
+        var k = m.config.perfis[0].teclas[0]
+        XCTAssertEqual(k.valor, "Google Meet")
+        XCTAssertEqual(k.icone, "svg:video")
+        XCTAssertEqual(k.acao?.id, "reuniao-microfone")
+        XCTAssertNil(Config.validar(semEnsaio(m.config)))
+        tl.escolherApp(AppDoMac(nome: "Safari", valor: "Safari", caminhoDoIcone: nil))
+        k = m.config.perfis[0].teclas[0]
+        XCTAssertNil(k.acao, "a ação era do Meet")
+        XCTAssertEqual(k.icone, "Safari")
+    }
+
+    func testLigaEDesligaDaTeclaDeComando() {
+        let m = modelo()
+        let tl = tela(m)
+        tl.escolherTipo(.comando)
+        tl.escolherComando("foco jogo")
+        tl.definirLigaEDesliga(true)
+        tl.escolherDesligar("foco trabalho")
+        tl.escolherConferir("checar-foco")
+        var k = m.config.perfis[0].teclas[0]
+        XCTAssertEqual([k.valor, k.desligar, k.estado], ["foco jogo", "foco trabalho", "checar-foco"])
+        XCTAssertNil(Config.validar(semEnsaio(m.config)))
+        tl.escolherConferir("  ")
+        XCTAssertNil(m.config.perfis[0].teclas[0].estado, "campo vazio apaga o comando de conferir")
+        tl.definirLigaEDesliga(false)
+        k = m.config.perfis[0].teclas[0]
+        XCTAssertNil(k.desligar)
+        XCTAssertEqual(k.valor, "foco jogo", "o comando de ligar continua sendo o da tecla")
+    }
+
+    func testTrocarOTipoApagaOQueSoValiaNoTipoAntigo() {
+        let m = modelo()
+        let tl = tela(m)
+        tl.escolherTipo(.comando)
+        tl.escolherComando("x")
+        tl.definirLigaEDesliga(true)
+        tl.escolherDesligar("y")
+        tl.escolherTipo(.app)
+        XCTAssertNil(tl.tecla?.desligar)
+        tl.escolherApp(TeclasDeFabrica.meet)
+        tl.escolherAcao(AcaoDeApp(id: "reuniao-camera", valor: nil))
+        tl.escolherTipo(.comando)
+        XCTAssertNil(tl.tecla?.acao)
+    }
+
     func testEscolherTipoTecladoPedeAcessibilidadeUmaVez() {
         var pedidos = 0
         let tl = ModeloTeclas(modelo: modelo(), pedirAcessibilidade: { pedidos += 1 }, executar: { _ in nil })

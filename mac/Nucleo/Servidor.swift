@@ -13,13 +13,27 @@ final class ServidorHttps: @unchecked Sendable {
     private let roteador: Roteador
     private let identidade: SecIdentity
     let porta: UInt16
+    /// Só no loopback (a bancada): o servidor não aparece para outros aparelhos da rede.
+    let somenteLocal: Bool
     private var listener: NWListener?
     private let fila = DispatchQueue(label: "deck.servidor")
+    /// Avisa cada resposta da API (caminho e status) dada pelo Wi-Fi. É assim que o app do Mac sabe que o iPhone
+    /// está falando agora, sem esperar um pareamento (cabo e Bluetooth têm o gancho deles).
+    private let aoAtender: (@Sendable (_ caminho: String, _ status: Int) -> Void)?
 
-    init(roteador: Roteador, identidade: SecIdentity, porta: UInt16) {
+    init(roteador: Roteador, identidade: SecIdentity, porta: UInt16, somenteLocal: Bool = false,
+         aoAtender: (@Sendable (_ caminho: String, _ status: Int) -> Void)? = nil) {
+        self.aoAtender = aoAtender
+        self.somenteLocal = somenteLocal
         self.roteador = roteador
         self.identidade = identidade
         self.porta = porta
+    }
+
+    static func parametros(tls: NWProtocolTLS.Options, somenteLocal: Bool) -> NWParameters {
+        let params = NWParameters(tls: tls, tcp: NWProtocolTCP.Options())
+        if somenteLocal { params.requiredInterfaceType = .loopback }
+        return params
     }
 
     /// Começa a escutar em todas as interfaces e só volta quando a porta está aberta ou falhou.
@@ -30,7 +44,7 @@ final class ServidorHttps: @unchecked Sendable {
         }
         sec_protocol_options_set_local_identity(tls.securityProtocolOptions, id)
         sec_protocol_options_set_min_tls_protocol_version(tls.securityProtocolOptions, .TLSv12)
-        let params = NWParameters(tls: tls, tcp: NWProtocolTCP.Options())
+        let params = Self.parametros(tls: tls, somenteLocal: somenteLocal)
         guard let p = NWEndpoint.Port(rawValue: porta) else {
             throw ErroServidor(description: "Porta inválida: \(porta).")
         }
@@ -48,8 +62,9 @@ final class ServidorHttps: @unchecked Sendable {
             }
         }
         let roteador = self.roteador
+        let aoAtender = self.aoAtender
         l.newConnectionHandler = { conexao in
-            Atendimento(conexao: conexao, roteador: roteador).iniciar()
+            Atendimento(conexao: conexao, roteador: roteador, aoAtender: aoAtender).iniciar()
         }
         l.start(queue: fila)
         if sinal.wait(timeout: .now() + 5) == .timedOut {
@@ -88,12 +103,14 @@ private final class Resultado: @unchecked Sendable {
 private final class Atendimento: @unchecked Sendable {
     private let conexao: NWConnection
     private let roteador: Roteador
+    private let aoAtender: (@Sendable (String, Int) -> Void)?
     private let fila = DispatchQueue(label: "deck.conexao")
     private var buffer = Data()
 
-    init(conexao: NWConnection, roteador: Roteador) {
+    init(conexao: NWConnection, roteador: Roteador, aoAtender: (@Sendable (String, Int) -> Void)? = nil) {
         self.conexao = conexao
         self.roteador = roteador
+        self.aoAtender = aoAtender
     }
 
     func iniciar() {
@@ -108,7 +125,9 @@ private final class Atendimento: @unchecked Sendable {
             if let dados { buffer.append(dados) }
             switch Http.ler(buffer) {
             case .ok(let req):
-                enviar(roteador.responder(req))
+                let resposta = roteador.responder(req)
+                aoAtender?(req.caminho, resposta.status)
+                enviar(resposta)
             case .invalido:
                 enviar(.erro(400, "Pedido inválido."))
             case .incompleto:

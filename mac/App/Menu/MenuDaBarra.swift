@@ -16,7 +16,7 @@ struct MenuDaBarra: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: Tema.Espaco.item) {
-            Topo(iphone: modelo.iphoneAtivo)
+            Topo(iphone: modelo.iphoneAtivo, agora: modelo.relogio?())
             if let pedido = modelo.pedidoBluetooth {
                 BlocoDoPedido(pedido: pedido) { modelo.responderPedido(permitir: $0) }
             }
@@ -31,16 +31,16 @@ struct MenuDaBarra: View {
                 BlocoPerfil(perfis: modelo.config.perfis, ativo: modelo.config.perfilAtivo, escolher: modelo.usarPerfil)
             }
             if modelo.renovacaoApertando, case .apertando(let vence) = modelo.estadoDaRenovacao {
-                AlertaDoMenu(texto: TextosDoNativo.venceEm(vence, agora: modelo.agora)) { modelo.secao = .iphone; acoes.abrirAjustes() }
+                AlertaDoMenu(texto: TextosDoNativo.venceEm(vence, agora: modelo.agora)) { modelo.metodoDeConexao = AvisoDeConexao.renovacao.metodo; modelo.secao = .iphone; acoes.abrirAjustes() }
             }
             if !modelo.acessosRecusados.isEmpty {
                 AlertaDoMenu(texto: TextosDoMenu.acessosRecusados(modelo.acessosRecusados.count)) { modelo.secao = .permissoes; acoes.abrirAjustes() }
             }
             if case .falhou = modelo.servidor {
-                AlertaDoMenu(texto: TextosDoMenu.servidorFalhou) { modelo.secao = .iphone; acoes.abrirAjustes() }
+                AlertaDoMenu(texto: TextosDoMenu.servidorFalhou) { modelo.metodoDeConexao = AvisoDeConexao.servidor.metodo; modelo.secao = .iphone; acoes.abrirAjustes() }
             }
             if let aviso = modelo.avisoDePorta {
-                AlertaDoMenu(texto: aviso) { modelo.secao = .iphone; acoes.abrirAjustes() }
+                AlertaDoMenu(texto: aviso) { modelo.metodoDeConexao = AvisoDeConexao.servidor.metodo; modelo.secao = .iphone; acoes.abrirAjustes() }
             }
             Separador()
             ItemDoMenu(titulo: "Ajustes...", atalho: "⌘,") { acoes.abrirAjustes() }
@@ -73,15 +73,19 @@ struct QuadroDoPopover<Conteudo: View>: View {
 
 private struct Topo: View {
     var iphone: IphonePareado?
+    var agora: Date?
 
     var body: some View {
         HStack(spacing: Tema.Espaco.icone) {
             Logo()
             VStack(alignment: .leading, spacing: 0) {
-                Text("Deck").tatile(Tema.Texto.base, .bold)
-                HStack(spacing: Tema.Espaco.item) {
-                    Ponto(ligado: iphone != nil)
-                    Text(TextosDoMenu.estadoIphone(iphone)).tatile(Tema.Texto.xs, .regular, Tema.Cor.texto2)
+                Text(Variante.atual.tituloDoMenu).tatile(Tema.Texto.base, .bold)
+                TimelineView(.periodic(from: .now, by: 5)) { contexto in
+                    let hora = self.agora ?? contexto.date
+                    HStack(spacing: Tema.Espaco.item) {
+                        Ponto(ligado: iphone?.aoVivo(agora: hora) ?? false)
+                        Text(TextosDoMenu.estadoIphone(iphone, agora: hora)).tatile(Tema.Texto.xs, .regular, Tema.Cor.texto2)
+                    }
                 }
             }
             Spacer(minLength: 0)
@@ -169,7 +173,7 @@ private struct BlocoLayout: View {
     var body: some View {
         BlocoMenu(rotulo: "Layout no iPhone") {
             HStack(spacing: Tema.Espaco.item) {
-                ForEach(["a", "b"], id: \.self) { c in
+                ForEach(["a", "b", "c"], id: \.self) { c in
                     Button { escolher(c) } label: {
                         VStack(spacing: Tema.Espaco.mini) {
                             MiniTela(composicao: c)
@@ -198,7 +202,7 @@ private struct MiniTela: View {
             let folga = Tema.Espaco.mini, vao = Tema.Espaco.micro
             let w = g.size.width - folga * 2, h = g.size.height - folga * 2
             Group {
-                if composicao == "a" { desenhoA(w, h, vao) } else { desenhoB(w, h, vao) }
+                if composicao == "a" { desenhoA(w, h, vao) } else if composicao == "c" { desenhoC(w, h, vao) } else { desenhoB(w, h, vao) }
             }
             .frame(width: w, height: h, alignment: .topLeading)
             .position(x: g.size.width / 2, y: g.size.height / 2)
@@ -225,6 +229,22 @@ private struct MiniTela: View {
                 caixa().frame(width: tecla)
             }
             .frame(height: fr * 1.1)
+        }
+    }
+
+    /// Relógio e mês: em cima o relógio à esquerda e o calendário à direita, embaixo a fileira de teclas.
+    private func desenhoC(_ w: CGFloat, _ h: CGFloat, _ vao: CGFloat) -> some View {
+        let fr = (h - vao) / 2.1
+        let col = (w - vao) / 2
+        let tecla = (w - vao * 6 - 2) / 6
+        return VStack(spacing: vao) {
+            HStack(spacing: vao) { caixa(Tema.Cor.texto3).frame(width: col); caixa().frame(width: col) }.frame(height: fr * 1.1)
+            HStack(spacing: vao) {
+                ForEach(0..<5, id: \.self) { _ in caixa().frame(width: tecla) }
+                caixa().frame(width: 2)
+                caixa().frame(width: tecla)
+            }
+            .frame(height: fr * 0.9)
         }
     }
 

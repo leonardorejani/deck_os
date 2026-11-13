@@ -21,7 +21,7 @@ tela de certificado (o pareamento é por cabo e Bluetooth). O deslocamento contr
 
 ### Fluxo do pareamento
 
-1. No Mac: Ajustes, Conectar iPhone. O QR leva `https://<mac>.local:4777/#parear=<6 dígitos>&certificado=<link>`.
+1. No Mac: Ajustes, Conexões. O QR leva `https://<mac>.local:4777/#parear=<6 dígitos>&certificado=<link>`.
 2. O iPhone lê o QR e abre o Safari. Antes de confiar no certificado o Safari avisa que a conexão não é privada:
    Mostrar detalhes, Visitar este site.
 3. A página abre a tela "Instale o certificado do Deck": Baixar certificado, Permitir, Ajustes > Perfil Transferido > Instalar,
@@ -151,7 +151,7 @@ Deck.app derrubado, página recarregada: {"titulo":"Deck","op":"1","txt":"Mac de
 
 Nada abaixo foi feito. É o teste da prova 0.2 (`docs/provas/0.2-pwa.md`), agora com o Deck de verdade. iPhone e Mac no mesmo Wi-Fi.
 
-1. No Mac: abra o Deck, Ajustes > Conectar iPhone. Deixe o QR na tela.
+1. No Mac: abra o Deck, Ajustes > Conexões. Deixe o QR na tela.
 2. No iPhone: abra a Câmera e leia o QR. O Safari abre e avisa que a conexão não é privada. Toque em Mostrar detalhes e em
    Visitar este site. Tem que aparecer "Instale o certificado do Deck".
 3. Toque em Baixar certificado e em Permitir. Abra Ajustes > Perfil Transferido > Instalar (pede o código do iPhone).

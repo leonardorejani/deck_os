@@ -10,6 +10,8 @@ for v in scripts/validators/*.ts; do bun run "$v" >/dev/null; done
 bash scripts/teste/abrir-deck.test.sh | tail -1
 # o requisito de assinatura do Deck é o mesmo em builds diferentes (as permissões do macOS sobrevivem a um build novo)
 bash scripts/teste/assinatura.test.sh | tail -1
+# a bancada tem dados, porta e Chaveiro próprios e nunca encosta nos do Deck de verdade
+bash scripts/teste/bancada.test.sh | tail -1
 # auditores da tatile (design system do autor): só rodam onde a skill está instalada
 if [ -d ~/.claude/skills/tatile ]; then
   node ~/.claude/skills/tatile/auditor/auditar.mjs prototipo | tail -1
@@ -19,6 +21,8 @@ if [ -d ~/.claude/skills/tatile ]; then
 fi
 # testes de tela do painel contra o Mac de mentira (precisam do Chrome, por isso só rodam onde ele existe)
 if [ -d "/Applications/Google Chrome.app" ]; then DECK_TESTE_PORTA="${DECK_TESTE_PORTA:-4981}" node painel/teste/rodar.mjs | tail -1; fi
+# ajudante do WhatsApp por QR (Go): vet e testes (só onde o Go existe)
+if command -v go >/dev/null 2>&1; then (cd helpers/whatsapp && go vet ./... && go test ./... | tail -1); fi
 swift test --package-path mac 2>&1 | grep -E "error:|failed|Executed [0-9]+ tests" | tail -3
 # App do Mac (SwiftUI): compila e roda os testes só onde o Xcode existe (o CI Linux não tem).
 # DECK_SEM_APP=1 pula este bloco (agentes em paralelo): o coordenador roda o teste do app uma vez no final.

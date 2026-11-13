@@ -12,6 +12,12 @@ struct AppDoMac: Equatable, Identifiable {
     var valor: String
     /// O .app (ícone tirado do sistema) ou um .png (só nas fotos).
     var caminhoDoIcone: String?
+    /// Só nas teclas "de fábrica" do Deck (não são apps instalados): o desenho no lugar do ícone do app.
+    var svg: String? = nil
+    /// O ícone que a tecla guarda ("svg:controles"). Nil: o próprio app.
+    var icone: String? = nil
+    /// O nome que a tecla ganha quando o da lista é comprido demais.
+    var nomeDaTecla: String? = nil
 
     var id: String { valor }
 }
@@ -29,11 +35,22 @@ enum IconesDeApps {
     }
 }
 
+/// As teclas de fábrica que não são app instalado: aparecem na lista de apps do editor, na frente, e valem em qualquer Mac.
+enum TeclasDeFabrica {
+    static let controles = AppDoMac(nome: "Controles do Mac", valor: "Controles", caminhoDoIcone: nil, svg: Icone.controles, icone: "svg:controles")
+    static let meet = AppDoMac(nome: "Google Meet (navegador)", valor: ControleDeReuniao.valorDoMeet, caminhoDoIcone: nil,
+                               svg: Icone.video, icone: "svg:video", nomeDaTecla: "Google Meet")
+    static let todas = [controles, meet]
+
+    static func de(valor: String) -> AppDoMac? { todas.first { $0.valor == valor } }
+}
+
 enum LeitorDeApps {
     static let pastas = ["/Applications", "/Applications/Utilities", "/System/Applications", "/System/Applications/Utilities",
                          NSHomeDirectory() + "/Applications"]
     /// O Finder mora fora das pastas de aplicativos.
     static let extras = ["/System/Library/CoreServices/Finder.app"]
+    static let pastasDoSistema = ["/System/Library/CoreServices"]
     /// Quando o Spotlight ainda não sabe o que a pessoa mais abre.
     static let padraoMaisUsados = ["Safari", "Calendar", "Notes", "Terminal", "Finder", "Mail", "Music", "Spotify", "WhatsApp", "Messages"]
     static let quantosMaisUsados = 8
@@ -89,7 +106,13 @@ final class CatalogoDeApps: ObservableObject {
     @Published private(set) var maisUsados: [AppDoMac] = []
     /// nil enquanto procura.
     @Published private(set) var atalhos: [String]?
-    private var carregou = false
+    /// Lista pronta de fora (as fotos): nunca relê.
+    private var fixo = false
+    private var carregando = false
+    private var ultimaLeitura: Date?
+
+    /// O catálogo do app: carrega ao abrir o Deck e é o que os Ajustes usam, para os ícones das teclas já estarem prontos.
+    static let compartilhado = CatalogoDeApps()
 
     init() {}
 
@@ -98,22 +121,28 @@ final class CatalogoDeApps: ObservableObject {
         self.apps = apps
         self.maisUsados = maisUsados
         self.atalhos = atalhos
-        carregou = true
+        fixo = true
     }
 
-    func carregarSeFaltar() {
-        guard !carregou else { return }
-        carregou = true
+    /// Lê a lista na primeira vez e de novo quando ela já está velha (app instalado depois de o Deck abrir).
+    func carregarSeFaltar(agora: Date = Date()) {
+        guard !fixo, RecargaDoCatalogo.precisa(ultimaLeitura: ultimaLeitura, agora: agora, carregando: carregando) else { return }
+        carregando = true
         Task.detached(priority: .userInitiated) { [weak self] in
             let todos = LeitorDeApps.ler()
+            // A lista sai antes dos "mais usados" (o Spotlight demora): os ícones das teclas só precisam dela.
+            await self?.recebeuTodos(todos)
             let mais = LeitorDeApps.maisUsados(todos) { a in a.caminhoDoIcone.map(LeitorDeApps.usos) ?? 0 }
-            await self?.recebeuApps(todos, mais)
+            await self?.recebeuMaisUsados(mais)
             let r = ExecutorShell().rodar("shortcuts list")
             await self?.recebeuAtalhos(r.status == 0 ? LeitorDeApps.atalhos(daSaida: r.saida) : [])
+            await self?.terminou()
         }
     }
 
-    private func recebeuApps(_ todos: [AppDoMac], _ mais: [AppDoMac]) { apps = todos; maisUsados = mais }
+    private func terminou() { carregando = false; ultimaLeitura = Date() }
+    private func recebeuTodos(_ todos: [AppDoMac]) { apps = todos }
+    private func recebeuMaisUsados(_ mais: [AppDoMac]) { maisUsados = mais }
     private func recebeuAtalhos(_ l: [String]) { atalhos = l }
 
     func app(_ valor: String) -> AppDoMac? { apps.first { $0.valor == valor } ?? maisUsados.first { $0.valor == valor } }

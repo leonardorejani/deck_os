@@ -17,7 +17,7 @@ enum SecaoAjustes: String, CaseIterable, Identifiable {
         switch self {
         case .teclas: return "Suas teclas"
         case .uso: return "Uso das IAs"
-        case .iphone: return "Conectar iPhone"
+        case .iphone: return "Conexões"
         case .permissoes: return "Acessos do Mac"
         case .geral: return "Este Mac"
         case .sobre: return "Sobre o Deck"
@@ -84,27 +84,6 @@ enum AcessoMac: String, CaseIterable, Identifiable {
     }
 }
 
-/// Por onde o iPhone está falando com o Mac.
-enum CanalIphone: String {
-    case wifi, cabo, bluetooth
-
-    var texto: String {
-        switch self {
-        case .wifi: return "pelo Wi-Fi"
-        case .cabo: return "pelo cabo"
-        case .bluetooth: return "por Bluetooth"
-        }
-    }
-}
-
-struct IphonePareado: Equatable {
-    var nome: String
-    var canal: CanalIphone = .wifi
-    /// Desde quando está conectado (a linha da seção Conectar iPhone) e a versão do iOS (a do Sobre).
-    var desde: Date? = nil
-    var ios: String? = nil
-}
-
 enum TextosDoMenu {
     static func acessosRecusados(_ n: Int) -> String { "\(n) \(n > 1 ? "acessos recusados" : "acesso recusado")" }
 
@@ -112,16 +91,24 @@ enum TextosDoMenu {
 
     static let servidorFalhou = "O iPhone não consegue achar o Mac"
 
-    static func estadoIphone(_ iphone: IphonePareado?) -> String {
-        iphone.map { "\($0.nome), \($0.canal.texto)" } ?? "Nenhum iPhone pareado"
+    static func estadoIphone(_ iphone: IphonePareado?, agora: Date = Date()) -> String {
+        guard let iphone else { return "Nenhum iPhone pareado" }
+        return iphone.aoVivo(agora: agora) ? "\(iphone.nome), \(iphone.canal.texto)" : "\(iphone.nome), fora de alcance"
     }
 
-    static func sincronia(_ iphone: IphonePareado?, salvoAgora: Bool = false) -> String {
-        if salvoAgora { return iphone != nil ? "Salvo. Já está no iPhone" : "Salvo" }
-        return iphone.map { "Sincronizado com o \($0.nome)" } ?? "Nenhum iPhone pareado"
+    static func sincronia(_ iphone: IphonePareado?, salvoAgora: Bool = false, agora: Date = Date()) -> String {
+        guard let iphone else { return salvoAgora ? "Salvo" : "Nenhum iPhone pareado" }
+        if !iphone.aoVivo(agora: agora) { return salvoAgora ? "Salvo. Vai para o iPhone quando ele voltar" : "\(iphone.nome) fora de alcance" }
+        return salvoAgora ? "Salvo. Já está no iPhone" : "Sincronizado com o \(iphone.nome)"
     }
 
-    static func composicao(_ c: String) -> String { c == "a" ? "Relógio em cima" : "Deck 3 x 3" }
+    static func composicao(_ c: String) -> String {
+        switch c {
+        case "a": return "Relógio em cima"
+        case "c": return "Relógio e mês"
+        default: return "Deck 3 x 3"
+        }
+    }
 }
 
 /// Primeira vez do app: quem já tinha config.json (usa o Deck há tempo) não passa pela configuração

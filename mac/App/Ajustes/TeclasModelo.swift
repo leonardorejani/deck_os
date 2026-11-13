@@ -39,6 +39,9 @@ final class ModeloTeclas: ObservableObject {
     private var desfazer: (() -> Void)?
     private var relogioDoAviso: Task<Void, Never>?
     private var monitor: Any?
+    private var captura: CapturaDeTecla?
+    /// true quando a escuta pega a tecla antes dos atalhos de outros apps (a tela esconde o aviso de "se o atalho abrir outro app").
+    @Published private(set) var capturaGlobal = false
     private let pedirAcessibilidade: () -> Void
     private let executar: (Tecla) -> String?
     /// true enquanto o botão do mouse está apertado (trocado nos testes).
@@ -249,7 +252,7 @@ final class ModeloTeclas: ObservableObject {
     func escolherTipo(_ tipo: TipoDeTecla) {
         guard let t = tecla else { return }
         if t.tipo != tipo.rawValue {
-            mudarTecla { $0.tipo = tipo.rawValue; $0.valor = "" }
+            mudarTecla { $0.tipo = tipo.rawValue; $0.valor = ""; $0.acao = nil; $0.desligar = nil }
             if tipo == .tecla { pedirAcessibilidade() }
         }
         parar()
@@ -260,18 +263,25 @@ final class ModeloTeclas: ObservableObject {
     func escolherApp(_ app: AppDoMac) {
         let nomes = Set(catalogo.apps.map(\.nome) + catalogo.apps.map(\.valor) + catalogo.maisUsados.map(\.nome))
         mudarTecla {
-            $0.nome = LogicaTeclas.nomeAposEscolher(atual: $0.nome, escolhido: app.nome, nomesDeApps: nomes)
+            // A ação (conta do Mail, microfone do Meet...) é do app antigo: outro app começa sem ação.
+            if $0.valor != app.valor { $0.acao = nil }
+            $0.nome = LogicaTeclas.nomeAposEscolher(atual: $0.nome, escolhido: app.nomeDaTecla ?? app.nome, nomesDeApps: nomes)
             $0.valor = app.valor
-            $0.icone = app.valor
+            $0.icone = app.icone ?? app.valor
         }
         avisar("\(app.nome) escolhido")
     }
+
+    /// O que a tecla de app faz além de abrir (o microfone do Meet, por exemplo). Nil: só abre.
+    func escolherAcao(_ acao: AcaoDeApp?) { mudarTecla { $0.acao = acao } }
 
     func escolherAtalho(_ nome: String) {
         mudarTecla { $0.nome = LogicaTeclas.nomeAposEscolher(atual: $0.nome, escolhido: nome); $0.valor = nome }
     }
 
-    func escolherCombinacao(_ valor: String) { mudarTecla { $0.valor = valor } }
+    func escolherCombinacao(_ valor: String) {
+        mudarTecla { $0.valor = valor }
+    }
 
     /// Comando vazio vira rascunho: a tecla fica sem ação até a pessoa escrever um.
     func escolherComando(_ valor: String, nome: String? = nil) {
@@ -279,6 +289,21 @@ final class ModeloTeclas: ObservableObject {
             if let nome { $0.nome = LogicaTeclas.nomeAposEscolher(atual: $0.nome, escolhido: nome) }
             $0.valor = valor
         }
+    }
+
+    /// Liga o modo liga e desliga da tecla de comando (o campo fica vazio até a pessoa escrever o comando de desligar).
+    /// Desligar o modo apaga os dois comandos extras: a tecla volta a ser um comando só.
+    func definirLigaEDesliga(_ ligado: Bool) {
+        mudarTecla {
+            if ligado { $0.desligar = $0.desligar ?? "" } else { $0.desligar = nil; $0.estado = nil }
+        }
+    }
+
+    func escolherDesligar(_ comando: String) { mudarTecla { $0.desligar = comando } }
+
+    /// Comando que confere se está ligado (sai 0 = ligado). Vazio apaga: aí o Deck guarda o estado.
+    func escolherConferir(_ comando: String) {
+        mudarTecla { $0.estado = comando.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : comando }
     }
 
     func escolherIcone(_ icone: String) { mudarTecla { $0.icone = icone } }
@@ -356,25 +381,45 @@ final class ModeloTeclas: ObservableObject {
 
     func alternarGravacao() { ouvindo ? parar() : comecar() }
 
+    /// Liga a escuta. Com Acessibilidade, captura antes dos atalhos de outros apps (CapturaDeTecla). Sem ela, ou se o
+    /// sistema recusar, cai no monitor local, que só vê a tecla que chegou ao Deck.
     private func comecar() {
         ouvindo = true
+        capturaGlobal = false
+        if let c = CapturaDeTecla.iniciar(aoApertar: { [weak self] t in self?.receber(t.codigo, t.controle, t.opcao, t.comando, t.shift) },
+                                          aoAcabar: { [weak self] in self?.terminouCaptura() }) {
+            captura = c
+            capturaGlobal = true
+            return
+        }
         monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] e in
             guard let self, self.ouvindo else { return e }
             let f = e.modifierFlags
-            let r = CombinacaoEmTexto.interpretar(codigo: e.keyCode, controle: f.contains(.control), opcao: f.contains(.option),
-                                                  comando: f.contains(.command), shift: f.contains(.shift))
-            switch r {
-            case .cancelou: self.parar()
-            case .ignorar: break
-            case .faltaControle: self.avisar("Use pelo menos uma tecla de controle (⌘, ⌥, ⌃ ou ⇧)")
-            case .gravou(let v): self.parar(); self.escolherCombinacao(v); self.avisar("Combinação gravada")
-            }
+            self.receber(e.keyCode, f.contains(.control), f.contains(.option), f.contains(.command), f.contains(.shift))
             return nil
         }
     }
 
+    private func receber(_ codigo: UInt16, _ controle: Bool, _ opcao: Bool, _ comando: Bool, _ shift: Bool) {
+        guard ouvindo else { return }
+        switch CombinacaoEmTexto.interpretar(codigo: codigo, controle: controle, opcao: opcao, comando: comando, shift: shift) {
+        case .cancelou: parar()
+        case .ignorar: break
+        case .faltaControle: avisar("Use pelo menos uma tecla de controle (⌘, ⌥, ⌃ ou ⇧)")
+        case .gravou(let v): parar(); escolherCombinacao(v); avisar("Combinação gravada")
+        }
+    }
+
+    /// A captura se desligou sozinha (o Deck saiu da frente ou o tempo acabou).
+    private func terminouCaptura() {
+        captura = nil
+        if ouvindo { parar(); avisar("Gravação cancelada. Clique no campo e aperte a combinação de novo") }
+    }
+
     func parar() {
         ouvindo = false
+        capturaGlobal = false
+        captura?.parar(); captura = nil
         if let m = monitor { NSEvent.removeMonitor(m); monitor = nil }
     }
 

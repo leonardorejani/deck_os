@@ -48,7 +48,8 @@ Bluetooth, build, instalação e renovação). Falta o teste de ponta a ponta no
   Prova no iPhone: `docs/provas/fase-6-cabo.md`.
   Fase 7, Bluetooth: `Enlace.swift` (fio de bytes e os 6 dígitos), `EnlaceSeguro.swift` (aperto de mão cifrado, só onde há
   CryptoKit) e `VazaoBluetooth.swift` existem nos dois pacotes (espelhos). No Mac, `PortaDoBluetooth.ligar` anuncia o serviço
-  e atende cada iPhone. No iPhone, `GerenteBluetooth` pareia e reconecta, e a `Casca` escolhe cabo ou Bluetooth.
+  e atende cada iPhone. No iPhone, `GerenteBluetooth` pareia e reconecta, e a `Casca` escolhe cabo ou Bluetooth. Sentido
+  invertido (12/11/2026): o iPhone também anuncia (`RadioPeriferico.swift`) e o Mac conecta como central (`BluetoothCentral.swift`).
   Prova no iPhone: `docs/provas/fase-7-bluetooth.md`.
   Fase 8, instalar e renovar: `./build.sh` gera `dist/Deck-1.0.dmg`, `./instalar-iphone.sh` faz a primeira instalação no iPhone e o
   `Deck.app` renova o app a cada 5 dias (`mac/Nucleo/Renovacao.swift`, `mac/App/Modelo/ModeloRenovacao.swift`).
@@ -57,7 +58,20 @@ Bluetooth, build, instalação e renovação). Falta o teste de ponta a ponta no
   (registro do service worker, Wake Lock e deslocamento contra queima de tela) e `pareamento.js` (certificado pelo QR e código de 6
   dígitos). Quem carrega arquivo novo no `index.html` tem que pô-lo na lista `ESSENCIAIS` do `sw.js` (o `pwa.teste.mjs` cobra).
   Auditor: `node ~/.claude/skills/tatile/modulos/pwa/scripts/auditar.mjs painel` (0 erros). Prova no iPhone: `docs/provas/fase-4-pwa.md`.
+- `helpers/whatsapp/`: ajudante em Go (whatsmeow, MPL-2.0) do WhatsApp por QR, só leitura, desligado por padrão
+  (`whatsapp.origem` = `qr`, SPEC 13 item 35). `helpers/whatsapp/build.sh` gera o binário universal, o `build.sh` e o
+  `scripts/bancada.sh` o põem em `Contents/Helpers`. No núcleo, `mac/Nucleo/Fontes/WhatsAppQR.swift` (`PonteWhatsAppQR`)
+  o abre e lê as linhas de JSON. Testes: `go test` em `helpers/whatsapp` e `mac/Testes/FontesWhatsAppQRTestes.swift`.
+  Prova com QR de verdade: `scripts/whatsapp-qr-prova.sh`.
 - Regra do produto: **o Mac configura, o iPhone mostra** (ver `.claude/rules/01-invariants.md`).
+
+### Deck Bancada
+
+Variante do app do Mac para testar telas sem tocar no Deck instalado (`mac/Nucleo/Variante.swift`, SPEC 13.31). Bundle
+`com.leonardorejani.deck.bancada`, dados em `Application Support/Deck Bancada`, porta 4791, log e Chaveiro próprios, sem cabo,
+Bluetooth, renovação nem rede (só loopback). `scripts/bancada.sh` compila a worktree atual e instala em
+`~/Applications/Deck Bancada.app` sem abrir. Primeira abertura copia a config do Deck real (só leitura).
+Tudo que for do dono (pasta, log, Chaveiro, porta) tem que passar por `Variante.atual`, nunca por caminho fixo.
 
 ### Como rodar e verificar
 

@@ -105,7 +105,8 @@ final class AcessosTestes: XCTestCase {
 
     func testAcessoNuncaPedidoNaoContaComoRecusado() {
         let defaults = defaultsNovos()
-        let v = VerificadorVivo(defaults: defaults)
+        // Detectores falsos e não liberados: com os de verdade o resultado dependeria do Mac em que o teste roda.
+        let v = VerificadorVivo(defaults: defaults, detectores: DetectoresFalsos())
         XCTAssertFalse(v.recusado(.acessibilidade))
         XCTAssertFalse(v.recusado(.discoTotal))
         defaults.set(true, forKey: VerificadorVivo.chaveRecusado(.discoTotal))
@@ -275,9 +276,6 @@ final class EsteMacESobreTestes: XCTestCase {
         let i = InformacoesDoApp(versao: "0.1", compilacao: "1", atualizadoEm: data, macOS: "macOS 26")
         XCTAssertEqual(i.versaoComCompilacao, "0.1 (1)")
         XCTAssertEqual(i.dataPorExtenso, "10 de novembro de 2026")
-        XCTAssertEqual(InformacoesDoApp.iphoneEmUso(nil), "nenhum pareado")
-        XCTAssertEqual(InformacoesDoApp.iphoneEmUso(IphonePareado(nome: "i", ios: "iOS 26")), "iOS 26")
-        XCTAssertEqual(InformacoesDoApp.iphoneEmUso(IphonePareado(nome: "i")), "pareado")
     }
 }
 
@@ -285,8 +283,7 @@ final class LinksDoProjetoTestes: XCTestCase {
     func testEnderecosDoProjetoAberto() {
         XCTAssertEqual(LinksDoProjeto.estrela.absoluteString, "https://github.com/leonardorejani/deck_os", "a estrela é dada na página do repositório")
         XCTAssertEqual(LinksDoProjeto.problema.absoluteString, "https://github.com/leonardorejani/deck_os/issues/new")
-        XCTAssertEqual(LinksDoProjeto.licenca.absoluteString, "https://github.com/leonardorejani/deck_os/blob/main/LICENSE")
-        for u in [LinksDoProjeto.estrela, LinksDoProjeto.problema, LinksDoProjeto.licenca] {
+        for u in [LinksDoProjeto.estrela, LinksDoProjeto.problema] {
             XCTAssertEqual(u.scheme, "https")
             XCTAssertEqual(u.host, "github.com")
         }
@@ -303,11 +300,30 @@ final class LinksDoProjetoTestes: XCTestCase {
         let t = try fonte("mac/App/Ajustes/Sobre.swift")
         XCTAssertFalse(t.contains("\"Repositório\""), "a linha Repositório saiu")
         let gostou = try XCTUnwrap(t.range(of: "titulo: \"Gostou do Deck?\""))
-        for outra in ["titulo: \"Licença\"", "titulo: \"Achou um erro?\""] {
-            XCTAssertLessThan(gostou.lowerBound, try XCTUnwrap(t.range(of: outra)).lowerBound, "Gostou do Deck? vem antes de \(outra)")
-        }
+        XCTAssertLessThan(gostou.lowerBound, try XCTUnwrap(t.range(of: "titulo: \"Achou um erro?\"")).lowerBound, "Gostou do Deck? vem antes de Achou um erro?")
         XCTAssertTrue(t.contains("estilo: .estrela, icone: \"star.fill\""))
         XCTAssertFalse(t.contains("estilo: .primario"), "o botão azul saiu")
+    }
+
+    /// Pedido de 12/11/2026: o Sobre sem as linhas Mac, iPhone e Licença (a licença fica só no texto do rodapé do grupo) e sem
+    /// o título "Sobre o Deck" em cima. "Mostra nenhum iPhone pareado mas estou conectado" vinha da linha do iPhone, que lia só o Wi-Fi.
+    func testSobreSemLinhasDeMacIphoneELicencaESemTitulo() throws {
+        let t = try fonte("mac/App/Ajustes/Sobre.swift")
+        for linha in ["titulo: \"Mac\"", "titulo: \"iPhone\"", "titulo: \"Licença\"", "modelo.iphone"] {
+            XCTAssertFalse(t.contains(linha), linha)
+        }
+        XCTAssertTrue(t.contains("licença MIT"), "a licença fica no texto do grupo")
+        let janela = try fonte("mac/App/Ajustes/JanelaAjustes.swift")
+        XCTAssertTrue(janela.contains("modelo.secao != .sobre"), "o título do topo não aparece no Sobre")
+    }
+
+    /// Pedido de 12/11/2026: WhatsApp e Spotify saíram de Este Mac e foram para Conexões, e o campo do nome ficou largo.
+    func testWhatsAppESpotifyEmConexoesENomeDoMacLargo() throws {
+        let esteMac = try fonte("mac/App/Ajustes/EsteMac.swift")
+        XCTAssertFalse(esteMac.contains("GrupoSpotify(") || esteMac.contains("titulo: \"WhatsApp\""))
+        let conexoes = try fonte("mac/App/Ajustes/ConectarIphone.swift")
+        XCTAssertTrue(conexoes.contains("GrupoSpotify(") && conexoes.contains("MetodoWhatsApp("))
+        XCTAssertGreaterThanOrEqual(Tema.Medida.campoNome, 260)
     }
 
     /// Os Ajustes do Mac não mostram mais a pasta da configuração (grupo Avançado).
@@ -352,6 +368,39 @@ final class LinksDoProjetoTestes: XCTestCase {
 
 final class AvisosEIphoneTestes: XCTestCase {
     private func defaultsNovos() -> UserDefaults { UserDefaults(suiteName: "deck-testes-\(UUID().uuidString)")! }
+
+    /// "Mostra nenhum iPhone pareado mas estou conectado": o PWA falando pelo Wi-Fi, sem o Mac ter anotado o pareamento, já conta.
+    @MainActor func testRespostaDoWifiFazOIphoneAparecerEmTodoLugar() {
+        let m = ModeloApp(config: Config.padrao(nomeMac: "Mac"))
+        let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+        XCTAssertNil(m.iphoneAtivo)
+        m.wifiAtendeu(caminho: "/api/estado", status: 200, agora: t0)
+        XCTAssertEqual(m.iphoneAtivo?.canal, .wifi)
+        XCTAssertEqual(TextosDoMenu.sincronia(m.iphoneAtivo, agora: t0), "Sincronizado com o iPhone")
+        XCTAssertEqual(TextosDoMenu.estadoIphone(m.iphoneAtivo, agora: t0), "iPhone, pelo Wi-Fi")
+        XCTAssertEqual(TextosDoMenu.sincronia(m.iphoneAtivo, agora: t0.addingTimeInterval(120)), "iPhone fora de alcance")
+    }
+
+    @MainActor func testCaboTemAVezSobreOWifiNaFonteUnica() {
+        let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+        let m = ModeloApp(config: Config.padrao(nomeMac: "Mac"), iphone: IphonePareado(nome: "iPhone", visto: t0),
+                          nativo: AppNativo(nome: "iPhone do cabo", canal: .cabo, desde: t0, visto: t0))
+        XCTAssertEqual(m.iphoneAtivo?.nome, "iPhone do cabo")
+        XCTAssertEqual(m.iphoneAtivo?.canal, .cabo)
+        XCTAssertEqual(m.iphoneAtivo?.visto, t0)
+    }
+
+    func testAparelhoForaDeAlcanceNaoFingeEstarConectado() {
+        let t0 = Date(timeIntervalSince1970: 1_800_000_000)
+        let i = IphonePareado(nome: "iPhone", canal: .wifi, desde: t0, visto: t0)
+        XCTAssertEqual(TextosDeAjuste.conexao(i, agora: t0.addingTimeInterval(5)), "Safari, pelo Wi-Fi desde \(hora(t0))")
+        XCTAssertEqual(TextosDeAjuste.conexao(i, agora: t0.addingTimeInterval(300)), "Safari, pareado e fora de alcance agora")
+        XCTAssertEqual(TextosDoMenu.estadoIphone(i, agora: t0.addingTimeInterval(300)), "iPhone, fora de alcance")
+    }
+
+    private func hora(_ d: Date) -> String {
+        let f = DateFormatter(); f.locale = Locale(identifier: "pt_BR"); f.dateFormat = "HH:mm"; return f.string(from: d)
+    }
 
     @MainActor func testPareouGuardaOIphoneEAvisa() {
         let m = ModeloApp(config: Config.padrao(nomeMac: "Mac"))

@@ -494,7 +494,7 @@ struct TelaPronto: View {
             Titulo(texto: "Pronto, o Deck está no ar", tamanho: Tema.Texto.xl2).padding(.top, Tema.Espaco.item)
             Prosa(texto: "Ele mora no ícone da barra de menus. " + (assistente.iphoneConectado
                   ? "O que você escolheu já está no iPhone."
-                  : "Conecte o iPhone quando quiser em Ajustes, Conectar iPhone."),
+                  : "Conecte o iPhone quando quiser em Ajustes, Conexões."),
                   ch: Tema.Inicial.apresentacaoCh)
         }
     }

@@ -19,4 +19,27 @@ final class TeclasTestes: XCTestCase {
         XCTAssertNil(Teclas.ler("cmd+shift"))
         XCTAssertNil(Teclas.ler(""))
     }
+
+    // MARK: Texto da combinação
+
+    func testEscreveNaOrdemDoGravador() {
+        XCTAssertEqual(Teclas.escrever(modificadores: [.comando, .controle, .opcao], tecla: "k"), "ctrl+opt+cmd+k")
+        XCTAssertEqual(Teclas.escrever(modificadores: [.shift, .comando], tecla: "4"), "cmd+shift+4")
+        XCTAssertEqual(Teclas.escrever(modificadores: [.fn, .comando], tecla: "f5"), "fn+cmd+f5")
+    }
+
+    func testEscreverRecusaSemModificadorOuTeclaDesconhecida() {
+        XCTAssertNil(Teclas.escrever(modificadores: [], tecla: "k"))
+        XCTAssertNil(Teclas.escrever(modificadores: [.comando], tecla: "zz"))
+    }
+
+    // MARK: Envio da combinação
+
+    func testPassosDescemESobemComOsModificadores() {
+        let c = Combinacao(codigo: 21, modificadores: [.comando, .shift])
+        XCTAssertEqual(Teclas.passos(c), [
+            PassoDeTecla(codigo: 21, descendo: true, modificadores: [.comando, .shift]),
+            PassoDeTecla(codigo: 21, descendo: false, modificadores: [.comando, .shift]),
+        ])
+    }
 }

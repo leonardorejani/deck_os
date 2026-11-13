@@ -34,7 +34,7 @@ if (canal.parear) {
   const PASSOS_INSTALAR = [
     'Toque no botão <b>Compartilhar</b> do Safari (o quadrado com a seta para cima).',
     'Escolha <b>Adicionar à Tela de Início</b>.',
-    'Abra o Deck pelo ícone novo. Se ele pedir o código, digite o do Mac em Conectar iPhone.',
+    'Abra o Deck pelo ícone novo. Se ele pedir o código, digite o do Mac em Conexões, no método PWA.',
   ];
   const lista = passos => `<ol class="pa-passos">${passos.map(p => `<li>${p}</li>`).join('')}</ol>`;
   const botao = (acao, texto, classe = 'secundario') => `<button class="btn ${classe}" data-pa="${acao}">${texto}</button>`;
@@ -47,7 +47,7 @@ if (canal.parear) {
     }),
     codigo: ({ erro }) => ({
       titulo: 'Digite o código do Mac',
-      html: `<p class="pa-nota">No Mac, abra o Deck, vá em Conectar iPhone e digite aqui o código de 6 dígitos.</p>
+      html: `<p class="pa-nota">No Mac, abra o Deck, vá em Conexões, no método PWA, e digite aqui o código de 6 dígitos.</p>
         <div class="campo"><label for="pa-cod">Código</label><input id="pa-cod" inputmode="numeric" autocomplete="one-time-code" maxlength="7" placeholder="000 000" aria-describedby="pa-erro"></div>
         <p class="pa-erro" id="pa-erro" role="alert">${erro ? esc(erro) : ''}</p>`,
       acoes: `${botao('enviar', 'Parear', 'primario')}${botao('fechar', 'Cancelar')}`,

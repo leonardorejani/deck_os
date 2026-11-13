@@ -40,6 +40,13 @@ struct AcoesDoApp: Codable, Equatable, Sendable {
     var acoes: [AcaoDisponivel]
 }
 
+/// O corpo de POST /api/agenda/criar quando deu certo.
+struct CompromissoCriado: Codable, Equatable, Sendable {
+    var ok: Bool
+    /// true se o destino foi guardado como padrão.
+    var padraoSalvo: Bool
+}
+
 // MARK: - O que o servidor pede para as outras frentes
 
 struct CapaAtual: Equatable, Sendable {
@@ -51,9 +58,21 @@ struct CapaAtual: Equatable, Sendable {
 protocol ProvedorPaineis: Sendable {
     func estado() -> Estado
     func whatsapp() -> [ConversaWhatsApp]
+    /// A foto de perfil de uma conversa do WhatsApp por QR (nil: sem foto).
+    func fotoWhatsApp(arquivo: String) -> MidiaBaixada?
+    /// A foto ou o áudio de uma mensagem do WhatsApp por QR, baixado agora (só leitura, com limite de tamanho).
+    func midiaWhatsApp(chat: String, id: String) -> ResultadoMidia
+    /// "Responder no Mac": abre a conversa no WhatsApp Web.
+    func abrirConversaWhatsApp(id: String) -> AberturaDeConversa
     func agenda(de: String, dias: Int) -> [Evento]
     func sessoes() -> [Sessao]
     func capa() -> CapaAtual?
+}
+
+extension ProvedorPaineis {
+    func fotoWhatsApp(arquivo: String) -> MidiaBaixada? { nil }
+    func midiaWhatsApp(chat: String, id: String) -> ResultadoMidia { .erro("Essa mídia não abre aqui.") }
+    func abrirConversaWhatsApp(id: String) -> AberturaDeConversa { .falhou("Não consegui abrir a conversa.") }
 }
 
 protocol ExecutorTeclas: Sendable {
@@ -143,10 +162,16 @@ struct Roteador: Sendable {
     var certificadoCA: URL? = nil
     /// "Entrar na reunião" da agenda. Nil: a rota /api/reuniao/entrar não existe (404).
     var reunioes: (any ProvedorDeReuniao)? = nil
+    /// Criar compromisso na agenda (Calendário e Lembretes). Nil: as rotas /api/agenda/destinos e /api/agenda/criar não existem (404).
+    var criadorDeAgenda: (any CriadorDeAgenda)? = nil
     /// "Abrir no Mac" das sessões. Nil: a rota /api/sessoes/<id>/abrir não existe (404).
     var abridorDeSessao: (any AbridorDeSessao)? = nil
     /// Os apps do Mac de quem usa (lista, ícone e ações de tecla). Nil: as rotas /api/apps não existem (404).
     var apps: (any ProvedorDeApps)? = nil
+    /// Volume, brilho da tela e da luz do teclado do Mac. Nil: as rotas /api/controles não existem (404).
+    var controles: (any ControlesDoMac)? = nil
+    /// Os processos que mais usam processador e memória, e o encerrar (tela do Monitor de Atividade). Nil: as rotas /api/processos não existem (404).
+    var processos: (any ProcessosDoMac)? = nil
 
     func responder(_ r: HttpRequisicao) -> RespostaRota {
         if r.caminho == "/api/parear" {
@@ -202,6 +227,10 @@ struct Roteador: Sendable {
             return RespostaRota(status: 200, tipo: capa.tipo, corpo: capa.dados, extras: ["Cache-Control": "no-store"])
         case "/api/whatsapp":
             return somente(["GET"], r) ?? .codificar(200, paineis.whatsapp())
+        case "/api/whatsapp/midia":
+            return somente(["GET"], r) ?? midiaDoWhatsApp(r)
+        case "/api/whatsapp/abrir":
+            return somente(["POST"], r) ?? abrirConversaDoWhatsApp(r)
         case "/api/sessoes":
             return somente(["GET"], r) ?? .codificar(200, paineis.sessoes())
         case "/api/agenda":
@@ -209,8 +238,17 @@ struct Roteador: Sendable {
         default:
             break
         }
+        if let arquivo = sufixo(r.caminho, "/api/whatsapp/foto/") {
+            return somente(["GET"], r) ?? fotoDoWhatsApp(arquivo)
+        }
         if let id = sufixo(r.caminho, "/api/botao/") {
             return somente(["POST"], r) ?? botao(id, atual)
+        }
+        if r.caminho == "/api/agenda/destinos" {
+            return somente(["GET"], r) ?? destinosDaAgenda(r)
+        }
+        if r.caminho == "/api/agenda/criar" {
+            return somente(["POST"], r) ?? criarNaAgenda(r)
         }
         if r.caminho == "/api/reuniao/entrar" {
             return somente(["POST"], r) ?? entrarNaReuniao(r)
@@ -221,6 +259,20 @@ struct Roteador: Sendable {
         }
         if r.caminho == "/api/apps" || r.caminho.hasPrefix("/api/apps/") {
             return somente(["GET"], r) ?? rotaDeApps(r)
+        }
+        if r.caminho == "/api/controles" {
+            // O que a pessoa desligou na tecla Controles do Mac não sai daqui: a barra some no iPhone, como a que o Mac não oferece.
+            return somente(["GET"], r) ?? controles.map { .codificar(200, $0.estado().somente(config.ler().controles)) } ?? .erro(404, "Essa rota não existe.")
+        }
+        if r.caminho == "/api/processos" {
+            return somente(["GET"], r) ?? processos.map { .codificar(200, $0.maiores()) } ?? .erro(404, "Essa rota não existe.")
+        }
+        if r.caminho.hasPrefix("/api/processos/"), r.caminho.hasSuffix("/encerrar") {
+            let pid = String(r.caminho.dropFirst("/api/processos/".count).dropLast("/encerrar".count))
+            return somente(["POST"], r) ?? encerrarProcesso(pid, r)
+        }
+        if let item = sufixo(r.caminho, "/api/controles/") {
+            return somente(["POST"], r) ?? controlar(item, r)
         }
         if let acao = sufixo(r.caminho, "/api/spotify/") {
             if acao == "dispositivos" { return somente(["GET"], r) ?? respostaSpotify(spotify.dispositivos()) }
@@ -264,6 +316,89 @@ struct Roteador: Sendable {
         return .json(200, Data("{\"ok\":true}".utf8))
     }
 
+
+    /// GET /api/whatsapp/foto/<arquivo>: a foto de perfil, em base64 (a mesma forma serve ao Wi-Fi, ao cabo e ao Bluetooth).
+    private func fotoDoWhatsApp(_ arquivo: String) -> RespostaRota {
+        guard let f = paineis.fotoWhatsApp(arquivo: arquivo) else { return .erro(404, "Sem foto.") }
+        return Self.midia(f)
+    }
+
+    /// GET /api/whatsapp/midia?chat=<id>&id=<mensagem>: a foto ou o áudio, baixado agora.
+    private func midiaDoWhatsApp(_ r: HttpRequisicao) -> RespostaRota {
+        guard let chat = r.query["chat"], let id = r.query["id"], Self.textoSimples(chat, maximo: 200), Self.textoSimples(id, maximo: 200) else {
+            return .erro(400, "Informe a conversa e a mensagem, por exemplo ?chat=<id>&id=<mensagem>.")
+        }
+        switch paineis.midiaWhatsApp(chat: chat, id: id) {
+        case .pronta(let m): return Self.midia(m)
+        case .erro(let e): return .erro(422, e)
+        }
+    }
+
+    private static func midia(_ m: MidiaBaixada) -> RespostaRota {
+        .codificar(200, ["tipo": m.tipo, "dados": m.dados.base64EncodedString()])
+    }
+
+    /// POST /api/whatsapp/abrir, corpo {"id": "<conversa>"}: abre a conversa no WhatsApp Web do Mac. Não envia nem marca nada.
+    private func abrirConversaDoWhatsApp(_ r: HttpRequisicao) -> RespostaRota {
+        guard let obj = (try? JSONSerialization.jsonObject(with: r.corpo)) as? [String: Any], let id = obj["id"] as? String,
+              Self.textoSimples(id, maximo: 200) else {
+            return .erro(400, "Informe a conversa a abrir, por exemplo {\"id\": \"<conversa>\"}.")
+        }
+        switch paineis.abrirConversaWhatsApp(id: id) {
+        case .aberta(let aviso):
+            var corpo: [String: Any] = ["ok": true]
+            if let aviso { corpo["aviso"] = aviso }
+            return .json(200, (try? JSONSerialization.data(withJSONObject: corpo)) ?? Data("{\"ok\":true}".utf8))
+        case .falhou(let e): return .erro(422, e)
+        }
+    }
+
+    /// Texto sem caractere de controle e sem tamanho absurdo.
+    static func textoSimples(_ s: String, maximo: Int) -> Bool {
+        !s.isEmpty && s.count <= maximo && !s.unicodeScalars.contains { CharacterSet.controlCharacters.contains($0) }
+    }
+
+    /// GET /api/agenda/destinos: onde dá para salvar, o padrão e a permissão de cada app. `?pedir=1` abre no Mac a
+    /// janela de acesso aos Lembretes (só quando a pessoa escolheu Lembretes).
+    private func destinosDaAgenda(_ r: HttpRequisicao) -> RespostaRota {
+        guard let criadorDeAgenda else { return .erro(404, "Essa rota não existe.") }
+        var d = criadorDeAgenda.destinos(pedirPermissao: r.query["pedir"] == "1")
+        if var p = config.ler().agendaPadrao {
+            // "Calendário padrão do Mac" vira o calendário de verdade, que é o que a lista do iPhone sabe mostrar.
+            if p.ehPadraoDoMac, let id = criadorDeAgenda.idDoCalendarioPadrao() { p = DestinoAgenda(tipo: "calendario", id: id) }
+            // Padrão que sumiu (calendário apagado) não vai para a tela, mas só dá para saber com a lista liberada.
+            let existe = p.tipo == "calendario"
+                ? d.permissaoCalendario != "liberado" || d.calendarios.contains { $0.id == p.id }
+                : d.permissaoLembretes != "liberado" || d.listas.contains { $0.id == p.id }
+            d.padrao = existe ? p : nil
+        }
+        return .codificar(200, d)
+    }
+
+    /// POST /api/agenda/criar. Corpo: titulo, dia (AAAA-MM-DD), diaTodo, inicio e fim (HH:MM), destino {tipo, id},
+    /// alertaMin e padrao (guardar o destino como padrão).
+    private func criarNaAgenda(_ r: HttpRequisicao) -> RespostaRota {
+        guard let criadorDeAgenda else { return .erro(404, "Essa rota não existe.") }
+        switch NovoCompromisso.ler(corpo: r.corpo, padrao: config.ler().agendaPadrao) {
+        case .failure(let e): return .erro(e.status, e.texto)
+        case .success(var novo):
+            if novo.destino.ehPadraoDoMac {
+                guard let id = criadorDeAgenda.idDoCalendarioPadrao() else {
+                    return .erro(409, "O Mac não disse qual é o calendário padrão. Libere o Calendário para o Deck ou escolha onde salvar.")
+                }
+                novo.destino = DestinoAgenda(tipo: "calendario", id: id)
+            }
+            if case .failure(let e) = criadorDeAgenda.criar(novo) { return .erro(e.status, e.texto) }
+            var padraoSalvo = false
+            if novo.definirPadrao {
+                var c = config.ler()
+                c.agendaPadrao = novo.destino
+                padraoSalvo = config.aplicar(c) == nil
+            }
+            return .codificar(200, CompromissoCriado(ok: true, padraoSalvo: padraoSalvo))
+        }
+    }
+
     private func abrirSessao(_ id: String) -> RespostaRota {
         guard let abridorDeSessao else { return .erro(404, "Essa rota não existe.") }
         switch abridorDeSessao.abrir(id: id) {
@@ -294,6 +429,36 @@ struct Roteador: Sendable {
     /// Id de pacote é letra, número, ponto, traço e sublinhado. O resto nem chega a procurar.
     static func bundleValido(_ s: String) -> Bool {
         !s.isEmpty && s.count <= 200 && s.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || ".-_".contains($0)) }
+    }
+
+    /// POST /api/controles/<volume|brilho|teclado>?v=0..100 e /api/controles/mudo?v=0|1.
+    private func controlar(_ item: String, _ r: HttpRequisicao) -> RespostaRota {
+        guard let controles, ["volume", "mudo", "brilho", "teclado"].contains(item) else { return .erro(404, "Essa rota não existe.") }
+        let erro: String?
+        if item == "mudo" {
+            guard let v = r.query["v"], ["0", "1"].contains(v) else { return .erro(400, "Informe mudo?v=1 para silenciar ou mudo?v=0 para voltar o som.") }
+            erro = controles.definirMudo(v == "1")
+        } else {
+            guard let texto = r.query["v"], let v = Int(texto), (0...100).contains(v) else {
+                return .erro(400, "Informe o valor de 0 a 100, por exemplo \(item)?v=40.")
+            }
+            switch item {
+            case "volume": erro = controles.definirVolume(v)
+            case "brilho": erro = controles.definirBrilho(v)
+            default: erro = controles.definirTeclado(v)
+            }
+        }
+        if let erro { return .erro(422, erro) }
+        return .json(200, Data("{\"ok\":true}".utf8))
+    }
+
+    /// POST /api/processos/<pid>/encerrar?nome=<o nome que a tela mostrava>. O nome evita fechar o programa errado se o pid foi reaproveitado.
+    private func encerrarProcesso(_ texto: String, _ r: HttpRequisicao) -> RespostaRota {
+        guard let processos else { return .erro(404, "Essa rota não existe.") }
+        guard let pid = Int(texto), pid > 1 else { return .erro(400, "Informe o número do processo.") }
+        guard let nome = r.query["nome"], !nome.isEmpty, nome.count <= 200 else { return .erro(400, "Informe o nome do processo, por exemplo encerrar?nome=Safari.") }
+        if let erro = processos.encerrar(pid: pid, nome: nome) { return .erro(422, erro) }
+        return .json(200, Data("{\"ok\":true}".utf8))
     }
 
     private func controlarSpotify(_ acao: String, _ r: HttpRequisicao) -> RespostaRota {

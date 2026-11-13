@@ -119,6 +119,14 @@ final class InicialTestes: XCTestCase {
 
     // MARK: acessos
 
+    func testListaDeAcessosDaBancadaNaoTemBluetoothNemRedeLocal() {
+        XCTAssertTrue(OrdemDosAcessos.painel(para: .deck).contains(.bluetooth))
+        XCTAssertTrue(OrdemDosAcessos.painel(para: .deck).contains(.redeLocal))
+        XCTAssertFalse(OrdemDosAcessos.painel(para: .bancada).contains(.bluetooth))
+        XCTAssertFalse(OrdemDosAcessos.painel(para: .bancada).contains(.redeLocal))
+        XCTAssertEqual(OrdemDosAcessos.painel(para: .bancada).count, 5)
+    }
+
     func testPermitirGuardaOQueOMacRespondeEOrdemDosNomesDoMacOS() async {
         let p = PedidosFalsos()
         p.respostas[.automacao] = .recusado
@@ -199,6 +207,19 @@ final class InicialTestes: XCTestCase {
     func testSemIphoneOPassoProntoFalaParaConectarDepois() {
         XCTAssertFalse(assistente(modelo()).iphoneConectado)
         XCTAssertTrue(assistente(modelo(iphone: true)).iphoneConectado)
+    }
+
+    func testIphoneLembradoQueNaoFalouNaoLiberaOPasso() {
+        let t = Date(timeIntervalSince1970: 1_000_000)
+        var c = Config.padrao(nomeMac: "MacBook Pro")
+        c.perfis[0].teclas = []
+        let m = ModeloApp(config: c, iphone: IphonePareado(nome: "iPhone", visto: .distantPast), configuracaoInicialFeita: false)
+        m.relogio = { t }
+        let a = assistente(m)
+        XCTAssertFalse(a.iphoneConectado, "fora de alcance pelo cabeçalho: o passo não diz conectado")
+        XCTAssertNil(a.iphone)
+        m.iphone?.visto = t
+        XCTAssertTrue(a.iphoneConectado)
     }
 
     // MARK: pareamento

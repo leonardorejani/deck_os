@@ -63,7 +63,7 @@
 
       <section class="folha cheia" id="f-whats" role="dialog" aria-modal="true" aria-labelledby="wa-titulo">
         <header><h2 id="wa-titulo"></h2>
-          <div class="segmentos" id="wa-filtro"><button data-f="todas">Todas</button><button data-f="contatos">Contatos</button><button data-f="grupos">Grupos</button></div>
+          <div class="segmentos" id="wa-filtro"><button data-f="todas">Todas</button><button data-f="contatos">Contatos</button><button data-f="grupos">Grupos</button><button data-f="arquivadas" hidden>Arquivadas</button></div>
           <button class="btn secundario pequeno" id="wa-abrir">Abrir no Mac</button><button class="fechar" data-fechar aria-label="Fechar"></button></header>
         <div class="corpo" id="wa-lista"></div>
       </section>
@@ -74,11 +74,22 @@
         <footer id="se-rodape" hidden><button class="btn secundario" data-dispensar>Dispensar</button><span class="espaco"></span><button class="btn primario" data-voltar>Voltar</button></footer>
       </section>
 
+      <section class="folha cheia" id="f-controles" role="dialog" aria-modal="true" aria-labelledby="ct-titulo">
+        <header><h2 id="ct-titulo">Controles do Mac</h2><button class="fechar" data-fechar aria-label="Fechar"></button></header>
+        <div class="corpo" id="ct-corpo" aria-live="polite"></div>
+      </section>
+
+      <section class="folha cheia" id="f-monitor" role="dialog" aria-modal="true" aria-labelledby="mn-titulo">
+        <header><h2 id="mn-titulo">Monitor de Atividade</h2><button class="fechar" data-fechar aria-label="Fechar"></button></header>
+        <div class="corpo" id="mn-corpo" aria-live="off"></div>
+      </section>
+
       <section class="folha cheia player-cheio" id="f-player" role="dialog" aria-modal="true" aria-label="Tocando agora">
         <button class="fechar fechar-cal" data-fechar aria-label="Fechar"></button>
         <div class="pc-corpo" id="pc-corpo"></div>
         <div class="pc-lista" id="pc-lista" hidden>
           <header><h2 id="pc-lista-titulo"></h2><button class="btn secundario" data-pc-voltar>Voltar</button></header>
+          <div class="pc-lista-topo" id="pc-lista-topo" hidden></div>
           <div class="corpo" id="pc-lista-corpo"></div>
         </div>
       </section>
@@ -86,12 +97,29 @@
       <section class="folha cheia calendario" id="f-cal" role="dialog" aria-modal="true" aria-label="Agenda">
         <button class="fechar fechar-cal" data-fechar aria-label="Fechar"></button>
         <div class="cal-corpo">
+          <div class="mes-janela">
           <div class="mes-sb" id="ca-mes">
             <div class="mes-topo"><h2 id="ca-titulo"></h2><button class="seta" id="ca-ant" aria-label="Mês anterior"></button><button class="seta" id="ca-prox" aria-label="Próximo mês"></button></div>
             <div class="sb-semana" aria-hidden="true"><span class="fds">D</span><span>S</span><span>T</span><span>Q</span><span>Q</span><span>S</span><span class="fds">S</span></div>
             <div class="sb-grade" id="ca-grade"></div>
           </div>
+          </div>
           <div class="lista-cal" id="ca-lista"></div>
+          <button class="puxa-novo" id="ca-puxa" data-novo aria-label="Novo compromisso"><span aria-hidden="true"></span></button>
+          <form class="novo-comp" id="ca-form" hidden novalidate aria-label="Novo compromisso">
+            <header><h3>Novo compromisso</h3></header>
+            <div class="nc-corpo">
+              <div class="campo nc-titulo"><label for="nc-titulo">Título</label><input id="nc-titulo" maxlength="200" autocomplete="off" enterkeyhint="done"></div>
+              <div class="campo nc-dia"><label for="nc-dia">Dia</label><input id="nc-dia" type="date"></div>
+              <div class="campo nc-ini"><label for="nc-inicio">Início</label><input id="nc-inicio" type="time"></div>
+              <div class="campo nc-fim"><label for="nc-fim">Fim</label><input id="nc-fim" type="time"></div>
+              <div class="campo nc-onde"><label for="nc-destino">Onde salvar</label><select id="nc-destino"></select></div>
+              <div class="campo nc-alerta"><label for="nc-alerta">Alerta</label><select id="nc-alerta"></select></div>
+              <label class="nc-check nc-todo"><input type="checkbox" id="nc-todo"><span>Dia todo</span></label>
+              <label class="nc-check nc-padrao"><input type="checkbox" id="nc-padrao"><span id="nc-padrao-txt">Usar como padrão</span></label>
+            </div>
+            <footer><p class="nc-msg" id="nc-msg" role="status" aria-live="polite"></p><button type="button" class="btn secundario" data-nc-cancelar>Cancelar</button><button type="submit" class="btn primario" id="nc-salvar">Salvar</button></footer>
+          </form>
         </div>
       </section>
     </div>
@@ -102,6 +130,8 @@
 <script src="canal.js"></script>
 <script src="paineis.js"></script>
 <script src="player.js"></script>
+<script src="controles.js"></script>
+<script src="monitor.js"></script>
 <script src="apps.js"></script>
 <script src="deck.js"></script>
 <script src="pwa.js"></script>

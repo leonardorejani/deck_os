@@ -104,7 +104,7 @@ Barra de Menus > Permitir na Barra de Menus, o ícone do Deck some. Quem constr�
 
 ### 2. O iPhone, caminho rápido (PWA pelo Wi-Fi)
 
-1. No Mac, abra o Deck na barra de menus e vá em Ajustes > Conectar iPhone.
+1. No Mac, abra o Deck na barra de menus e vá em Ajustes > Conexões.
 2. Leia o QR com a câmera do iPhone e siga a tela: baixar o certificado, instalar o perfil e confiar nele em Ajustes > Geral > Sobre > Ajustes de Confiança de Certificados.
 3. No Safari, Compartilhar > Adicionar à Tela de Início.
 
@@ -142,6 +142,7 @@ Quem faz um fork configura a própria chave:
 | App do Mac | SwiftUI, `MenuBarExtra`, xcodegen |
 | App nativo do iPhone | SwiftUI e WKWebView, pacote `DeckCasca`, cabo por usbmuxd e Bluetooth (Curve25519 e ChaChaPoly) |
 | Design | tokens da tatile, auditor com 0 erros |
+| WhatsApp por QR | ajudante em Go (`helpers/whatsapp`) com a whatsmeow (MPL-2.0), opcional |
 | CI | runner próprio (rótulo `leve`) ou do GitHub, testes em `swift:6.2` |
 
 ## Rodar local
@@ -177,6 +178,16 @@ O Deck é código aberto. Gostou? Dê uma estrela no repositório, ela ajuda out
 botão "Dar uma estrela no GitHub" em Ajustes > Sobre o Deck, no app do Mac). Achou um erro ou tem uma ideia, abra uma
 [issue](https://github.com/leonardorejani/deck_os/issues/new/choose). Quer mexer no código, leia o
 [`CONTRIBUTING.md`](.github/CONTRIBUTING.md): como rodar os testes, o fluxo de PR e o que o CI confere.
+
+### WhatsApp por QR (opcional, desligado por padrão)
+
+Além do app do WhatsApp e do WhatsApp Web, o Deck pode ler as conversas como um "aparelho conectado" (você lê um QR
+no celular). É um ajudante em Go (`helpers/whatsapp/`) que usa a biblioteca
+[whatsmeow](https://github.com/tulir/whatsmeow), licença [MPL-2.0](https://www.mozilla.org/MPL/2.0/) (o código dela não é
+alterado aqui, e o texto da licença segue com a dependência). **Não é oficial e viola os termos do WhatsApp.** Só lê,
+não envia e não marca como lido. Ocupa uma das 4 conexões do WhatsApp. Para sair, apague o aparelho "Deck (só leitura)"
+em Aparelhos conectados no celular. Liga em Ajustes > Este Mac > WhatsApp. O `build.sh` precisa do Go
+(`brew install go`) para embutir o ajudante, e sem ele o Deck sai sem essa opção.
 
 ## Licença
 

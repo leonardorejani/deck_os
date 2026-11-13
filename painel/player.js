@@ -96,7 +96,13 @@ const lp = { qual: null, dados: null, erro: '', semLogin: false, seq: 0, faixa: 
 const TIPOS_APARELHO = { computer: 'Computador', smartphone: 'Celular', tablet: 'Tablet', speaker: 'Caixa de som', tv: 'TV', castaudio: 'Caixa de som', castvideo: 'TV', audiodongle: 'Caixa de som', avr: 'Receiver', stb: 'Decodificador', gameconsole: 'Videogame', automobile: 'Carro' };
 const esqueletoLinhas = () => '<div class="esq-lista" aria-hidden="true">' + '<div class="item-lista esq"><span class="tx"><i class="barra" style="width:50%"></i><i class="barra" style="width:30%"></i></span></div>'.repeat(4) + '</div>';
 function abrirListaPlayer(qual) { lp.qual = qual; lp.dados = null; lp.erro = ''; lp.semLogin = false; lp.faixa = V.spotify?.faixa || ''; pintarListaPlayer(); lerListaPlayer() }
-function fecharListaPlayer() { lp.qual = null; lp.seq++; $('#pc-lista').hidden = true }
+/* A lista entra deslizando da direita para a esquerda e sai de volta para a direita. O `hidden` só vale depois da saída (a lista precisa
+   estar na tela para animar), e `aberta` é o que a move. */
+function fecharListaPlayer() {
+  lp.qual = null; lp.seq++;
+  const el = $('#pc-lista'); el.classList.remove('aberta'); clearTimeout(lp.saida);
+  lp.saida = setTimeout(() => { if (!lp.qual) el.hidden = true }, msCss('--mov-sai-padrao') + 40);
+}
 async function lerListaPlayer() {
   const n = ++lp.seq, qual = lp.qual; if (!qual) return;
   try {
@@ -110,8 +116,12 @@ async function lerListaPlayer() {
   pintarListaPlayer();
 }
 function pintarListaPlayer() {
-  const el = $('#pc-lista'), corpo = $('#pc-lista-corpo'); if (!lp.qual) { el.hidden = true; return }
-  el.hidden = false; $('#pc-lista-titulo').textContent = lp.qual === 'fila' ? 'Na fila' : 'Tocar em';
+  const el = $('#pc-lista'), corpo = $('#pc-lista-corpo'); if (!lp.qual) return;
+  clearTimeout(lp.saida);
+  if (el.hidden) { el.hidden = false; void el.offsetWidth; requestAnimationFrame(() => { if (lp.qual) el.classList.add('aberta') }) } // o quadro de partida (fora da tela) tem de existir antes de deslizar
+  else el.classList.add('aberta');
+  $('#pc-lista-titulo').textContent = lp.qual === 'fila' ? 'Na fila' : 'Tocar em';
+  pintarTopoFila();
   corpo.setAttribute('aria-busy', String(!lp.dados && !lp.erro));
   if (lp.erro) { corpo.innerHTML = lp.semLogin ? `<div class="vazio-bloco"><strong>Spotify não conectado</strong><span>${esc(lp.erro)}</span></div>` : erroLista(lp.erro, 0); return }
   if (!lp.dados) { if (!corpo.querySelector('.esq-lista')) corpo.innerHTML = esqueletoLinhas(); return }
@@ -120,10 +130,16 @@ function pintarListaPlayer() {
   corpo.scrollTop = y;
 }
 const linhaFila = i => `<div class="item-lista"><span class="tx"><b>${esc(i.faixa)}</b><small>${esc(i.artista || '')}</small></span></div>`;
+/* No alto da fila, fixa: a capa e o nome do que toca agora (o que o estado do Spotify diz, que anda junto com a música). A lista das
+   próximas rola embaixo. Na lista de aparelhos o alto não existe. */
+function pintarTopoFila() {
+  const topo = $('#pc-lista-topo'), s = V?.spotify;
+  topo.hidden = lp.qual !== 'fila' || !s; if (topo.hidden) return;
+  const html = `<img class="capa-mini"${s.capaId ? ` src="${esc(canal.capaUrl(s.capaId))}"` : ''} alt="" onerror="this.dataset.erro=1;this.removeAttribute('src')"><span class="tx"><small class="rotulo">Tocando agora</small><b>${esc(s.faixa)}</b><small>${esc(s.artista || '')}</small></span>`;
+  if (topo.dataset.k !== html) { topo.dataset.k = html; topo.innerHTML = html }
+}
 function filaHTML(f) {
-  const atual = f.atual ? `<section class="grupo-data"><h3>Tocando agora</h3>${linhaFila(f.atual)}</section>` : '';
-  const prox = (f.proximas || []).length ? `<section class="grupo-data"><h3>Próximas</h3>${f.proximas.map(linhaFila).join('')}</section>` : '<div class="vazio-bloco" style="min-height:120px"><strong>A fila está vazia</strong><span>Quando você pôr músicas na fila, elas aparecem aqui.</span></div>';
-  return atual + prox;
+  return (f.proximas || []).length ? `<section class="grupo-data"><h3>Próximas</h3>${f.proximas.map(linhaFila).join('')}</section>` : '<div class="vazio-bloco" style="min-height:120px"><strong>A fila está vazia</strong><span>Quando você pôr músicas na fila, elas aparecem aqui.</span></div>';
 }
 function aparelhosHTML(lista) {
   if (!lista.length) return '<div class="vazio-bloco"><strong>Nenhum aparelho achado</strong><span>Abra o Spotify no aparelho em que quer ouvir, e ele aparece aqui.</span></div>';

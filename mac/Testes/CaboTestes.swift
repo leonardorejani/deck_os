@@ -130,6 +130,8 @@ final class CaboTestes: XCTestCase {
         XCTAssertTrue(r.texto.contains("\"nomeMac\":\"Mac\""), r.texto)
         let direto = c.pedir("GET", "/api/estado")
         XCTAssertEqual(r.corpo, direto.corpo, "o cabo devolve os mesmos bytes que o roteador")
+        // A sessão anota no diário logo depois de mandar a resposta: esperar a linha em vez de olhar na hora.
+        for _ in 0..<100 where !log.todos.contains(where: { $0.contains("GET /api/estado 200") }) { Thread.sleep(forTimeInterval: 0.01) }
         XCTAssertTrue(log.todos.contains { $0.contains("GET /api/estado 200") }, "\(log.todos)")
     }
 
@@ -280,6 +282,7 @@ final class CaboTestes: XCTestCase {
         let (ip, s, _, log) = sessao(c)
         defer { s.encerrar() }
         _ = ip.resposta(ip.pedir("GET", "/api/capa", query: ["codigo": Cenario.codigo]))
+        for _ in 0..<100 where !log.todos.contains(where: { $0.contains("GET /api/capa 200") }) { Thread.sleep(forTimeInterval: 0.01) }
         XCTAssertFalse(log.todos.joined().contains(Cenario.codigo))
         XCTAssertTrue(log.todos.contains { $0.contains("GET /api/capa 200") })
     }

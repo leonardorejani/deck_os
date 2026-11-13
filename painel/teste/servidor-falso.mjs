@@ -23,7 +23,9 @@ const padrao = () => ({
   sessoes: 5,                // 0 a 12
   sessaoMuda: false,         // a primeira sessão chega com outra pergunta (ela mudou)
   whatsapp: 'normal',        // normal | vazio | muitas (30 conversas) | erro (a rota falha)
-  whatsappOrigem: 'app',     // app | web (só o total, pelo título da aba) | web-fechado (sem aba aberta)
+  whatsappRico: false,       // lista do aparelho conectado com foto, áudio, visualização única, arquivada e conversa sem nome (precisa de whatsappOrigem 'qr')
+  whatsappExtra: false,      // chega uma conversa nova na lista (mede a velocidade com que a folha aberta a mostra)
+  whatsappOrigem: 'app',     // app | web (só o total, pelo título da aba) | web-fechado (sem aba aberta) | qr (aparelho conectado, com lista) | qr-caido | qr-reconectando (subindo ou queda curta, sem lista) | qr-reconectando-lista (queda curta com a lista de antes)
   uso: 'normal',             // normal | sem-medicao
   relogioMs: 0,              // adianta o relógio do Mac (o "há X min" das sessões anda)
   atrasoListas: 0,           // ms de espera nas listas de WhatsApp e Agenda
@@ -35,6 +37,8 @@ const padrao = () => ({
   perfis: 'um',              // um | dois
   comp: 'a',
   blocos: { spotify: true, agenda: true, whatsapp: true, sessoes: true, uso: true },
+  monitorItens: { cpu: true, memoria: true, bateria: true, rede: true, gpu: true, disco: true, energia: true, ventoinhas: true, dispositivos: true }, // o que a pessoa deixou ligado nos Ajustes do Mac
+  monitor: { cpu: 12, memoria: 63, bateria: 81, naTomada: false, baixa: 1258291, sobe: 40960, gpu: 27, discoLivre: 412000000000, discoTotal: 994000000000, watts: 11.4, carregando: false, ventoinhas: [2400, 2600], ventoinhaMax: 6000, dispositivos: 3 }, // o que o Mac mediu (sem `bateria` = Mac de mesa, e o que falta some)
   nomeMac: 'MacBook Pro de Teste',
   faixa: 'Faixa de Exemplo', artista: 'Artista Exemplo',
   acesas: ['acordado'],
@@ -46,6 +50,7 @@ const padrao = () => ({
   atrasoAcao: 0,             // ms de espera antes de o Mac fazer uma tecla (POST /api/botao) ou um comando do Spotify
   spotifyRecusa: '',         // todo comando do Spotify é recusado (422) com esse motivo
   album: 'Artista Exemplo (Deluxe)', repetir: false, aleatorio: false,
+  agendaCriar: 'normal',     // normal | antigo (Mac sem as rotas de criar: 404) | lembretes-pedir (Lembretes ainda sem acesso: o pedido abre no Mac) | recusa (o Mac recusa o compromisso, 409)
   reunioes: false,           // os eventos de Meet, Zoom e Teams chegam com o link da sala (Evento.link)
   reuniaoRecusa: '',         // POST /api/reuniao/entrar falha (422) com esse motivo
   sessaoAbre: 'terminal',    // o que "Abrir no Mac" de uma sessão fez: terminal (trouxe o app do terminal) | pasta (abriu o Terminal na pasta)
@@ -57,17 +62,25 @@ const padrao = () => ({
   apps: 'antigo',            // antigo (Mac sem as rotas de apps: 404, o editor usa a lista curta) | normal | erro (a lista falha com 500) | muitos (140 apps)
   acoesAtraso: 0,            // ms de espera antes de o Mac responder o que um app oferece (ler as contas do Mail demora)
   mailAviso: '',             // a lista de contas do Mail não pôde ser lida: o motivo vem no aviso da ação
+  comFoco: false,            // o perfil ganha uma tecla de comando com liga e desliga (sem comando de conferir: o Mac guarda o estado)
+  comControles: false,       // o perfil ganha a tecla Controles (abre a tela dos controles do Mac no iPhone)
+  controles: 'tudo',         // tudo | sem-brilho (Mac sem tela interna nem luz no teclado) | nada (não oferece nada) | antigo (Mac sem a rota: 404) | erro (500) | recusa (os pedidos de escrita falham com 422)
+  comReuniao: false,         // o perfil ganha as teclas Mutar (microfone) e Câmera do Meet no navegador, e o estado delas chega em `reuniao`
+  reuniaoEstado: { mic: 'ligado', cam: 'desligado' }, // ligado | desligado | desconhecido | sem-reuniao (o que o Mac leu). null: Mac antigo, não manda `reuniao`
+  comMonitorApp: false,      // o perfil ganha a tecla do app Monitor de Atividade (abre a tela do monitor no iPhone)
+  ctVolume: 30, ctMudo: false, ctBrilho: 60, ctTeclado: 20, ctAtraso: 0,
   spotifyModos: 'sim',       // sim | sem (Mac antigo: o estado não traz álbum, repetir nem aleatório)
 });
 let c = padrao();
 let T0 = Date.now(); // as sessões esperam desde um instante fixo (o Mac real manda sempre o mesmo `desde` até a sessão mudar)
-let cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, whatsapp: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [] };
+let cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, whatsapp: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], criados: [], destinosPedidos: 0, controles: [], whatsappAbertas: [], midias: [], fotos: [] };
 let posicaoBase = { s: 132, desde: Date.now() };
 let perfilAtivo = 'trabalho';
+let criadosAgenda = [], padraoAgenda = null, lembretesAcesso = null, liberarEm = 0; // o que o iPhone criou na agenda, o destino padrão e o acesso aos Lembretes
 let codigoAtual = CODIGO, codigoAnterior = null; // rodízio: o atual, e o anterior que ainda vale (a folga de 10 min)
 let parearGasto = false, parearErros = 0; // o código de 6 dígitos serve uma vez e aguenta 5 erros
 let gravada = null; // o que o iPhone gravou: perfis e blocos, como o Mac guardaria no config.json
-const zerar = () => { parearGasto = false; parearErros = 0; codigoAtual = CODIGO; codigoAnterior = null; T0 = Date.now(); gravada = null; c = padrao(); cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, whatsapp: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [] }; posicaoBase = { s: 132, desde: Date.now() }; perfilAtivo = 'trabalho' };
+const zerar = () => { parearGasto = false; parearErros = 0; codigoAtual = CODIGO; codigoAnterior = null; T0 = Date.now(); gravada = null; c = padrao(); cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, whatsapp: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], criados: [], destinosPedidos: 0, controles: [], whatsappAbertas: [], midias: [], fotos: [] }; posicaoBase = { s: 132, desde: Date.now() }; perfilAtivo = 'trabalho'; criadosAgenda = []; padraoAgenda = null; lembretesAcesso = null };
 
 // com xss ligado, todo texto que a página mostra chega como HTML que tenta executar código
 const X = t => c.xss ? `"><img src=x onerror="window.__xss=(window.__xss||0)+1">${t}` : t;
@@ -80,6 +93,10 @@ function perfisConfig() {
     T('calendario', 'Agenda', 'app', 'Calendar', { icone: 'Calendar' }),
     T('apagar', 'Apagar tela', 'comando', 'pmset displaysleepnow', { icone: 'svg:tela' }),
   ];
+  if (c.comReuniao) trabalho.push(T('mic', 'Mutar', 'app', 'Google Meet', { icone: 'svg:video', acao: { id: 'reuniao-microfone' } }), T('cam', 'Câmera', 'app', 'Google Meet', { icone: 'svg:video', acao: { id: 'reuniao-camera' } }));
+  if (c.comMonitorApp) trabalho.push(T('monitor', 'Monitor', 'app', 'Activity Monitor', { icone: 'Activity Monitor' }));
+  if (c.comFoco) trabalho.push(T('foco', 'Mudar foco', 'comando', 'foco jogo', { icone: 'svg:tela', desligar: 'foco trabalho' }));
+  if (c.comControles) trabalho.push(T('controles', 'Controles', 'app', 'Controles', { icone: 'svg:controles' }));
   if (c.comAcao) trabalho.push(T('cal-dia', 'Natal', 'app', 'Calendar', { icone: 'Calendar', acao: { id: 'calendario-dia', valor: '2026-12-25' } }));
   if (c.teclas === 'muitas') for (const n of ['Safari', 'Notes', 'Terminal', 'Finder', 'Spotify', 'Vorssaint', 'WhatsApp', 'Calendar']) trabalho.push(T('x' + n, n === 'Notes' ? 'Notas' : n, 'app', n, { icone: n }));
   const ensaio = [T('e-spotify', 'Spotify', 'app', 'Spotify', { icone: 'Spotify' }), T('e-cifras', 'Cifras', 'app', 'Notes', { icone: 'Notes' }), T('e-agenda', 'Agenda', 'app', 'Calendar', { icone: 'Calendar' }), T('e-apagar', 'Apagar tela', 'comando', 'pmset displaysleepnow', { icone: 'svg:tela' }), T('e-terminal', 'Terminal', 'app', 'Terminal', { icone: 'Terminal' })];
@@ -90,21 +107,38 @@ const contas = () => [
   { id: 'claude-equipe', nome: 'Claude', conta: 'equipe', mostrar: true },
   { id: 'codex', nome: 'Codex', conta: 'pro', mostrar: true },
 ];
-const configCompleta = () => ({ versao: 1, perfis: perfisConfig(), perfilAtivo: perfilAtivo === 'ensaio' && c.perfis === 'dois' ? 'ensaio' : 'trabalho', comp: c.comp, contas: contas(), blocos: c.blocos, nomeMac: X(c.nomeMac), porta: 4777 });
+const configCompleta = () => ({ versao: 1, perfis: perfisConfig(), perfilAtivo: perfilAtivo === 'ensaio' && c.perfis === 'dois' ? 'ensaio' : 'trabalho', comp: c.comp, contas: contas(), blocos: c.blocos, monitor: c.monitorItens, nomeMac: X(c.nomeMac), porta: 4777 });
 
 const emDias = (dias, h, m = 0) => { const d = new Date(); d.setDate(d.getDate() + dias); d.setHours(h, m, 0, 0); return d.toISOString() };
 const SESSOES = () => [...SESSOES_BASE(), ...Array.from({ length: 7 }, (_, i) => ({ id: 's' + (6 + i), nome: 'sessão extra ' + (i + 1), projeto: 'projeto_' + (i + 1), pergunta: 'Pergunta longa da sessão extra ' + (i + 1) + ', com bastante texto para passar de duas linhas na lista e mostrar inteira só quando a pessoa tocar em Responder, sem cortar nada. '.repeat(4), desde: new Date(T0 - (5 + i) * 86400000).toISOString() }))];
 const SESSOES_BASE = () => [
   { id: 's1', nome: X('convite novos usuarios'), projeto: X('app_web'), pergunta: c.perguntaGigante ? Array.from({ length: 40 }, (_, i) => `Linha ${i + 1} da pergunta: posso seguir com o plano e abrir o PR agora?`).join('\n') : c.textoLongo ? 'Posso editar /Users/exemplo/projeto/painel/paineis.js agora?' : X(c.sessaoMuda ? 'Agora pode salvar o TXT no DNS?' : 'Salvar o TXT de verificação do domínio no DNS?'), desde: new Date(T0 - 5 * 60000).toISOString() },
-  { id: 's2', nome: 'EXPORTAR_VIDEO_1080', projeto: 'video', pergunta: '1080p medido, aguarda decisão sobre times, PR e vídeo.', desde: new Date(T0 - 13 * 3600000).toISOString() },
+  { id: 's2', nome: 'EXPORTAR_VIDEO_1080', projeto: 'video', pergunta: '1080p medido, aguarda decisão sobre times, PR e vídeo.', desde: new Date(T0 - 13 * 3600000).toISOString(),
+    pedido: 'Escolha: A reserva 2 das 4 vagas para reuniões, B times em 540p, ou C vídeo dos times no node01. Depois diga se abro o PR rascunho.', sugestao: 'A, e pode abrir o PR rascunho',
+    contexto: c.xss ? '<img src=x onerror=window.__xss=1> **negrito** `codigo`' : 'needs input ficou claro.\n\n## O que foi medido\n\n| Item | Valor |\n|---|---|\n| 1080p | 4 vagas |\n| 540p | 9 vagas |\n\nCom **A** sobram 2 vagas para as reuniões, usando `tc` no wg0.' },
   { id: 's3', nome: 'CI_RUNNER_02', projeto: 'infra', pergunta: 'Você aprova o plano do runner 02 (e2e do ci-1)?', desde: new Date(T0 - 14 * 3600000).toISOString() },
   { id: 's4', nome: 'instala repo', projeto: 'app_web', pergunta: 'Registro essa conclusão na memória do projeto?', desde: new Date(T0 - 16 * 3600000).toISOString() },
   { id: 's5', nome: 'podio ranking pontuação', projeto: 'app_web', pergunta: 'Posso fazer o commit e abrir o PR?', desde: new Date(T0 - 4 * 86400000).toISOString() },
 ];
 
+// Imagem e áudio de mentira (1 pixel e 0,1 s de silêncio) para a folha do WhatsApp por QR
+const PNG_B64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+const WAV_B64 = (() => { const n = 800, b = Buffer.alloc(44 + n); b.write('RIFF', 0); b.writeUInt32LE(36 + n, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(8000, 24); b.writeUInt32LE(8000, 28); b.writeUInt16LE(1, 32); b.writeUInt16LE(8, 34); b.write('data', 36); b.writeUInt32LE(n, 40); b.fill(128, 44); return b.toString('base64') })();
+const WHATSAPP_RICO = () => {
+  const ha = min => new Date(T0 - min * 60000).toISOString(), M = (texto, min, extra = {}) => ({ de: '', texto, hora: ha(min), ...extra });
+  return [
+    { id: 'r1@s.whatsapp.net', nome: 'Ana Souza', grupo: false, naoLidas: 3, ultima: ha(2), numero: '5544999990001', foto: '0123456789abcdef.jpg', mensagens: [M('Oi, tudo bem?', 6), M('Foto', 4, { id: 'F1', tipo: 'foto', midia: true }), M('Áudio', 3, { id: 'A1', tipo: 'audio', midia: true })] },
+    { id: 'r2@lid', nome: '+55 44 99999-0002', grupo: false, naoLidas: 2, ultima: ha(10), numero: '5544999990002', mensagens: [M('Foto única', 12, { id: 'U1', tipo: 'foto', unica: true }), M('Áudio único', 11, { id: 'U2', tipo: 'audio', unica: true })] },
+    { id: 'g1@g.us', nome: 'Louvor', grupo: true, naoLidas: 1, ultima: ha(30), mensagens: [{ de: 'Carla', texto: 'Ensaio confirmado', hora: ha(30) }] },
+    { id: 'sn@lid', nome: '', grupo: false, naoLidas: 1, ultima: ha(40), mensagens: [M('Alguém sem nome salvo', 40)] },
+    { id: 'arq@s.whatsapp.net', nome: 'Bia Arquivada', grupo: false, naoLidas: 4, ultima: ha(50), arquivada: true, mensagens: [M('Mensagem de conversa arquivada', 50)] },
+    ...(c.whatsappExtra ? [{ id: 'novo@s.whatsapp.net', nome: 'Chegou Agora', grupo: false, naoLidas: 1, ultima: ha(0), mensagens: [M('Acabou de chegar', 0)] }] : []),
+  ];
+};
 // WhatsApp: as 5 conversas do protótipo (o tempo é relativo a agora, para "hoje" e "ontem" não envelhecerem)
 const WHATSAPP = () => {
   if (c.whatsapp === 'vazio') return [];
+  if (c.whatsappRico) return WHATSAPP_RICO();
   const ha = min => new Date(T0 - min * 60000).toISOString(), M = (de, texto, hora = '10:00') => ({ de: X(de), texto: X(texto), hora });
   const base = [
     { id: 'w1', nome: X('Ministério de Louvor'), grupo: true, naoLidas: 12, ultima: ha(3), mensagens: [M('Carla', c.textoLongo ? 'Olha o PR: https://github.com/leonardorejani/deck_os/pull/30/files#diff-8f3b2c1d9e7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e' : 'Ensaio confirmado quinta 20h?'), M('Pedro', 'Mandei a setlist no drive'), M('Carla', 'Quem leva o cabo P10?')] },
@@ -127,6 +161,8 @@ function eventosDoDia(d) {
   if (dow === 0) { E(9, 0, 'Escola dominical', AMARELO, 'Igreja', 'Sala 2'); E(19, 0, 'Culto', AMARELO, 'Igreja', 'Templo') }
   const avulsos = { 3: [14, 0, 'Revisão do projeto', AZUL, 'Trabalho', c.reunioes ? 'https://us02web.zoom.us/j/81234567890?pwd=abc123' : '', false, 'https://us02web.zoom.us/j/81234567890?pwd=abc123'], 10: [16, 0, 'Dentista', ROSA, 'Pessoal'], 12: [12, 30, 'Almoço com Rafael', VERDE, 'Trabalho'], 15: [0, 0, 'Aniversário da Ana', ROSA, 'Pessoal', '', true], 21: [15, 0, 'Gravação do podcast', AZUL, 'Trabalho', '', false, 'https://teams.microsoft.com/l/meetup-join/19%3ameeting_abc'], 27: [18, 0, 'Entrega do cliente', AZUL, 'Trabalho'] };
   if (avulsos[dia]) E(...avulsos[dia]);
+  const chaveDia = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  for (const n of criadosAgenda) if (n.dia === chaveDia) { const [h, mi] = (n.inicio || '00:00').split(':').map(Number); E(h, mi, n.titulo, VERDE, n.calendario, '', !!n.diaTodo) }
   if (c.agenda === 'muitas' && mesmoDiaF(d, new Date(Date.now() + 86400000))) for (let i = 0; i < 14; i++) E(7 + i, 0, 'Compromisso ' + (i + 1), AZUL, 'Trabalho', 'Sala ' + (i + 1));
   return ev;
 }
@@ -153,6 +189,7 @@ const ACAO_LINK = { id: 'link', nome: 'Abrir um endereço', entrada: 'texto', ro
 const ACAO_GMAIL = { id: 'gmail', nome: 'Abrir o Gmail de uma conta', entrada: 'texto', rotulo: 'Conta (número ou e-mail)', exemplo: '1 ou nome@gmail.com' };
 function acoesDoApp(bundle) {
   if (bundle === 'navegador-padrao') return [ACAO_LINK, ACAO_GMAIL];
+  if (bundle === 'deck-meet-navegador') return [{ id: 'reuniao-microfone', nome: 'Mutar ou desmutar o microfone da reunião', entrada: 'nenhuma' }, { id: 'reuniao-camera', nome: 'Ligar ou desligar a câmera da reunião', entrada: 'nenhuma' }];
   const a = APPS_MAC().find(x => x.bundle === bundle); if (!a) return null;
   const lista = bundle === 'com.apple.mail' ? [c.mailAviso
       ? { id: 'mail-caixa', nome: 'Abrir a caixa de entrada de uma conta', entrada: 'lista', rotulo: 'Conta', opcoes: [], aviso: c.mailAviso }
@@ -178,19 +215,25 @@ function estado() {
   if (c.agenda === 'sem') selos.calendario = '!';
   return {
     agora: new Date(Date.now() + c.relogioMs).toISOString(), nomeMac: X(c.nomeMac), perfilAtivo: configCompleta().perfilAtivo, comp: c.comp, blocos: c.blocos,
+    ...(c.blocos.monitor ? { monitor: { ...c.monitor, itens: Object.keys(c.monitorItens).filter(k => c.monitorItens[k]) } } : {}),
     spotify: estadoSpotify(),
     uso: [
       { id: 'claude-leo', nome: 'Claude', conta: X('leo'), semana: semMed ? null : 61, renova: emDias(3, 14) },
       { id: 'claude-equipe', nome: 'Claude', conta: 'equipe', semana: semMed ? null : 77, renova: emDias(1, 9) },
       { id: 'codex', nome: 'Codex', conta: 'pro', semana: semMed ? null : 4, renova: emDias(0, 23) },
     ],
-    sessoes: SESSOES().slice(0, c.sessoes),
+    sessoes: SESSOES().slice(0, c.sessoes).map(({ contexto, ...leve }) => leve), // o Mac de verdade só manda o contexto em /api/sessoes
     whatsapp: c.whatsappOrigem === 'web' ? { total: 23, conversas: 0, origem: 'web', navegador: 'Google Chrome', aberto: true }
+      : c.whatsappOrigem === 'qr' ? { total: 23, conversas: 5, origem: 'qr', aberto: true }
+      : c.whatsappOrigem === 'qr-reconectando' ? { total: 0, conversas: 0, origem: 'qr', aberto: false, reconectando: true }
+      : c.whatsappOrigem === 'qr-reconectando-lista' ? { total: 23, conversas: 5, origem: 'qr', aberto: false, reconectando: true }
+      : c.whatsappOrigem === 'qr-caido' ? { total: 0, conversas: 0, origem: 'qr', aberto: false }
       : c.whatsappOrigem === 'web-fechado' ? { total: 0, conversas: 0, origem: 'web', navegador: 'Arc', aberto: false }
       : { total: 23, conversas: 5, origem: 'app' },
     agenda: c.agenda === 'sem' ? { permissao: false, proximo: null }
       : { permissao: true, proximo: c.agenda === 'vazia' ? null : { titulo: X('Reunião de produto'), inicio: new Date(Date.now() + 2 * 3600000).toISOString(), diaTodo: false, calendario: X('Trabalho'), cor: X('#60A5FA'), local: X('Google Meet') } },
     acesas: c.acesas, selos, avisos: [],
+    ...(c.comReuniao && c.reuniaoEstado ? { reuniao: { mic: c.reuniaoEstado.mic, cam: c.reuniaoEstado.cam } } : {}),
   };
 }
 
@@ -263,7 +306,10 @@ async function api(req, res, url) {
     if (!tecla) return json(res, 404, { erro: 'Essa tecla não existe mais no Mac.' });
     if (c.falha) return json(res, 500, { erro: 'O Mac não deixou: ligue a Acessibilidade para o Deck nos Ajustes do Sistema.' });
     cont.botoes.push(id);
+    // o Mac aperta o atalho do app e a leitura seguinte já traz o estado novo
+    if ((id === 'mic' || id === 'cam') && c.reuniaoEstado) { const v = c.reuniaoEstado[id]; if (v === 'ligado' || v === 'desligado') c.reuniaoEstado[id] = v === 'ligado' ? 'desligado' : 'ligado' }
     if (id === 'acordado') c.acesas = c.acesas.includes(id) ? [] : [id];
+    if (tecla.desligar) c.acesas = c.acesas.includes(id) ? c.acesas.filter(x => x !== id) : [...c.acesas, id]; // o Mac guarda o estado da tecla liga e desliga
     return json(res, 200, { ok: true });
   }
   const semLogin = () => c.spotifyExtras !== 'login' && (json(res, 409, { erro: 'O Spotify não está conectado. Conecte nos Ajustes do Mac.' }), true); // responde 409 e devolve true
@@ -297,6 +343,47 @@ async function api(req, res, url) {
     if (acao === 'posicao') posicaoBase = { s: +url.searchParams.get('s'), desde: Date.now() };
     return json(res, 200, { ok: true });
   }
+  if (rota === '/api/controles' || rota.startsWith('/api/controles/')) {
+    if (c.controles === 'antigo') return json(res, 404, { erro: 'Essa rota não existe.' });
+    if (c.controles === 'erro') return json(res, 500, { erro: 'O Mac não conseguiu ler os controles.' });
+    if (rota === '/api/controles') {
+      if (m !== 'GET') return json(res, 405, { erro: 'Esse pedido não é aceito nessa rota.' });
+      cont.controles.push('ler');
+      const nada = c.controles === 'nada', semBrilho = c.controles === 'sem-brilho';
+      return json(res, 200, { ...(nada ? {} : { volume: c.ctVolume, mudo: c.ctMudo }), ...(nada || semBrilho ? {} : { brilho: c.ctBrilho, teclado: c.ctTeclado }) });
+    }
+    if (m !== 'POST') return json(res, 405, { erro: 'Esse pedido não é aceito nessa rota.' });
+    const item = rota.slice('/api/controles/'.length), v = Number(url.searchParams.get('v'));
+    if (!['volume', 'mudo', 'brilho', 'teclado'].includes(item) || !Number.isInteger(v)) return json(res, 400, { erro: 'Pedido de controle inválido.' });
+    if (c.controles === 'recusa') return json(res, 422, { erro: 'Não consegui mudar o brilho da tela.' });
+    if (c.ctAtraso) await new Promise(r => setTimeout(r, c.ctAtraso));
+    cont.controles.push(`${item}=${v}`);
+    if (item === 'volume') c.ctVolume = v; else if (item === 'mudo') c.ctMudo = v === 1; else if (item === 'brilho') c.ctBrilho = v; else c.ctTeclado = v;
+    return json(res, 200, { ok: true });
+  }
+  if (rota === '/api/agenda/destinos' && m === 'GET') {
+    if (c.agendaCriar === 'antigo') return json(res, 404, { erro: 'Essa rota não existe.' });
+    if (lembretesAcesso === null) lembretesAcesso = c.agendaCriar === 'lembretes-pedir' ? 'pedir' : 'liberado';
+    // Como o Mac real: só a chamada com ?pedir=1 que abre a janela devolve "pedindo". Enquanto a janela está aberta as outras devolvem "pedir".
+    let devolve = lembretesAcesso;
+    if (url.searchParams.get('pedir') === '1') { cont.destinosPedidos++; if (lembretesAcesso === 'pedir') { lembretesAcesso = 'pedindo'; liberarEm = Date.now() + 4500; devolve = 'pedindo' } }
+    if (lembretesAcesso === 'pedindo' && Date.now() >= liberarEm) lembretesAcesso = devolve = 'liberado';
+    else if (devolve === 'pedindo' && url.searchParams.get('pedir') !== '1') devolve = 'pedir';
+    return json(res, 200, {
+      calendarios: [{ id: 'cal-trab', nome: X('Trabalho'), cor: AZUL, conta: 'iCloud' }, { id: 'cal-pes', nome: X('Pessoal'), cor: ROSA, conta: 'iCloud' }],
+      listas: devolve === 'liberado' ? [{ id: 'lis-compras', nome: X('Compras'), cor: VERDE }, { id: 'lis-tarefas', nome: X('Tarefas'), cor: AMARELO }] : [],
+      permissaoCalendario: 'liberado', permissaoLembretes: devolve, padrao: padraoAgenda });
+  }
+  if (rota === '/api/agenda/criar' && m === 'POST') {
+    if (c.agendaCriar === 'antigo') return json(res, 404, { erro: 'Essa rota não existe.' });
+    const n = await lerCorpo(req);
+    if (!n.titulo || !n.dia || !n.destino) return json(res, 400, { erro: 'Dê um título ao compromisso.' });
+    if (c.agendaCriar === 'recusa') return json(res, 409, { erro: 'O Deck está sem acesso ao Calendário. No Mac: Ajustes do Sistema > Privacidade.' });
+    cont.criados.push(n);
+    if (n.destino.tipo === 'calendario') criadosAgenda.push({ ...n, calendario: n.destino.id === 'cal-pes' ? 'Pessoal' : 'Trabalho' });
+    if (n.padrao) padraoAgenda = n.destino;
+    return json(res, 200, { ok: true, padraoSalvo: !!n.padrao });
+  }
   if (rota === '/api/reuniao/entrar' && m === 'POST') {
     const link = String((await lerCorpo(req)).link || '');
     if (!/^https:\/\/(meet\.google\.com|([a-z0-9-]+\.)?zoom\.us|teams\.microsoft\.com|teams\.live\.com)\//.test(link)) return json(res, 400, { erro: 'Esse link não é de uma reunião do Meet, do Zoom ou do Teams.' });
@@ -329,9 +416,18 @@ async function api(req, res, url) {
   if (rota === '/api/capa') { cont.capas++; res.writeHead(200, { 'Content-Type': 'image/png' }); return res.end(fs.readFileSync(path.join(RAIZ, 'icones/deck.png'))) }
   if (rota === '/api/sessoes') { cont.sessoes++; return json(res, 200, SESSOES().slice(0, c.sessoes)) }
   if ((rota === '/api/whatsapp' || rota === '/api/agenda') && c.atrasoListas) await new Promise(r => setTimeout(r, c.atrasoListas));
+  if (c.whatsappRico && rota.startsWith('/api/whatsapp/foto/') && m === 'GET') { cont.fotos.push(rota.split('/').pop()); return json(res, 200, { tipo: 'image/png', dados: PNG_B64 }) }
+  if (c.whatsappRico && rota === '/api/whatsapp/midia' && m === 'GET') {
+    const id = url.searchParams.get('id'); cont.midias.push(id);
+    return json(res, 200, id === 'A1' ? { tipo: 'audio/wav', dados: WAV_B64 } : { tipo: 'image/png', dados: PNG_B64 });
+  }
+  if (c.whatsappRico && rota === '/api/whatsapp/abrir' && m === 'POST') {
+    const id = String((await lerCorpo(req)).id || ''); cont.whatsappAbertas.push(id);
+    return json(res, 200, id.endsWith('@g.us') ? { ok: true, aviso: 'Abri o WhatsApp Web. Grupo não tem link direto: procure o grupo na lista.' } : { ok: true });
+  }
   if (rota === '/api/whatsapp') {
     cont.whatsapp++;
-    if (c.whatsappOrigem !== 'app') return json(res, 200, []); // pelo navegador o Mac não tem lista por conversa
+    if (c.whatsappOrigem === 'qr-caido' || c.whatsappOrigem === 'qr-reconectando' || c.whatsappOrigem.startsWith('web')) return json(res, 200, []); // pelo navegador o Mac não tem lista por conversa
     if (c.whatsapp === 'erro') return json(res, 500, { erro: 'O WhatsApp não respondeu no Mac.' });
     return json(res, 200, WHATSAPP());
   }

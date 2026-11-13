@@ -20,6 +20,9 @@ struct Tecla: Codable, Equatable, Sendable {
     /// Só no tipo "app": abre o app numa coisa específica (a caixa de entrada de uma conta do Mail, um
     /// endereço no navegador...). Sem ele a tecla só abre o app. O catálogo vem de GET /api/apps/<bundle>/acoes.
     var acao: AcaoDeApp? = nil
+    /// Só no tipo "comando": com ele a tecla vira liga e desliga. `valor` é o comando para ligar e este é o para desligar.
+    /// O `estado` (opcional) confere se está ligado (sai 0 = ligado). Sem `estado`, o Deck guarda o último estado que ele mesmo pôs.
+    var desligar: String? = nil
 }
 
 /// O que a tecla de app faz além de abrir o app. `id` é o da ação no catálogo do Mac (AcoesDeApp.swift) e
@@ -54,15 +57,62 @@ struct Blocos: Codable, Equatable, Sendable {
     var whatsapp = true
     var sessoes = true
     var uso = true
+    /// O monitor do Mac nasce desligado: ligar é escolha de quem usa (SPEC, seção 13, 12/11/2026).
+    var monitor = false
+}
+
+/// Quais itens o monitor do Mac mostra no iPhone ("não tem mais espaço": quem usa escolhe o que fica na tela).
+struct ConfigMonitor: Codable, Equatable, Sendable {
+    var cpu = true
+    var memoria = true
+    var bateria = true
+    var rede = true
+    /// Itens da tela do Monitor de Atividade no iPhone (12/11/2026). Só aparecem se o Mac souber ler.
+    var gpu = true
+    var disco = true
+    var energia = true
+    var ventoinhas = true
+    var dispositivos = true
+    var algum: Bool { !itens.isEmpty }
+    var itens: [String] {
+        [cpu ? "cpu" : nil, memoria ? "memoria" : nil, bateria ? "bateria" : nil, rede ? "rede" : nil, gpu ? "gpu" : nil,
+         disco ? "disco" : nil, energia ? "energia" : nil, ventoinhas ? "ventoinhas" : nil, dispositivos ? "dispositivos" : nil].compactMap { $0 }
+    }
+}
+
+/// Quais controles a tela "Controles do Mac" mostra no iPhone (volume, brilho e luz do teclado). Todos ligados de fábrica.
+struct ConfigControles: Codable, Equatable, Sendable {
+    var volume = true
+    var brilho = true
+    var teclado = true
+    var algum: Bool { volume || brilho || teclado }
 }
 
 /// De onde o Deck lê as não lidas do WhatsApp.
 struct ConfigWhatsApp: Codable, Equatable, Sendable {
-    /// "auto" (o Deck descobre), "app" (banco do WhatsApp do Mac) ou "web" (aba do WhatsApp Web).
+    /// "auto" (o Deck descobre), "app" (banco do WhatsApp do Mac), "web" (aba do WhatsApp Web) ou "qr"
+    /// (aparelho conectado por QR, só quando a pessoa liga: não é oficial). O "auto" nunca escolhe "qr".
     var origem = "auto"
     /// Navegador do WhatsApp Web: "Safari", "Google Chrome", "Arc", "Brave Browser" ou "Microsoft Edge".
     /// nil: o Deck acha a aba aberta e, sem aba, abre o WhatsApp Web no navegador padrão do Mac.
     var navegador: String?
+    /// A origem que valia antes de ligar o "Conectar pelo QR": desligar a chave volta para ela, em vez de cair em "auto".
+    var origemAntes: String?
+
+    /// Liga o QR. Sem o ajudante no app (build sem Go) não liga: a origem "qr" sem ponte tiraria a leitura que já funcionava.
+    @discardableResult
+    mutating func ligarQR(disponivel: Bool) -> Bool {
+        guard disponivel else { return false }
+        if origem != "qr" { origemAntes = origem }
+        origem = "qr"
+        return true
+    }
+
+    /// Desliga o QR e devolve a origem de antes (ou "auto", se não havia).
+    mutating func desligarQR() {
+        origem = origemAntes.flatMap { $0 == "qr" ? nil : $0 } ?? "auto"
+        origemAntes = nil
+    }
 }
 
 struct Config: Codable, Equatable, Sendable {
@@ -70,11 +120,15 @@ struct Config: Codable, Equatable, Sendable {
     var versao = Config.versaoAtual
     var perfis: [Perfil]
     var perfilAtivo: String
-    /// Composição do painel: "a" (relógio em cima) ou "b" (deck ao lado).
+    /// Composição do painel: "a" (relógio em cima), "b" (deck ao lado) ou "c" (relógio e calendário do mês).
     var comp = "a"
     var contas: [ContaIA] = []
     var blocos = Blocos()
     var whatsapp = ConfigWhatsApp()
+    /// Itens do monitor do Mac. Só aparece no iPhone com `blocos.monitor` ligado.
+    var monitor = ConfigMonitor()
+    /// Barras que a tela Controles do Mac mostra no iPhone.
+    var controles = ConfigControles()
     var nomeMac: String
     var porta = 4777
     /// Código longo da API (20 letras). Sem ele nada é lido nem executado. Troca sozinho a cada 24 h
@@ -88,6 +142,9 @@ struct Config: Codable, Equatable, Sendable {
     var codigoAnterior: String?
     /// Fim da folga do codigoAnterior, em segundos desde 1970.
     var anteriorValeAte: Int?
+    /// Onde "Novo compromisso" da agenda salva quando a pessoa não escolhe (um calendário ou uma lista dos Lembretes).
+    /// Nil: pergunta toda vez.
+    var agendaPadrao: DestinoAgenda? = nil
 }
 
 // MARK: - Estado (GET /api/estado, pedido pelo painel a cada 1 s)
@@ -147,18 +204,28 @@ struct Sessao: Codable, Equatable, Sendable {
     var pergunta: String
     /// Desde quando espera, ISO 8601.
     var desde: String
+    /// O pedido inteiro da sessão (`needs`), quando é mais que o resumo de `pergunta`. Ausente em Mac antigo.
+    var pedido: String? = nil
+    /// A última mensagem da sessão antes de parar (o contexto do que ela espera), sem segredos e com limite de
+    /// tamanho. Só vem em GET /api/sessoes, nunca no estado. Ausente em Mac antigo.
+    var contexto: String? = nil
+    /// A resposta que a própria sessão sugere (`suggestedReply`), só para ler. Ausente em Mac antigo.
+    var sugestao: String? = nil
 }
 
 struct ResumoWhatsApp: Codable, Equatable, Sendable {
     var total: Int
     var conversas: Int
-    /// De onde o total veio: "app" (banco do WhatsApp do Mac) ou "web" (título da aba do WhatsApp Web).
+    /// De onde o total veio: "app" (banco do WhatsApp do Mac), "web" (título da aba do WhatsApp Web) ou "qr" (aparelho conectado).
     /// Ausente em Mac antigo: o painel trata como "app". Em "web" não há lista por conversa.
     var origem: String?
     /// Navegador da aba do WhatsApp Web, quando a origem é "web" e há aba.
     var navegador: String?
-    /// Só na origem "web": false quando não há aba do WhatsApp Web aberta (o total 0 não é medição).
+    /// Só nas origens "web" e "qr": false quando não há aba aberta (web) ou a conexão por QR está caída (o total 0 não é medição).
     var aberto: Bool?
+    /// Só na origem "qr": true quando a conexão está subindo ou voltando sozinha (rede que caiu um instante). O painel
+    /// não manda ler o QR de novo nesse caso: não precisa.
+    var reconectando: Bool?
 }
 
 struct Evento: Codable, Equatable, Sendable {
@@ -173,6 +240,9 @@ struct Evento: Codable, Equatable, Sendable {
     /// Link de reunião de vídeo (Meet, Zoom ou Teams) achado no evento. Ausente em Mac antigo e em evento sem reunião:
     /// o painel só mostra "Entrar na reunião" quando ele vem.
     var link: String? = nil
+    /// ISO 8601 do fim. Ausente em Mac antigo: o painel trata como evento de um dia só. Vem para o evento de vários dias
+    /// (viagem, feriado prolongado) aparecer em todos os dias e meses que cobre.
+    var fim: String? = nil
 }
 
 struct ResumoAgenda: Codable, Equatable, Sendable {
@@ -197,6 +267,44 @@ struct Estado: Codable, Equatable, Sendable {
     /// Selo por id de tecla (não lidas do WhatsApp, "!" da agenda sem permissão).
     var selos: [String: String]
     var avisos: [Aviso]
+    /// Só com o bloco do monitor ligado, e só os itens que a pessoa escolheu nos Ajustes do Mac.
+    var monitor: EstadoMonitor? = nil
+    /// Por id de tecla de microfone ou de câmera da reunião: ligado, desligado, desconhecido ou sem-reuniao.
+    /// Ausente em Mac antigo e quando o perfil não tem tecla dessas: o painel trata como "não sabe" e desenha a tecla de sempre.
+    var reuniao: [String: EstadoDeReuniao]? = nil
+}
+
+/// Medidas do Mac. Cada uma é nil quando o item está escondido nos Ajustes ou o Mac não tem a medida
+/// (bateria num Mac de mesa, por exemplo).
+struct EstadoMonitor: Codable, Equatable, Sendable {
+    /// Os itens que a pessoa deixou ligados nos Ajustes do Mac ("cpu", "memoria", "bateria", "rede"). É daqui que o painel
+    /// sabe o que desenhar, porque medida ausente também quer dizer "ainda sem leitura" ou "Mac sem bateria".
+    var itens: [String] = []
+    /// Uso do processador, 0 a 100.
+    var cpu: Int? = nil
+    /// Memória em uso, 0 a 100.
+    var memoria: Int? = nil
+    /// Carga da bateria, 0 a 100. nil em Mac sem bateria.
+    var bateria: Int? = nil
+    /// Na tomada (carregando ou cheia). Só vem junto com `bateria`.
+    var naTomada: Bool? = nil
+    /// Bytes por segundo recebidos e enviados. nil na primeira leitura, porque taxa precisa de duas medidas.
+    var baixa: Int? = nil
+    var sobe: Int? = nil
+    /// Uso da GPU, 0 a 100. nil quando o Mac não informa.
+    var gpu: Int? = nil
+    /// Espaço livre e total do disco, em bytes.
+    var discoLivre: Int? = nil
+    var discoTotal: Int? = nil
+    /// Consumo do Mac em watts (a carga total do sistema, ou o fluxo da bateria quando só isso estiver disponível). nil em Mac sem a medida.
+    var watts: Double? = nil
+    /// A bateria está recebendo carga. Só vem junto com `watts`.
+    var carregando: Bool? = nil
+    /// Rotação de cada ventoinha, em RPM, e a maior rotação possível. nil em Mac sem ventoinha (MacBook Air).
+    var ventoinhas: [Int]? = nil
+    var ventoinhaMax: Int? = nil
+    /// Quantos dispositivos USB estão conectados.
+    var dispositivos: Int? = nil
 }
 
 // MARK: - Painéis
@@ -206,6 +314,13 @@ struct MensagemWhatsApp: Codable, Equatable, Sendable {
     var de: String
     var texto: String
     var hora: String
+    /// Só na origem "qr". O id da mensagem (serve para pedir a mídia) e o tipo: "foto", "audio" ou "video". Ausente = texto.
+    var id: String? = nil
+    var tipo: String? = nil
+    /// Visualização única: o painel mostra só o balão com o ícone, e o Mac nunca entrega o conteúdo.
+    var unica: Bool? = nil
+    /// Dá para abrir a mídia no iPhone (foto e áudio comuns, até o limite de tamanho).
+    var midia: Bool? = nil
 }
 
 struct ConversaWhatsApp: Codable, Equatable, Sendable {
@@ -216,6 +331,12 @@ struct ConversaWhatsApp: Codable, Equatable, Sendable {
     /// Hora da última mensagem, ISO 8601.
     var ultima: String
     var mensagens: [MensagemWhatsApp]
+    /// Só na origem "qr". Arquivada aparece só no filtro Arquivadas e não entra na conta das não lidas.
+    var arquivada: Bool? = nil
+    /// Só na origem "qr". Os dígitos do telefone (conversa direta), para abrir a conversa no WhatsApp Web.
+    var numero: String? = nil
+    /// Só na origem "qr". O arquivo da foto de perfil (pedida em /api/whatsapp/foto/<arquivo>). Ausente = sem foto.
+    var foto: String? = nil
 }
 
 // MARK: - Rotas (todas exigem o código de acesso, menos os arquivos da página e /api/parear)
@@ -235,6 +356,9 @@ struct ConversaWhatsApp: Codable, Equatable, Sendable {
 //                                  Sem `modo`, `repetir[?v=1|0]` segue sendo o do AppleScript acima.
 // GET  /api/capa                   PNG ou JPEG da capa atual
 // GET  /api/whatsapp               -> [ConversaWhatsApp] (vazia quando Estado.whatsapp.origem é "web": o navegador só dá o total)
+// GET  /api/whatsapp/foto/<arquivo> -> {"tipo", "dados" (base64)}  a foto de perfil (origem "qr"; 404 sem foto)
+// GET  /api/whatsapp/midia?chat=<id>&id=<mensagem> -> {"tipo", "dados" (base64)}  a foto ou o áudio de uma mensagem (origem "qr", até 8 MB, nunca visualização única)
+// POST /api/whatsapp/abrir         <- {"id": "<conversa>"}  abre a conversa no WhatsApp Web do Mac -> {"ok": true, "aviso"?}
 // GET  /api/agenda?de=AAAA-MM-DD&dias=N -> [Evento]
 // GET  /api/sessoes                -> [Sessao]
 // POST /api/sessoes/<id>/abrir     traz para a frente o terminal da sessão no Mac -> SessaoAberta {"ok", "como": "terminal"|"pasta", "app"}

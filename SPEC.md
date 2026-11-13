@@ -37,7 +37,7 @@ do calendário vem do dado, `theme-color` é hex por regra da própria tatile).
 Deitado 932 x 430, área segura de 59 em cada lateral e 21 embaixo. Em pé 430 x 932, com 59 em
 cima e 34 embaixo. Ajusta a outros iPhones pela largura, mas é desenhada e conferida no 15 Pro Max.
 
-Tudo numa tela, sem navegação. As duas composições ficam: o Leonardo alterna nos Ajustes do Mac
+Tudo numa tela, sem navegação. As composições ficam: o Leonardo alterna pelo menu da barra do Mac
 (item 9a), e o iPhone só mostra.
 
 - **A, relógio em cima:** duas linhas que cruzam as colunas. Em cima, relógio e data à esquerda e
@@ -45,6 +45,10 @@ Tudo numa tela, sem navegação. As duas composições ficam: o Leonardo alterna
   as linhas na mesma régua (mesma letra, altura e separador). Depois, uma fileira de 6 teclas.
 - **B, deck ao lado:** à esquerda relógio, data, uso de IA numa linha, Spotify e sessões. À direita
   uma grade de 3 x 3 teclas.
+- **C, relógio e mês (12/11/2026):** à esquerda o relógio com as horas em cima e os minutos embaixo (as
+  mesmas placas do "relógio grande" da A, sem os dois pontos), à direita o calendário do mês de hoje com o dia
+  marcado, e embaixo a mesma fileira de teclas da A. Sem player, sem sessões e sem uso. Tocar no mês abre a
+  agenda. A e B continuam como estavam.
 
 **Teclas sempre centralizadas, carrossel quando passam de uma página.**
 - **A:** a fileira tem três partes: o carrossel de apps (5 por página), uma divisória e a tecla
@@ -75,6 +79,7 @@ da área segura com 4 ou com 12 teclas, nas duas composições).
 | Uso da semana | uma barra por conta, com o ícone do serviço: Claude `leo`, Claude `equipe` e Codex. Só o limite semanal (o Claude não tem mais a janela de 5 h, e o Codex só registra a semana: 5.694 de 5.694 registros conferidos em 10/11/2026). Ao lado, quando aquela conta renova ("sex 14h"), porque cada conta renova num dia. Amarelo a partir de 70%, vermelho a partir de 90%, sempre com o número | nada na v1 |
 | Spotify | capa, faixa, artista com o ícone do Spotify, tempo decorrido e total, anterior / tocar-pausar / próxima. Fundo com um brilho das duas cores dominantes da capa (o Mac tira as cores da arte e manda junto) | capa ou nome abre o player em tela cheia (seção 5). Botões controlam a música. **Arrastar a barra de tempo pula a música**: a área de arrasto é alta, mas fica numa linha só dela, abaixo dos botões. Nas pontas da barra, **aleatório** e **repetir** (verdes quando ligados), só quando o Mac manda o estado deles |
 | Sessões esperando | com o ícone do Claude: nome, pergunta e há quanto tempo espera (amarelo depois de 1 h), das 3 mais recentes | tocar em qualquer ponto do bloco (linha ou título) abre a tela de sessões, um cartão por sessão (seção 5). A linha é pequena demais para ser um alvo separado |
+| Monitor do Mac | uma linha pequena com processador, memória, bateria (some em Mac sem bateria) e rede (baixando e enviando). Nasce desligado. Nos Ajustes do Mac, na tecla do Monitor de Atividade, a pessoa liga o bloco e escolhe quais itens aparecem. Sem item escolhido o bloco some. Em A e B ele toma uma linha embaixo da data (o relógio cede a altura, e a B mostra uma sessão só), na C fica embaixo das placas | nada |
 | Teclas | ícone, nome, LED, selo de não lidas. Na Agenda, o horário do próximo compromisso centralizado no topo, só o texto, sem pílula. Toda tecla reserva no topo o espaço do selo, então os ícones ficam na mesma altura com ou sem selo | toque executa, segurar organiza |
 
 **Sem música tocando:** o player sai e as sessões crescem até o topo, ocupando o lugar dele (até 7
@@ -221,13 +226,41 @@ Meet e Teams no navegador padrão, Zoom no app do Zoom se ele estiver instalado 
 no `Evento` (`link`, opcional: Mac antigo não manda e o botão não aparece) e só aceita abrir `https` desses três serviços
 (`POST /api/reuniao/entrar`, corpo `{"link": "https://..."}`, senão 400).
 
+**Novo compromisso (12/11/2026).** Na lista, deslizar para a esquerda (ou tocar no puxador da borda) abre o formulário. Ele troca a parte da
+direita inteira (o mês continua à esquerda): título, dia, início e fim, "Dia todo", "Onde salvar",
+alerta e "Usar como padrão", com Cancelar e Salvar no pé. Onde salvar é um calendário do Mac (só os que aceitam
+gravar) ou uma lista do app Lembretes. Alerta com hora: sem, no horário, 5, 15, 30 min, 1 h ou 1 dia antes. Dia todo: sem,
+no dia às 9h, 1 dia, 2 dias ou 1 semana antes (às 9h). Salvar vai ao Mac, que grava pelo EventKit (aparece no Calendário
+do Mac e do celular da mesma conta). Depois a agenda recarrega no dia criado e mostra o item. O aviso do
+lembrete diz "Lembrete criado em <lista>. Ele aparece no app Lembretes."
+Novo compromisso por gesto e lembretes na agenda (12/11/2026). Palavras dele: "o botão Novo compromisso atrapalha, deixa por cima da lista" e "compromissos e lembretes criados pelo Deck têm que aparecer, hoje só aparecem feriados". O botão grande saiu: deslizar a lista do dia para a esquerda revela o formulário (a lista segue o dedo e volta se soltar cedo), e um puxador discreto na borda faz o mesmo com um toque. `GET /api/agenda` passou a devolver também os lembretes ainda não feitos com prazo no intervalo (EKReminder), com o nome da lista no lugar do calendário, no dia do prazo e com a hora quando tem.
+
+Fechar puxando de cima para baixo (12/11/2026). Palavras dele: "fechar puxando de cima para baixo não funcionou em nenhum lugar". O gesto vale em todas as telas abertas e é cancelado já no primeiro movimento para baixo, porque no iPhone a rolagem nativa começa nos primeiros pixels e depois dela o movimento não pode mais ser cancelado.
+
+Uso das IAs sem número (12/11/2026). Palavras dele: a conta iacall aparece "Sem medição" no Mac e "-" no iPhone. O cartão da conta agora diz o motivo (token que não está guardado neste app, token recusado, sem conexão ou resposta sem o uso da semana). O token de uma conta adicionada no Deck mora no Chaveiro do app que a adicionou: o Deck Bancada não enxerga o do Deck.
+
+Rotas (com o código de acesso): `GET /api/agenda/destinos` devolve `{calendarios, listas, permissaoCalendario,
+permissaoLembretes, padrao}` e `?pedir=1` abre no Mac o pedido de acesso aos Lembretes (a permissão só é pedida
+quando a pessoa escolhe Lembretes). `POST /api/agenda/criar` recebe `{titulo, dia: "AAAA-MM-DD", diaTodo, inicio, fim:
+"HH:MM", destino: {tipo: "calendario"|"lembretes", id}, alertaMin, padrao}`. O Mac valida tudo (título de 1 a 200 letras,
+dia real entre 2000 e 2100, hora de 24 h, fim depois do início, alerta da lista, destino existente que aceita gravar) e
+responde 400 (entrada), 409 (sem acesso no macOS) ou 422 (destino sumiu ou o EventKit recusou). Sem `destino`, vale o
+padrão da config (`agendaPadrao: {tipo, id}`, ajustável em Ajustes > Este Mac > Agenda). `padrao: true` guarda o
+destino escolhido como padrão. Mac antigo responde 404 e o formulário pede para atualizar o Deck.
+
 ### Sessões esperando
 
 Tela de sessões em cartões, um por sessão: nome, projeto, há quanto tempo e o começo da pergunta (3 linhas), a mais
-recente primeiro (duas colunas deitado, uma em pé). Tocar num cartão abre a sessão com a pergunta inteira, legível,
-com rolagem sem barra, e dois botões: **Dispensar** (esconde até ela mudar de novo) e **Voltar** (aos cartões, no mesmo ponto
-da rolagem). Se a sessão aberta for respondida no Mac, a tela volta aos cartões e avisa. Sem link para abrir a sessão no
-Claude do iPhone (item 4 da seção 13), o botão "Responder" saiu: quem responde faz isso na própria sessão, e a tela diz isso.
+recente primeiro (duas colunas deitado, uma em pé). Cartão com uma barra de cor na lateral (azul, amarela depois de 1 h
+de espera). Tocar num cartão abre a sessão, de cima para baixo: **Pede a sua resposta** (o pedido inteiro da sessão, em
+destaque), a **resposta sugerida** pela sessão quando ela tem uma (só leitura), **Abrir no Mac** e o **Contexto** (a última
+mensagem da sessão, com a marcação solta limpa e a tabela em linhas). Rolagem sem barra e dois botões no rodapé:
+**Dispensar** (esconde até ela mudar de novo) e **Voltar** (aos cartões, no mesmo ponto da rolagem). Se a sessão aberta for
+respondida no Mac, a tela volta aos cartões e avisa. Sem link para abrir a sessão no Claude do iPhone (item 4 da seção 13),
+o botão "Responder" saiu: quem responde faz isso na própria sessão, e a tela diz isso. O pedido, a sugestão e o contexto
+vêm de `GET /api/sessoes` (`pedido`, `sugestao`, `contexto`, todos opcionais: Mac antigo não manda e a tela abre só com a
+pergunta). O estado (`/api/estado`) leva só o resumo, sem `contexto`. O Mac mascara tokens e senhas e corta o contexto em
+4 mil caracteres antes de mandar.
 A sessão aberta tem **Abrir no Mac** (`POST /api/sessoes/<id>/abrir`), que traz para a frente o terminal onde ela está. O
 `state.json` do job não diz em que app a sessão roda, então o Mac descobre pelo processo: a sessão em segundo plano é
 acompanhada por um `claude attach <nome>` num terminal, e o app dono desse terminal é o primeiro `.app` entre os pais do
@@ -274,7 +307,7 @@ contas que o dono adicionar em User Management (até 25): quem não estiver na l
 | Spotify fechado | o player sai e as sessões ocupam o espaço (animado, item 3) |
 | Spotify pausado | capa a meia luz, botão de tocar |
 | Agenda sem permissão | selo "!" na tecla, e a folha explica onde liberar no Mac |
-| Agenda vazia | "Nada nos próximos 30 dias" |
+| Agenda vazia | "Nada neste mês a partir deste dia" |
 | Nenhuma sessão esperando | ícone do Claude, "Tudo respondido" e "Nenhuma sessão do Claude esperando você" |
 | Spotify fechado e nenhuma sessão | as sessões ocupam o espaço mostrando "Tudo respondido" |
 | Uso sem medição recente | barra cinza com "-" |
@@ -286,18 +319,18 @@ contas que o dono adicionar em User Management (até 25): quem não estiver na l
 
 | Dado | Fonte | Observação |
 |---|---|---|
-| Agenda | EventKit (Calendário do Mac) | o macOS recusa para processo de terminal sem perguntar, por isso o Deck é um app |
+| Agenda | EventKit (Calendário do Mac, e Lembretes para criar) | o macOS recusa para processo de terminal sem perguntar, por isso o Deck é um app |
 | Spotify | AppleScript no Spotify | nome, artista, álbum, capa, posição, duração, `repeating` e `shuffling`, testado. Próxima da fila e repetir só a música não existem no AppleScript (precisam do login na API do Spotify) |
 | Spotify, volume | AppleScript (`sound volume` do player e `output volume` do Mac) | lido junto do estado, mudado por `POST /api/spotify/volume`. Testado em 11/11/2026 lendo e devolvendo o volume sem mexer na música |
 | Spotify, aparelhos, curtir, fila, repetir | API do Spotify (`api.spotify.com/v1`), com o login da pessoa | só com o Spotify conectado nos Ajustes (seção 5, "Spotify: volume...") |
 | Manter acordado | atalho de teclado do Vorssaint + `pmset -g assertions` | ligar e desligar testado |
-| WhatsApp | banco local do WhatsApp do Mac (`ChatStorage.sqlite`), só leitura | tem nome do contato ou grupo, não lidas, última mensagem e as mensagens. Hoje: 445 conversas, 53 com não lidas. Filtrar arquivadas e escondidas. Pode mudar com atualização do WhatsApp, então tem que falhar com aviso, nunca quebrar a tela. Origem web (11/11/2026): o total de não lidas vem do título da aba do WhatsApp Web ("(23) WhatsApp"), lido por AppleScript em Safari, Chrome, Arc, Brave ou Edge (só com a aba aberta, pede Automação na primeira vez), sem lista por conversa |
+| WhatsApp | banco local do WhatsApp do Mac (`ChatStorage.sqlite`), só leitura | tem nome do contato ou grupo, não lidas, última mensagem e as mensagens. Hoje: 445 conversas, 53 com não lidas. Filtrar arquivadas e escondidas. Pode mudar com atualização do WhatsApp, então tem que falhar com aviso, nunca quebrar a tela. Origem QR (12/11/2026, item 35): lista por conversa pelo aparelho conectado (ajudante Go, só leitura, desligada por padrão). Origem web (11/11/2026): o total de não lidas vem do título da aba do WhatsApp Web ("(23) WhatsApp"), lido por AppleScript em Safari, Chrome, Arc, Brave ou Edge (só com a aba aberta, pede Automação na primeira vez), sem lista por conversa |
 | Uso do Claude | medição da troca de contas (`~/.config/claude-account`, perfis `leo` e `equipe`) | o arquivo de medição não existe agora. Quando faltar, o Deck mede por conta própria a cada 5 min com o login de cada perfil, sem gravar token em lugar nenhum |
 | Uso do Codex | `rate_limits` nos arquivos de sessão do Codex (`~/.codex/sessions`) | só a janela semanal (`window_minutes` 10080), percentual, plano e `resets_at` (quando renova). Só atualiza quando o Codex roda |
 | Renovação de cada conta | `reset_7d` da medição do Claude por perfil, `resets_at` do Codex | mostrado como dia e hora ("sex 14h") |
 | Cores da capa | o Mac lê a arte do Spotify e tira as duas cores dominantes | vão junto do estado do Spotify |
 | Ícones | ícone do app instalado no Mac (Claude, Spotify, WhatsApp...) | Codex com o ícone oficial do app do Codex para Mac (nuvem azul com o prompt). No app de verdade, o ícone sai do app instalado. Sem ele, usa esse mesmo ícone guardado no Deck |
-| Sessões esperando | `~/.claude/jobs/*/state.json` com estado `blocked` | nome, pergunta (`detail`), projeto e hora. Hoje há 13, algumas paradas desde outubro. Falta confirmar qual link abre a sessão no Claude do iPhone |
+| Sessões esperando | `~/.claude/jobs/*/state.json` com estado `blocked` | nome, resumo da pergunta (`detail`), pedido inteiro (`needs`), resposta sugerida (`suggestedReply`), projeto e hora. O contexto é o `text` da última linha do `timeline.jsonl` da sessão, quando ela é `blocked` (o `state.json` não guarda ferramenta nem comando de permissão). Hoje há 13, algumas paradas desde outubro. Falta confirmar qual link abre a sessão no Claude do iPhone |
 
 ## 8. Instalar no iPhone
 
@@ -383,7 +416,8 @@ Bluetooth só para o app nativo.
   200 px (JPEG) e o resto do estado cabe folgado. O pareamento principal é por aqui: o iPhone lista os Macs, os dois
   derivam os mesmos 6 dígitos (comparação numérica) e a pessoa confirma nas duas telas. Troca automática: o cabo é
   o canal em uso quando está plugado e o Bluetooth assume na hora quando ele sai, com o aviso de 3 s. Os dois ficam
-  conectados ao mesmo tempo, e uma leitura que estava indo pelo cabo é repetida no Bluetooth.
+  conectados ao mesmo tempo, e uma leitura que estava indo pelo cabo é repetida no Bluetooth. Desde 12/11/2026 há também o
+  sentido invertido (o iPhone anuncia, o Mac conecta como central): ver o parágrafo "Bluetooth no sentido invertido" na seção 13.
 - **Config:** `~/Library/Application Support/Deck/config.json` (teclas, ordem, código, porta).
   O iPhone grava com `PUT /api/config` mandando a config inteira que o GET devolve (sem código nem
   porta, que ficam sempre os do Mac). Corpo incompleto é recusado e nada muda.
@@ -513,6 +547,7 @@ uma linha e "Excluir tecla" (⌘Z desfaz). Embaixo, dois passos numerados:
    - Atalho: busca na lista do app Atalhos.
    - Teclado: "Clique aqui e aperte as teclas", que grava do teclado de verdade (Esc cancela, exige
      uma tecla de controle), com exemplos prontos.
+     (A seção "Montar escolhendo as teclas" saiu em 12/11/2026, ver o fim da seção 13.)
    - Comando: caixa em fonte de código, "Testar agora" e comandos prontos (apagar tela, abrir
      Downloads, silenciar, esvaziar Lixeira).
 
@@ -886,6 +921,137 @@ Ajustes de UX (11/11/2026, teste do Leonardo no iPhone):
       nativo, só o que existe no código: sem cabo e Bluetooth (item 9), sem dados quando o iPhone sai do Wi-Fi e tela
       acesa só pelo Wake Lock do Safari, que pode falhar (no app nativo é a casca que segura a tela).
 
+31. Tecla de comando roda no shell de login do usuário (12/11/2026). Palavras dele: "coloquei um comando na tecla (mudar
+    tela/teclado, jogo, trabalho) e ele deu o aviso erro zsh:1 'mudar' comandos criados ele não entende. Libera pra ele
+    entender. Esses aí eu dou no terminal e corre tudo bem."
+    - Causa: o Deck rodava `/bin/zsh -c <linha>` sem login e sem interativo, então o .zshrc e o .zprofile não eram lidos e
+      alias, função e PATH do usuário não existiam (`zsh:1: command not found: mudar`).
+    - Agora: a tecla de comando roda no shell de login do usuário (getpwuid, não a variável SHELL, caindo em /bin/zsh) com
+      `-l -i -c` em zsh, bash e fish (só `-l` em sh e outros), lendo o perfil como o Terminal. A linha segue como argumento
+      do `-c`, nunca colada em string de outro shell. O limite de 10 s, o vigia e o stdin em /dev/null continuam (sem tty
+      para travar), e a saída do perfil (banner) só aparece se o comando falhar, pela última linha como antes.
+    - Comando que não existe de verdade (status 127) avisa "Comando não encontrado: <nome>". Só a tecla de comando muda:
+      os comandos internos do Deck (osascript, open, shortcuts) seguem no zsh puro, de propósito.
+32. Deck Bancada (12/11/2026). Pedido da frente deck-bancada: testar as telas do Mac sem tocar no Deck instalado (decisão da
+    frente, sem citação dele). É o mesmo app do Mac com outro nome e identificador (`com.leonardorejani.deck.bancada`), ícone com a faixa laranja "BANCADA" e a barra de
+    menus com a diagonal pintada. Fica em `~/Applications/Deck Bancada.app`, instalado por `scripts/bancada.sh`, que
+    nunca abre o app. Decidido:
+    - Dados próprios: config e certificados em `~/Library/Application Support/Deck Bancada/`, log em
+      `~/Library/Logs/Deck Bancada/`, porta 4791 e serviços de Chaveiro com o prefixo `com.leonardorejani.deck.bancada.`.
+      Nunca lê nem grava os itens do Deck real, então nunca pede a senha dele.
+    - Primeira abertura: copia o `config.json` do Deck real (só leitura) com a porta trocada para 4791. Se a bancada já
+      tem config, não mexe. Os certificados não vêm junto, a bancada cria os dela.
+    - Sem iPhone e sem rede: nada de cabo, Bluetooth nem renovação do app do iPhone, e o servidor escuta só no
+      loopback, então não aparece para outros aparelhos.
+    - Código em `mac/Nucleo/Variante.swift`. Testes: `mac/Testes/VarianteTestes.swift` e `scripts/teste/bancada.test.sh`.
+    - Ícone da barra de menus (12/11/2026, "tem 2 instalado, qual uso?"): a bancada aparece em laranja, fora do modo
+      template, com as quatro teclas e uma bolinha laranja com "B" no canto. O Deck de verdade segue monocromático e
+      igual. O topo do menu da bancada diz "Deck Bancada (teste)".
+33. Gravar atalho de teclado que outro app já usa (12/11/2026). Palavras dele: "uso o CleanShot com os mesmos comandos do
+    Mac, tentei configurar as teclas com as combinações mas ele sempre ativava o atalho ao invés de salvar o atalho."
+    - Causa: o atalho global do outro app dispara antes de a tecla chegar ao Deck, então o gravador (monitor local do
+      AppKit) nunca via a combinação.
+    - Na tecla do tipo Teclado, além de "Clique aqui e aperte as teclas", existe "Montar escolhendo as teclas":
+      modificadores (⌃ ⌥ ⌘ ⇧ e fn) ligados e desligados em botões, e a tecla escolhida numa lista por grupo (Letras,
+      Números, F1 a F12, Setas, Outras). Não aperta nada. A combinação só vai para a tecla quando está completa
+      (pelo menos um modificador e uma tecla). Incompleta, a que já estava gravada continua valendo no iPhone e a tela
+      diz o que falta.
+    - Gravando, o Deck captura a tecla antes dos atalhos de outros apps (CGEventTap de sessão), só enquanto grava e só
+      com a Acessibilidade liberada. O tap engole o teclado do sistema inteiro, então desliga sozinho ao parar, quando
+      o Deck sai da frente e depois de 30 s. Sem Acessibilidade cai no monitor local, e a tela avisa que, se o atalho
+      abrir outro app, é para montar escolhendo as teclas.
+    - Ao usar a tecla, o Deck posta a tecla descendo e subindo no HID, com os modificadores nos dois eventos.
+Mail tirado do iPhone (12/11/2026). Palavras dele: "tira a tela do mail por enquanto" (ninguém usa o app Mail, só o Gmail pela web). A tela de fábrica do Mail, a rota `/api/mail` e o leitor do Mail saíram, e a tecla do app Mail volta a só abrir o Mail no Mac, como qualquer tecla de app. As ações de app do Mail (caixa de entrada de uma conta, e-mail novo) continuam como estavam.
+
+34. Spotify fechou e abriu de novo, o player volta (12/11/2026). Palavras dele: "Quando o spotify fechou no pc ele sumiu do
+    app, mas quando foi reaberto nao apareceu de volta. mesmo dando play".
+    - Causa: a leitura do Spotify rodava o `osascript` sem tempo limite. Um Spotify que acabou de abrir (ou está fechando)
+      pode não atender o evento por minutos, e essa leitura pendurada segurava o cache do estado: todo pedido seguinte
+      recebia o último valor (sem player) e a leitura boa nunca entrava.
+    - Agora: quem diz se o Spotify está aberto é o sistema (`NSRunningApplication`, bundle `com.spotify.client`), antes de
+      qualquer AppleScript, então fechado o `osascript` nem roda (falar com o app por AppleScript pode abri-lo). A leitura
+      roda no vigia com limite de 4 s: estourou, sem aviso, e a próxima leitura tenta de novo. Com o app aberto e tocando
+      é só uma leitura lenta (Mac acordando), então o player segue com a última faixa por até 30 s e só sai depois disso.
+      Fechado (ou sem faixa) o player sai na hora.
+      O ciclo fechado, abrindo, tocando tem teste (`FontesSpotifyTestes`).
+
+33. Bluetooth que não reconecta depois de tirar o cabo (12/11/2026). Palavras dele: "desconectei do cabo e ele tenta
+    buscar o mesmo Mac pelo Bluetooth mas não conecta nunca e o painel não atualiza."
+    - Evidência: o Bluetooth pareou e funcionou (12:58 UTC), caiu às 13:20 e o log do Mac ficou 3 horas sem nenhum evento de
+      Bluetooth, inclusive quando o cabo caiu (16:15). Nenhuma tentativa chegou ao Mac.
+    - Causa no iPhone: depois de pareado o app só conectava no id guardado (`retrievePeripherals`/`connect`). O connect do
+      iOS não falha, só espera. Se o Mac trocou de endereço (o macOS anuncia com endereço que muda) ou parou de anunciar, o
+      id nunca respondia, e o app nunca olhava o ar por outro id. A tela ficava em "Procurando pelo cabo e pelo
+      Bluetooth" fixo, sem dizer nada de cada tentativa.
+    - Causa no Mac: nada religava o anúncio depois de uma queda. O macOS pode parar o anúncio sem avisar o app (conexão
+      que acabou, rádio reiniciado), e o Deck só anunciava de novo se o estado do rádio mudasse. Sem log, ninguém via.
+    - Agora, no iPhone: a conexão direta no id guardado tem tempo limite de 6 s (garantido no gerente, além do do rádio).
+      Estourou, procura o serviço do Deck no ar por até 8 s e conecta no que achar, preferindo o id guardado, depois o nome
+      do Mac e por fim o sinal mais forte. Conectou, guarda o id novo. Um Mac de vizinho que recusa na procura não conta
+      para esquecer o pareamento (só o Mac conhecido recusando conta). O Bluetooth segue tentando com o cabo plugado, para a
+      troca não ter buraco.
+    - Agora, na tela de conexão: o app diz o que o Bluetooth está fazendo a cada tentativa ("Procurando o Mac pelo Bluetooth.
+      Tentativa 3.", "Não achei o Mac pelo Bluetooth. Tentando de novo.", ou o motivo do rádio: desligado, sem permissão),
+      e limpa ao conectar. Só aparece na tela "Mac desconectado": com cabo ou Bluetooth servindo a página não recebe nada.
+    - Agora, no Mac: um vigia (`VigiaDoAnuncio`) confere se o Mac ainda anuncia a cada 15 s e depois de cada sessão que
+      acaba ou iPhone que sai, e anuncia de novo. Serviço que não chegou a ser publicado é publicado de novo. Tudo vai para o
+      log (estado do rádio, "iPhone saiu", "o anúncio tinha parado (...). Anunciando de novo.", pedido de iPhone sem sessão).
+    - Precisa atualizar o app do iPhone e o Deck do Mac. Testes: `ios/Pacote/Tests/DeckCascaTests/BluetoothTestes.swift`
+      (id que nunca conecta, situação da busca, vizinho que recusa) e `mac/Testes/BluetoothTestes.swift` (vigia do anúncio).
+
+33. Conexões e uma fonte de verdade por estado (12/11/2026, frente mac-conexoes). Palavras dele: "pode manter a conexão
+    com spotify entao se a pessoa quiser conectar essas opções aparecem nos controles", "quando ia parear pelo celular
+    aparecia um código nada a ver e às vezes era o mesmo do PWA", "os ícones demoram e só aparecem ao alternar de perfil",
+    "quando clico em liberar (botão azul) ele leva o app pra baixo de tudo ao invés de só liberar e manter o app na frente",
+    "mostra nenhum iPhone pareado mas estou conectado" e "temos muitas coisas dentro do app que estão se contradizendo. Coisas
+    funcionando mas diz que não, conexões que aparecem desconectadas. Tem que ver o app e painel inteiros." Decidido:
+    - "Conectar iPhone" vira "Conexões", com o método no topo: Cabo e Bluetooth, WhatsApp e PWA (Wi-Fi). Cada método mostra
+      só o que é dele. O Spotify (login opcional) e o WhatsApp saíram de Este Mac. O Spotify fica num grupo à parte no fim
+      de Conexões, porque não é um jeito de conectar o iPhone (decisão minha, a confirmar com ele). WhatsApp tem a escolha
+      de origem de sempre e o espaço reservado "Conectar pelo QR", sem ação até a frente do QR existir.
+    - Um código por tela: o pedido de Bluetooth mostra o código de confirmação (igual nas duas telas), e o cartão "Código do
+      cabo" só aparece quando não há pedido na tela. O código do cabo é o mesmo do PWA por construção (o iPhone prova ao Mac
+      que o conhece, `ProvaCabo.modoCodigo`). PENDENTE DE DECISÃO DELA: ele reclamou de "às vezes era o mesmo do PWA", e
+      sem pedido de Bluetooth os dois métodos ainda mostram o mesmo número. Foi só reposicionado (nunca dois códigos na mesma
+      tela). Para ser outro código teria de existir um segundo segredo no núcleo, o que muda a prova do cabo. Perguntar.
+    - Fonte única de "tem iPhone": `ModeloApp.iphoneAtivo` (cabo ou Bluetooth primeiro, depois Wi-Fi), usada pelo cabeçalho,
+      pelo menu, por Conexões e pela configuração inicial. "Falando agora" é o `visto` (última resposta boa da API, pelo Wi-Fi,
+      cabo ou Bluetooth) dentro de 30 s, senão o texto diz "fora de alcance". A tela de Conexões e a configuração inicial
+      releem isso no mesmo relógio de 5 s do cabeçalho (o iPhone lembrado de uma abertura anterior, que ainda não falou,
+      não é "conectado"), e "Último canal" só diz "agora" dentro dos mesmos 30 s. Resposta boa pelo Wi-Fi sem registro cria o
+      iPhone (o Mac reabriu): estar falando é estar conectado.
+    - Sobre: sem o título "Sobre o Deck" em cima e sem as linhas Mac, iPhone e Licença (a licença fica só no texto do grupo).
+    - Teclas: a lista de apps carrega ao abrir o Deck e o ícone observa a lista (antes só aparecia ao trocar de perfil).
+    - Permissões: terminado o pedido, o Deck volta para a frente. Se foi preciso abrir os Ajustes do Sistema (inclusive pelo
+      diálogo de Acessibilidade), o Deck não volta antes: olha a permissão a cada segundo (até 3 minutos) e volta quando ela
+      muda. Rede Local e Automação com o app alvo fechado o macOS não deixa reler, então não há espera: o Deck só volta
+      quando a pessoa clicar nele.
+    - Os avisos do menu e o selo da barra lateral abrem Conexões já no método onde o cartão aparece (renovação em Cabo e
+      Bluetooth, servidor e porta em PWA).
+    - Nome deste Mac: o campo passou de 170 para 280 pt.
+
+36. Controles do Mac no iPhone (12/11/2026). Palavras dele: "controles seria interessante (volume do mac, brilho, teclado
+    brilho, etc)".
+    - Tela "Controles do Mac" no iPhone, aberta pela tecla **Controles** (no editor de tecla ela é o botão "Controles do Mac" embaixo da lista de apps,
+      e a tecla não manda nada ao Mac: abre a tela aqui). Três barras arrastáveis como a do volume do
+      player (resposta na hora, no máximo 4 pedidos por segundo, sempre o último valor): **Volume** (com botão **Mudo**),
+      **Brilho da tela** e **Luz do teclado**. Aberta, a tela acompanha o Mac a cada 2 s, porque as teclas do próprio Mac
+      também mexem nesses valores.
+    - O Mac diz o que oferece em `GET /api/controles` (`volume`, `mudo`, `brilho`, `teclado`, de 0 a 100). Campo que falta
+      quer dizer que este Mac não oferece, e a barra some em vez de fingir. Mexer: `POST /api/controles/<volume|brilho|teclado>?v=0..100`
+      e `POST /api/controles/mudo?v=0|1`. Mac antigo (sem a rota) faz a tela pedir para atualizar o Deck.
+    - Volume e mudo: AppleScript (`set volume output volume`, `set volume output muted`), sem pedir acesso. Saída de som sem
+      volume próprio (algumas telas HDMI) volta "missing value" e a barra some.
+    - Brilho da tela: `DisplayServicesGetBrightness` e `DisplayServicesSetBrightness` (framework privado, carregado com
+      `dlopen`), só na tela interna. Brilho do teclado: `KeyboardBrightnessClient` do `CoreBrightness` (privado, por `dlopen`
+      e pelo runtime do Objective-C), só com teclado interno (a luz "suprimida" não esconde a barra: é só o auto-brilho, e a escrita funciona). Qualquer peça que falte vira "não oferece".
+    - Prova neste Mac (macOS 26, MacBook Pro): o volume e o mudo leem e escrevem (mexido e devolvido ao valor de antes).
+      Com a tampa fechada e uma tela externa, a tela interna não está ativa e a externa não responde ao DisplayServices
+      (`CanChangeBrightness` falso), então o brilho some, como pedido. Teclado, com a tampa aberta: `isBacklightSuppressedOnKeyboard`
+      continua verdadeiro com o auto-brilho ligado, a leitura dá 0, e `setBrightness:forKeyboard:` retorna verdadeiro e relê o
+      valor novo (a flag vira falsa, e restaurar o valor de antes também funciona). Então suprimida não quer dizer sem efeito,
+      e o filtro por ela escondia um controle que funciona. Falta provar a escrita do brilho da tela interna com a tampa aberta.
+
 Nada em aberto que trave a fase 1. Falta só confirmar, na construção, o link que abre uma sessão
 específica no app do Claude do iPhone (se não existir, cai no "mostra a pergunta").
 
@@ -894,6 +1060,228 @@ ficam sem medição". Decisão: o Deck mede o uso pelo token de `claude setup-to
 `anthropic-ratelimit-unified-7d-*` de um pedido de 1 token ao Claude, porque o endereço `/api/oauth/usage` pede
 o escopo `user:profile` e o token de setup-token só tem `user:inference` (403). Conta da troca de contas sem
 medição do autoswitch passa a ser medida pelo token do perfil (type oauth_token). A leitura fica em cache de 5 min.
+
+Criar compromisso pela agenda do iPhone (12/11/2026, frente agenda-criar): "Tem que aparecer no app do calendário do Mac e
+celular tudo correto." e "deixa o usuário decidir pra onde vai, definir como padrão". Decisão: tocar num dia dá a opção
+de criar, o formulário ocupa a parte da direita inteira, e a pessoa escolhe entre um calendário e uma lista do app
+Lembretes, podendo marcar um padrão guardado na config (também ajustável no Mac). Isso muda o invariante 3: a agenda
+deixa de ser só leitura, e o Deck passa a gravar nela, só pela rota autenticada de criar e só o que a pessoa pediu
+(nunca altera nem apaga evento existente). O Deck passa a pedir acesso aos Lembretes (full access), na hora em que a
+pessoa escolhe Lembretes pela primeira vez.
+Correções (12/11/2026): o alerta do evento é gravado como alarme relativo ao início ("15 minutos antes", que acompanha o
+evento se o horário mudar), e só o lembrete usa data fixa. O acompanhamento do pedido de acesso aos Lembretes continua
+até a pessoa responder, porque o Mac só devolve "pedindo" na chamada que abriu a janela.
+Teste do Deck 1.0 (12/11/2026, frente iphone-bugs), dito pelo Leonardo:
+- "Mesmo com conta de IA configurada no Mac, no app não aparece nenhum dado. Uso e renovação não aparecem." Causa: o
+  Mac mede por token só na tela Uso das IAs, e o estado que vai ao iPhone lia apenas o `measure.json` do autoswitch.
+  Decisão: o estado soma o uso medido por token ao que vem dos arquivos (só preenche conta sem número, medição boa de
+  arquivo não é trocada).
+- "Clico dia 26/nov e ele mostra sexta 25 de dezembro (Natal) na direita. Só pode mostrar os daquele mês, mudou de mês
+  mudou todos os feriados/compromissos." Decisão: a lista da Agenda vai do dia tocado até o fim do mês na tela e nunca
+  passa disso. Trocar de mês (seta ou arrasto) recarrega grade e lista, e o dia escolhido vira hoje (no mês de hoje) ou o dia 1.
+- "Quando arrasto e seguro pra mudar de mês ele buga": o mês arrastado fica recortado na coluna dele, sem passar por
+  cima da lista.
+- "Às vezes quando arrasto as cenas de teclas ele buga e aparece o risco acima": a linha roxa NÃO foi reproduzida (o painel
+  não tem elemento roxo, e o indicador de páginas e o LED ficam no lugar durante e depois do arrasto, coberto por teste).
+  O que se achou e corrigiu: soltar o dedo fora da tela deixava o fantasma da tecla e a tecla apagada, e o arrasto agora
+  termina em qualquer lugar onde o dedo solte. Pendente: um print do risco, para achar a causa se ele continuar.
+- Telas abertas (player, relógio, agenda, WhatsApp, sessões, editor): além do X, arrastar de cima para baixo fecha. A tela
+  acompanha o dedo e volta se soltar cedo. Lista que ainda rola para cima, barra de tempo, volume e campo de texto
+  ficam com o gesto deles.
+31. Sessões com o contexto do que esperam (12/11/2026). Palavras dele: "quando clico no card da sessão ele não mostra nada de
+    contexto que eu tenho que aprovar, se for assim não muda nada eu abrir isso no celular." E: "muda o visual, deixa mais
+    bonito aí sla, intuitivo e fácil de ler". Decisão: a sessão aberta mostra o pedido inteiro, o contexto e Abrir no Mac, e o
+    cartão e a tela ganham hierarquia nova (seção 5). Sem responder pelo iPhone nesta versão. O Mac não vê o pedido de
+    permissão (ferramenta e comando) porque o `state.json` não o guarda: o que existe é `needs` e a última mensagem da
+    sessão no `timeline.jsonl`, e é isso que a tela mostra.
+    Correção da verificação (12/11/2026): como o pedido é "sem segredo: mascare tokens", a máscara cobre também URL de banco
+    com senha (qualquer esquema, não só http), par chave/valor em JSON com aspas e chave com underscore (`sk_live_...`). E
+    "fácil de ler" inclui bloco de código com cerca (a cerca some e o comando fica como está), link, itálico, `__forte__` e
+    citação sem a marcação.
+
+35. Mutar e ligar a câmera da reunião por tecla (12/11/2026). Palavras dele: "isso do controle em google meet é legal, pode fazer tb".
+    - Nova ação de tecla de app (não é tipo novo, aparece no editor como as outras): "Mutar ou desmutar o microfone da reunião" e
+      "Ligar ou desligar a câmera da reunião", para o Zoom, o Teams e os navegadores que o Deck já consulta (Safari, Chrome, Arc,
+      Brave e Edge, para o Meet). O Mac aperta o atalho do app: Meet Cmd+D e Cmd+E, Zoom Cmd+Shift+A e Cmd+Shift+V, Teams
+      Cmd+Shift+M e Cmd+Shift+O. No Meet, a aba da sala (meet.google.com/abc-defg-hij, não a página inicial) vem para a frente
+      antes. Precisa de Acessibilidade (para teclar) e, no Meet, da Automação do navegador (para achar a aba). Ambas são pedidas
+      pelo macOS na hora do uso (invariante 12).
+    - ~~O Deck só ALTERNA. Ele não mostra se o microfone está mutado: Meet e Teams não entregam isso sem espiar a tela a cada
+      segundo (Acessibilidade) ou sem o navegador liberar JavaScript por Apple Events, e o Zoom só pela leitura do menu dele.
+      Nada disso é pedido em lista de cara, então a tecla não finge saber. Se o Leonardo quiser o estado, é uma decisão nova.~~
+      Revisto em 12/11/2026 ("2 sim"): a tecla mostra o estado. Ver o parágrafo "Estado da reunião na tecla", no fim desta seção.
+    - Zoom e Teams só têm esses atalhos com a reunião rolando e a janela na frente. Fechado, a tecla avisa "O Zoom não está
+      aberto" e não abre o app só para mutar.
+
+36. Monitor do Mac, escolhendo o que aparece (12/11/2026). Palavras dele: "monitor é interessante, mas teriamos que ter como
+    configurar o que queremos que apareca na tela. nao tem mais espaco."
+    - Bloco novo e pequeno, desligado por padrão (quem já usa o Deck não ganha nada novo na tela). Nos Ajustes do Mac, em
+      "Este Mac", grupo "Monitor do Mac": uma chave para mostrar no iPhone e uma para cada item (processador, memória, bateria,
+      rede). Sem item ligado o bloco some. O Mac só mede o que está ligado.
+    - Estado: `Estado.monitor` com `itens` (o que desenhar) e as medidas. Taxa de processador e de rede precisa de duas
+      leituras, então a primeira mostra "-". Bateria some sozinha em Mac sem bateria. Memória é aproximada (ativa, fixa e
+      comprimida, como o Monitor de Atividade soma).
+
+37. Composição C, relógio e mês (12/11/2026). Pedido da frente meet-monitor-tela: relógio à esquerda com a hora em cima e os
+    minutos embaixo, e o calendário do mês à direita, escolhível como as composições que já existem. `comp` aceita "a", "b" e
+    "c". Escolhe-se no menu da barra do Mac, ao lado das outras. A configuração inicial (primeira vez) ainda mostra só A e B,
+    porque as fotos dela são das duas antigas.
+38. Tela de fábrica do Monitor de Atividade no iPhone (12/11/2026). Palavras dele: "podemos deixar alguns apps com funções
+    predefinidas como é o WhatsApp e o calendário, criar uma visualização pro Monitor, como configurações de fábrica do app".
+    - A tecla do app **Monitor de Atividade** (no editor de tecla é o app `Activity Monitor` da lista, como o Mail e a Agenda)
+      abre uma tela no iPhone, sem mandar nada ao Mac. Tecla com ação vai para o Mac, como nas outras.
+    - Em cima, os mesmos dados do bloco do monitor (`Estado.monitor`, a mesma fonte, sem leitura nova) em tamanho grande, só
+      os itens que a pessoa deixou ligados nos Ajustes do Mac. Com o bloco desligado a tela diz onde ligar (Ajustes, Este Mac)
+      e mostra só os processos. A tela repinta a cada segundo e acompanha o estado.
+    - Embaixo, duas listas: os 5 que mais usam o **processador** e os 5 que mais usam a **memória**, relidas a cada 3 s
+      (`GET /api/processos` devolve `cpu` e `memoria`, cada processo com `pid`, `nome`, `cpu`, `memoria` em bytes e
+      `podeEncerrar`). O processador vem do `ps` (média recente, não o instante do Monitor de Atividade) e a memória é a
+      residente. O `ps` da própria medição e o app do Deck não entram na lista.
+    - **Encerrar** sempre pergunta antes ("Encerrar X? O que não foi salvo nele pode ser perdido.", Cancelar ou Encerrar),
+      e a lista não é relida enquanto a pergunta está na tela. `POST /api/processos/<pid>/encerrar?nome=<nome>` manda
+      SIGTERM (o programa pode salvar antes, nunca SIGKILL). O Mac confere de novo na hora: o pid tem de ainda ser o
+      programa de nome igual (pid reaproveitado não é fechado), ser do mesmo usuário e não ser `launchd`, `kernel_task`,
+      `loginwindow`, `WindowServer`, o Deck ou o pid 1. O botão só aparece onde `podeEncerrar` é verdadeiro.
+    - Toque que não se perde (12/11/2026, achado na verificação). Os cartões e as listas se repintam em partes separadas.
+      Com o dedo em cima da tela (e uns 400 ms depois) a lista espera, porque o monitor muda quase a cada segundo e repintar
+      destruía o botão antes do dedo subir. Os cartões continuam andando. O toque do próprio dedo repinta na hora.
+
+    Telas do iPhone refeitas (12/11/2026). Pedido dele: o Monitor de Atividade como uma grade de cartões escuros arredondados
+    (ícone pequeno e rótulo em cinza no topo, número grande em branco, barra fina embaixo, laranja quando alto), sem processos
+    e sem Encerrar. Na composição C, tirar a fileira de teclas, pôr à direita o calendário igual ao da Agenda, uma linha cinza
+    dividindo e, do outro lado, o relógio estilo Fliqo bem quadrado, com a hora em cima e os minutos embaixo. No player em tela
+    cheia, o botão de lista que abre as próximas músicas deslizando da direita para a esquerda, e o play no centro do círculo.
+    - Monitor: CPU, GPU, memória, bateria, rede (download grande, upload menor), disco disponível, energia (watts), ventoinhas
+      (RPM) e dispositivos conectados. O Mac lê GPU, disco livre, energia, RPM e USB (`Estado.monitor` ganhou `gpu`,
+      `discoLivre`, `discoTotal`, `watts`, `carregando`, `ventoinhas`, `ventoinhaMax` e `dispositivos`) e o item que ele não
+      consegue ler some, em vez de aparecer com "-". Cada item novo tem a chave dele na tecla Monitor de Atividade, nos Ajustes do Deck,
+      ligada por padrão. A lista dos 5 maiores processos e o Encerrar saíram da tela e do canal do painel. O número conta do
+      valor antigo ao novo em 600 ms (tatile, movimento, regra 9) e os cartões não são refeitos a cada segundo.
+    - Composição C: sem fileira de teclas. O calendário é o da Agenda (mês grande em vermelho, setas que só mexem nele e voltam
+      ao mês de hoje depois de 30 s, números grandes, pontinho nos dias com evento, hoje em círculo vermelho) e tocar nele
+      abre a Agenda. O relógio tem dois blocos quadrados que viram, as horas em cima e os minutos embaixo.
+    - Player em tela cheia: a fila (só com o Spotify conectado, como antes) desliza da direita para a esquerda e volta para a
+      direita. No alto fica a capa e o nome da música que toca, e as próximas ficam embaixo, rolando. O triângulo do play
+      nasce centrado no círculo, sem o empurrão de 2 px do CSS que o deixava 3 a 4 px à direita.
+
+35. WhatsApp por QR, aparelho conectado (12/11/2026). Palavras dele: "vamos seguir com o QR code". Decidido:
+    - Uma quarta origem do WhatsApp, `whatsapp.origem` = `qr`, ao lado de `auto`, `app` e `web`. Nasce DESLIGADA: o
+      `auto` nunca escolhe `qr`, só a pessoa liga, em Ajustes > Este Mac > WhatsApp > Aparelho conectado (QR).
+    - Quem conecta é um ajudante separado em Go, `helpers/whatsapp/` (biblioteca whatsmeow, licença MPL-2.0, citada no
+      README). O build.sh compila e o põe em `Deck.app/Contents/Helpers/deck-whatsapp` (universal, assinado à parte). O
+      núcleo (`PonteWhatsAppQR`) o abre e fala por linhas de JSON no stdout (fase, qr, conversas). Fechou o stdin, o
+      ajudante sai. Sem Go no Mac que compila, o Deck sai sem ele e a opção diz que não está disponível.
+    - Só LEITURA: o ajudante nunca envia mensagem, nunca marca como lido e nunca anuncia presença. Ele aparece no
+      WhatsApp do celular como "Deck (só leitura)" em Aparelhos conectados.
+    - A sessão fica em `~/Library/Application Support/Deck/whatsapp-qr` (a bancada tem a dela), pasta 0700 e arquivos
+      0600. As conversas com não lidas ficam num `conversas.json` dentro dela. "Apagar este aparelho" sai do aparelho no
+      WhatsApp e apaga a pasta. Trocar a origem para outra desliga o ajudante (não fica ocupando uma das 4 conexões).
+    - O núcleo entrega o mesmo formato de `/api/whatsapp` do banco do app (conversas, não lidas, mensagens, hora), com
+      `Estado.whatsapp.origem` = `qr` e `aberto` dizendo se a conexão está de pé. O painel mostra a lista por conversa
+      como no app e, com a conexão caída, "WhatsApp por QR sem conexão" em vez de "0 não lidas".
+    - Aviso fixo na tela do Mac, antes e depois de ligar: "Não é oficial e viola os termos do WhatsApp. Só lê, não
+      envia. Ocupa uma das 4 conexões. Para sair, apague o aparelho em Aparelhos conectados."
+    - Prova: `scripts/whatsapp-qr-prova.sh` mostra o QR no terminal, guarda a sessão na pasta da bancada e, com
+      `--ligar-bancada`, põe a origem QR na config da bancada.
+    - Correções da verificação (12/11/2026): (a) sair pelo celular (LoggedOut) apaga o `conversas.json` e zera o estado, e
+      o `conversas.json` só guarda as conversas com não lidas, nunca o texto de conversa já lida. (b) "Apagar este
+      aparelho" sobe o ajudante só para o logout quando ele está parado e NÃO apaga a pasta se não conseguiu sair (sem
+      rede): a tela mostra "Não consegui sair do aparelho" e a pessoa tenta de novo. (c) Com sessão guardada, rede fora
+      na subida não derruba o ajudante: ele avisa "desconectado" e tenta de novo (2 s, 5 s, 10 s, depois 30 s em 30 s).
+      (d) Subindo ou reconectando, o painel diz "Reconectando ao WhatsApp, volta sozinho" (`Estado.whatsapp.reconectando`)
+      e mantém a lista de antes, em vez de mandar ler o QR, que só vale em aguardando QR, QR vencido e erro.
+      (e) Desligar a chave "Conectar pelo QR" volta para a origem de antes (`whatsapp.origemAntes`), não para "auto".
+      (f) Sem o ajudante no app a chave não liga e a origem não muda.
+
+Ajustes dentro da tecla, gravador limpo, liga e desliga, Meet no navegador e Controles na lista (12/11/2026). Palavras dele: "Os
+ajustes de app Agenda e Monitor do Mac saem do Este Mac (lá os botões ficaram quebrados e jogados) e vão para dentro do editor da
+tecla", "isso é muito feio, tira eles daí e deixa o usuário fazer a combinação", "ele usa o Meet só no navegador" e "Controles
+(volume, brilho, luz do teclado) não foi achado". O que mudou, no editor de tecla do Mac:
+- Agenda e Monitor de Atividade. Saíram do Este Mac. A tecla do app Agenda (Calendar) ganha "Salvar compromissos em", num menu
+  nativo: "Perguntar toda vez" (de fábrica), "Calendário padrão do Mac" (`agendaPadrao` com o id `padrao-do-mac`, que o Mac troca
+  pelo calendário padrão de verdade na hora de salvar e ao mostrar o padrão no iPhone) e cada calendário e lista dos Lembretes. A
+  tecla do Monitor de Atividade ganha a chave "Mostrar na tela do iPhone" e uma chave por item (processador, memória, bateria,
+  rede), todos ligados de fábrica. A config é a mesma de antes (`agendaPadrao`, `blocos.monitor`, `monitor`).
+- Controles do Mac. Entrou na lista de apps, na frente, junto de "Google Meet (navegador)", tanto no editor do Mac quanto no do
+  iPhone (o botão escondido embaixo da lista saiu). A tecla ganha uma chave por barra (volume com mudo, brilho, luz do teclado),
+  todas ligadas de fábrica: `config.controles`. O Mac só devolve em `GET /api/controles` as barras ligadas, e o iPhone esconde as
+  outras como esconde a que o Mac não oferece. Não é um bloco na tela inicial do iPhone (não tem espaço lá).
+- Gravador de atalho. A seção "Montar escolhendo as teclas" (item 33) saiu, no Mac e no protótipo. A pessoa faz a combinação no
+  campo do gravador, que ganhou fonte menor. O gravador que pega a tecla antes dos outros apps continua como era.
+- Tecla de comando com liga e desliga. Chave "Liga e desliga": o comando principal vira "Comando para ligar" e entram "Comando
+  para desligar" (`Tecla.desligar`) e, opcional, "Comando que confere se está ligado" (o `estado`, sai 0 = ligado). A tecla acende
+  como a de Manter acordado. Sem o comando de conferir, o Deck guarda o estado: o toque roda ligar ou desligar e só grava o novo
+  estado se o comando deu certo (arquivo `teclas-ligadas.json` na pasta de dados do Deck). Apagar o `desligar` volta a tecla a ser
+  um comando só.
+- Google Meet (navegador). Tecla de app com o valor "Google Meet", sem app instalado. Sem ação abre meet.google.com no navegador
+  padrão. Com "Mutar ou desmutar o microfone" ou "Ligar ou desligar a câmera", o Mac acha a sala aberta em qualquer navegador que o
+  Deck sabe consultar (Safari, Chrome, Arc, Brave, Edge), traz a aba para a frente e aperta Cmd+D ou Cmd+E, igual ao item 35 da
+  seção 13. Trocar o app da tecla, ou o tipo, apaga a ação e o desligar que eram do antigo.
+
+Conexões e WhatsApp, depois de testar (12/11/2026, frente conexoes-whatsapp). Pedidos dele, resumidos: o aparelho
+conectado pelo QR aparecia como "Outro dispositivo" e tem que aparecer como "Deck OS", a mensagem nova levava cerca de 1 s,
+havia conversa sem nome e sem avatar, e as arquivadas só podem aparecer no filtro "Arquivadas". Decidido: o seletor de Conexões vira Cabo e Bluetooth, PWA, WhatsApp e Spotify (o
+Spotify deixa de ser grupo no fim). O ajudante se apresenta como "Deck OS" (tipo desktop, o padrão da biblioteca era o tipo
+desconhecido, que o celular escreve como "Outro dispositivo"), e só vale para aparelho pareado depois da mudança. A lista sai
+do ajudante na hora (antes esperava 300 ms) e o núcleo não segura mais o cache de 5 s quando o ajudante empurra lista nova.
+Com a folha aberta o painel relê a cada 1 s. Contato só com LID ganha nome pelo contato salvo, pelo nome que a pessoa se deu
+ou pelo número, e a conversa ganha a foto de perfil (cache em disco, entregue em base64 por `/api/whatsapp/foto`). Cada
+mensagem mostra o horário, foto aparece como imagem, áudio tem player (os dois baixados sob demanda por
+`/api/whatsapp/midia`, até 8 MB, só leitura) e visualização única é só o balão com o ícone, sem nunca baixar o conteúdo.
+Arquivadas ficam fora de Todas, Contatos e Grupos, só no filtro Arquivadas, e não contam no total nem no selo. "Responder no
+Mac" abre `https://web.whatsapp.com/send?phone=<número>` no navegador escolhido ou no padrão (grupo e contato sem número
+abrem o Web e o aviso diz que não há link direto). O Deck continua só lendo: nunca envia nem marca como lido.
+
+Estado da reunião na tecla (12/11/2026). Decisão dele ("2 sim"): a tecla de microfone e a de câmera da reunião mostram o estado
+atual, como a "Manter acordado" mostra aceso. Só as teclas de app com a ação "Mutar ou desmutar o microfone da reunião" ou "Ligar
+ou desligar a câmera da reunião" (item 35) ganham isso, e o Mac só lê quando o perfil ativo tem uma delas.
+- Contrato. `Estado.reuniao`, um mapa de id de tecla para `ligado` (microfone aberto, câmera ligada), `desligado` (mutado, câmera
+  desligada), `desconhecido` (há reunião e o Deck não conseguiu ler) ou `sem-reuniao`. Ausente em Mac antigo e em perfil sem essas
+  teclas: o painel desenha a tecla de sempre. Mac novo que não trouxe a tecla conta como `desconhecido`: o painel não finge.
+- Painel. Ligado acende como a tecla acesa. Desligado apaga e escreve "Mutado" (microfone) ou "Sem vídeo" (câmera) no topo da
+  tecla, em vermelho. Desconhecido escreve "?". Sem reunião a tecla fica esmaecida (ainda toca). Cada uma tem rótulo para o leitor
+  de tela ("Microfone: mutado"). Depois do toque o estado novo chega na leitura seguinte, em até 2 ou 3 segundos (a leitura
+  fica guardada 1,5 s para não castigar o navegador).
+- Meet no navegador (o que ele usa). O Mac executa JavaScript na aba da sala (AppleScript, nunca fora dela) e lê o
+  `data-is-muted` dos botões de microfone e de câmera, achados pelo rótulo (inglês, português e espanhol) e pelo atalho (D e E).
+  Exige que o navegador deixe JavaScript por Apple Events: no Chrome (e Arc, Brave, Edge) Visualizar > Desenvolvedor > Permitir
+  JavaScript de Eventos da Apple, no Safari Desenvolvedor > Permitir JavaScript de Eventos da Apple. É uma opção que o Deck
+  não liga sozinho (ela deixa qualquer programa com Automação executar JavaScript nas abas) e que o macOS não pede: sem ela a tecla
+  mostra "?" e o estado do Mac traz um aviso dizendo qual opção ligar. Fallback: sem a opção o Deck continua alternando pelo
+  atalho como antes, só não sabe dizer o estado. A Automação do navegador é pedida pelo macOS na primeira leitura.
+- Zoom e Teams. O Mac lê o menu do app pelo System Events (a Acessibilidade que o Deck já tem, mais a Automação do System
+  Events, pedida na hora) e entende o título do item: "Mute audio" quer dizer microfone aberto, "Unmute audio" mutado, "Start
+  video" câmera desligada, "Stop video" ligada (também em português e espanhol). "Mute All" e afins são ignorados. App fechado, ou
+  aberto sem os itens e sem janela de reunião, é `sem-reuniao`. Janela de reunião aberta e itens não entendidos (outro idioma,
+  versão nova) é `desconhecido`.
+- O que não dá. Meet em navegador que o Deck não consulta (Firefox) e Meet com a opção de JavaScript desligada: `desconhecido`.
+  A Acessibilidade lendo a página do Meet direto foi descartada: o Chrome só monta a árvore de acessibilidade da página com um
+  modo especial ligado, que deixa o navegador mais lento. Zoom e Teams não foram conferidos numa reunião de verdade (o Deck não
+  abre reunião em teste): os títulos acima são os que os apps usam e o primeiro uso real dele confirma.
+
+Bluetooth no sentido invertido (12/11/2026). O iPhone achava o Mac, mas toda conexão pelo Bluetooth falhava na cifragem do
+sistema (CBError 15 no iPhone). O log do bluetoothd do Mac mostrou a causa: com o iPhone e o Mac na mesma conta do iCloud, toda
+conexão LE entre eles passa pelo Fast LE Connection do macOS, que falhava a cifragem com o Mac periférico ("Failed to encrypt
+connection", 217 de 217 no dia) e passava na única conexão com o Mac central ("localRole=Central encrypted:1"). Reiniciar o
+Bluetooth dos dois lados não resolve.
+- Agora os dois sentidos convivem. O Mac anuncia o serviço de sempre e também procura o iPhone. O iPhone procura o Mac e, com o
+  app aberto e sem conexão pelo Bluetooth, também anuncia um serviço próprio do Deck (UUIDs terminados em 0002). O Mac só conecta
+  em quem anuncia esse serviço. Só o transporte troca de mãos: o pedido do iPhone sai por notificação e a resposta do Mac entra
+  por escrita, com o mesmo aperto de mão cifrado, o mesmo pareamento por comparação numérica e os mesmos quadros. As
+  características não pedem cifragem do sistema, o Deck já cifra por cima.
+- O primeiro sentido que fecha o aperto de mão vale e o outro é fechado: nunca duas sessões para o mesmo iPhone. Como o iPhone
+  periférico não consegue derrubar o Mac, ele avisa que fechou com uma notificação vazia, e o Mac solta a conexão.
+- Depois de uma falha de cifragem no sentido antigo, o iPhone para de conectar no Mac por 60 s e fica só anunciando. A tela de
+  conexão diz "Esperando o Mac conectar pelo Bluetooth." e o aviso de cifragem (o que fazer) só aparece se nenhum dos dois
+  sentidos conectar em 60 s desde a primeira falha. Voltar o app ao primeiro plano começa uma rodada nova.
+- iPhone novo: se o sentido antigo falha ao parear, o iPhone anuncia por até 15 s e o pareamento segue pelo Mac que conectar,
+  igual ao de sempre (6 dígitos nas duas telas, e o Mac só aceita com Conectar iPhone aberto). Sem pareamento e sem pareamento em
+  curso, o iPhone não anuncia (e não pede a permissão de Bluetooth por isso).
+- Só em primeiro plano, sem modo de segundo plano novo. A permissão é a mesma que o app já pede (NSBluetoothAlwaysUsageDescription).
+- Um Mac que conecta pelo sentido invertido e não reconhece o iPhone não conta para esquecer o pareamento (pode ser outro Mac
+  com o Deck por perto). Essa contagem continua só no sentido antigo e no cabo.
+- Diário: o iPhone anota cada passo do periférico em `Documents/bluetooth.log` (linhas `bluetooth/periférico:`) e o Mac cada
+  passo da central no deck.log (linhas `bluetooth/central:` e `bluetooth inv-...`).
 
 ## 14. Melhorias (10/11/2026)
 

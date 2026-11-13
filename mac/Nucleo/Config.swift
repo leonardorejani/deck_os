@@ -21,14 +21,33 @@ extension Blocos {
     /// O Codable sintetizado ignora os valores padrão quando falta chave. Aqui falta = ligado.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: ChavesConfig.self)
-        func ler(_ nome: String) throws -> Bool { try c.decodeIfPresent(Bool.self, forKey: ChavesConfig(nome)) ?? true }
+        func ler(_ nome: String, padrao: Bool = true) throws -> Bool { try c.decodeIfPresent(Bool.self, forKey: ChavesConfig(nome)) ?? padrao }
         self.init(spotify: try ler("spotify"), agenda: try ler("agenda"), whatsapp: try ler("whatsapp"),
-                  sessoes: try ler("sessoes"), uso: try ler("uso"))
+                  sessoes: try ler("sessoes"), uso: try ler("uso"), monitor: try ler("monitor", padrao: false))
+    }
+}
+
+extension ConfigMonitor {
+    /// Item que falta fica ligado: quem liga o monitor começa vendo tudo e desliga o que não quer.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: ChavesConfig.self)
+        func ler(_ nome: String) -> Bool { ((try? c.decodeIfPresent(Bool.self, forKey: ChavesConfig(nome))) ?? nil) ?? true }
+        self.init(cpu: ler("cpu"), memoria: ler("memoria"), bateria: ler("bateria"), rede: ler("rede"), gpu: ler("gpu"), disco: ler("disco"),
+                  energia: ler("energia"), ventoinhas: ler("ventoinhas"), dispositivos: ler("dispositivos"))
+    }
+}
+
+extension ConfigControles {
+    /// Barra que falta fica ligada: quem nunca escolheu nada vê os três controles.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: ChavesConfig.self)
+        func ler(_ nome: String) -> Bool { ((try? c.decodeIfPresent(Bool.self, forKey: ChavesConfig(nome))) ?? nil) ?? true }
+        self.init(volume: ler("volume"), brilho: ler("brilho"), teclado: ler("teclado"))
     }
 }
 
 extension ConfigWhatsApp {
-    static let origens = ["auto", "app", "web"]
+    static let origens = ["auto", "app", "web", "qr"]
 
     /// Leitura tolerante: chave faltando ou valor que o Deck não conhece volta para o padrão (auto, sem
     /// navegador fixo), em vez de derrubar a config inteira.
@@ -36,13 +55,15 @@ extension ConfigWhatsApp {
         let c = try decoder.container(keyedBy: ChavesConfig.self)
         let origem = (try? c.decodeIfPresent(String.self, forKey: ChavesConfig("origem"))) ?? nil
         let navegador = (try? c.decodeIfPresent(String.self, forKey: ChavesConfig("navegador"))) ?? nil
+        let antes = (try? c.decodeIfPresent(String.self, forKey: ChavesConfig("origemAntes"))) ?? nil
         self.init(origem: origem.flatMap { Self.origens.contains($0) ? $0 : nil } ?? "auto",
-                  navegador: navegador.flatMap { n in NavegadorWeb.todos.contains { $0.nome == n } ? n : nil })
+                  navegador: navegador.flatMap { n in NavegadorWeb.todos.contains { $0.nome == n } ? n : nil },
+                  origemAntes: antes.flatMap { Self.origens.contains($0) && $0 != "qr" ? $0 : nil })
     }
 }
 
 extension Tecla {
-    private enum Chave: String, CodingKey { case id, nome, tipo, valor, estado, icone, acao }
+    private enum Chave: String, CodingKey { case id, nome, tipo, valor, estado, icone, acao, desligar }
 
     /// Leitura tolerante da ação de app: `acao` malformada (de uma versão futura, por exemplo) vira nil e a
     /// tecla só abre o app, em vez de derrubar a config inteira. O resto é estrito como sempre foi.
@@ -52,7 +73,8 @@ extension Tecla {
                   tipo: try c.decode(String.self, forKey: .tipo), valor: try c.decode(String.self, forKey: .valor),
                   estado: try c.decodeIfPresent(String.self, forKey: .estado),
                   icone: try c.decodeIfPresent(String.self, forKey: .icone),
-                  acao: (try? c.decodeIfPresent(AcaoDeApp.self, forKey: .acao)) ?? nil)
+                  acao: (try? c.decodeIfPresent(AcaoDeApp.self, forKey: .acao)) ?? nil,
+                  desligar: (try? c.decodeIfPresent(String.self, forKey: .desligar)) ?? nil)
     }
 
     /// A tecla "painel" do protótipo antigo virou "app" (igual normalizarTecla em prototipo/dados.js).
@@ -93,13 +115,16 @@ extension Config {
             contas: try c.decodeIfPresent([ContaIA].self, forKey: chave("contas")) ?? [],
             blocos: try c.decodeIfPresent(Blocos.self, forKey: chave("blocos")) ?? Blocos(),
             whatsapp: (try? c.decodeIfPresent(ConfigWhatsApp.self, forKey: chave("whatsapp"))) ?? ConfigWhatsApp(),
+            monitor: (try? c.decodeIfPresent(ConfigMonitor.self, forKey: chave("monitor"))) ?? ConfigMonitor(),
+            controles: (try? c.decodeIfPresent(ConfigControles.self, forKey: chave("controles"))) ?? ConfigControles(),
             nomeMac: try c.decodeIfPresent(String.self, forKey: chave("nomeMac")) ?? nomePadrao,
             porta: try c.decodeIfPresent(Int.self, forKey: chave("porta")) ?? 4777,
             codigoAcesso: try c.decodeIfPresent(String.self, forKey: chave("codigoAcesso")) ?? Config.novoCodigoAcesso(),
             // Config antiga sem data: o código que ela tem vira o atual, criado agora.
             codigoCriadoEm: try c.decodeIfPresent(Int.self, forKey: chave("codigoCriadoEm")) ?? Int(Date().timeIntervalSince1970),
             codigoAnterior: try c.decodeIfPresent(String.self, forKey: chave("codigoAnterior")),
-            anteriorValeAte: try c.decodeIfPresent(Int.self, forKey: chave("anteriorValeAte"))
+            anteriorValeAte: try c.decodeIfPresent(Int.self, forKey: chave("anteriorValeAte")),
+            agendaPadrao: (try? c.decodeIfPresent(DestinoAgenda.self, forKey: chave("agendaPadrao"))) ?? nil
         )
     }
 
@@ -148,6 +173,10 @@ extension Config {
                 if vazio(t.valor) { return "A tecla \"\(t.nome)\" está sem ação." }
                 if t.tipo == "tecla", Teclas.ler(t.valor) == nil { return "A combinação da tecla \"\(t.nome)\" não foi reconhecida: \(t.valor)" }
                 if let erro = validarAcao(t) { return erro }
+                if let d = t.desligar {
+                    if t.tipo != "comando" { return "Só tecla de comando pode ter comando para desligar (\"\(t.nome)\")." }
+                    if d.count > 4000 { return "O comando para desligar da tecla \"\(t.nome)\" é grande demais." }
+                }
             }
         }
         if vazio(c.nomeMac) { return "O nome do Mac não pode ficar vazio." }
@@ -160,11 +189,14 @@ extension Config {
                 return "O perfil da conta \"\(conta.conta)\" não é válido."
             }
         }
-        if !ConfigWhatsApp.origens.contains(c.whatsapp.origem) { return "A origem do WhatsApp deve ser automática, app ou web." }
+        if !ConfigWhatsApp.origens.contains(c.whatsapp.origem) { return "A origem do WhatsApp deve ser automática, app, web ou QR." }
         if let n = c.whatsapp.navegador, !NavegadorWeb.todos.contains(where: { $0.nome == n }) {
             return "O navegador do WhatsApp Web não é válido."
         }
-        if !["a", "b"].contains(c.comp) { return "A composição da tela deve ser A ou B." }
+        if let d = c.agendaPadrao, !DestinoAgenda.tipos.contains(d.tipo) || vazio(d.id) || d.id.count > 200 {
+            return "O lugar padrão da agenda não é válido."
+        }
+        if !["a", "b", "c"].contains(c.comp) { return "A composição da tela deve ser A, B ou C." }
         if !(1024...65535).contains(c.porta) { return "A porta deve estar entre 1024 e 65535." }
         if c.codigoAcesso.count != tamanhoCodigo || !c.codigoAcesso.allSatisfy({ alfabetoCodigo.contains($0) }) {
             return "O código de acesso é inválido."

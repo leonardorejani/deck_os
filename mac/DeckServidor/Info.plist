@@ -8,5 +8,9 @@
 	<string>DeckServidor</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>O Deck usa o Bluetooth para o iPhone achar este Mac e controlar o painel sem cabo nem Wi-Fi.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>O Deck cria lembretes pela Agenda do iPhone, na lista que a pessoa escolher.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>O Deck mostra e cria compromissos na Agenda do iPhone.</string>
 </dict>
 </plist>

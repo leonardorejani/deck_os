@@ -18,7 +18,7 @@ let pendSpotify = 0;                  // comandos do Spotify ainda a caminho do 
 const otmTeclas = {};                 // id da tecla -> { acesa, ate }
 
 /* ---------- vista: do estado do Mac para o que a tela mostra ---------- */
-const BLOCOS_PADRAO = { spotify: true, agenda: true, whatsapp: true, sessoes: true, uso: true };
+const BLOCOS_PADRAO = { spotify: true, agenda: true, whatsapp: true, sessoes: true, uso: true, monitor: false };
 function conferirSobrepor(e) {
   if (!sobrepor.ate) return;
   if (performance.now() > sobrepor.ate) { sobrepor = {}; return }
@@ -61,13 +61,14 @@ function vistaReal() {
   const perfil = (config?.perfis || []).find(p => p.id === perfilId);
   const mostrar = id => (config?.contas || []).find(c => c.id === id)?.mostrar !== false;
   return {
-    comp: e.comp === 'b' ? 'b' : 'a', blocos, ref, nomeMac: e.nomeMac,
+    comp: ['b', 'c'].includes(e.comp) ? e.comp : 'a', blocos, ref, nomeMac: e.nomeMac,
+    monitor: blocos.monitor ? e.monitor || {} : null,
     spotify: blocos.spotify === false ? null : spotifyOtimista(e.spotify || null),
     uso: blocos.uso === false ? [] : (e.uso || []).filter(u => mostrar(u.id)),
     sessoes: [...(e.sessoes || [])].filter(s => !dispensada(s)).sort((a, b) => Date.parse(b.desde) - Date.parse(a.desde)),
     teclas: perfil?.teclas || [], perfilAtivo: perfilId,
     perfis: (config?.perfis || []).map(p => ({ id: p.id, nome: p.nome, n: p.teclas.length })),
-    acesas: acesasOtimistas(e.acesas || []), selos: e.selos || {}, agenda: e.agenda || null,
+    acesas: acesasOtimistas(e.acesas || []), selos: e.selos || {}, agenda: e.agenda || null, reuniao: e.reuniao || null,
     whatsapp: blocos.whatsapp === false ? null : e.whatsapp || null,
   };
 }
@@ -77,7 +78,7 @@ const FORMA_PADRAO = { v: 1, comp: 'a', blocos: { spotify: true, sessoes: true }
 function lerForma() {
   try {
     const f = JSON.parse(lerGuardado(CHAVE_FORMA));
-    if (f?.v === 1 && ['a', 'b'].includes(f.comp) && typeof f.blocos?.spotify === 'boolean' && typeof f.blocos?.sessoes === 'boolean' && [f.uso, f.sessoes, f.teclas].every(n => Number.isInteger(n) && n >= 0)) return f;
+    if (f?.v === 1 && ['a', 'b', 'c'].includes(f.comp) && typeof f.blocos?.spotify === 'boolean' && typeof f.blocos?.sessoes === 'boolean' && [f.uso, f.sessoes, f.teclas].every(n => Number.isInteger(n) && n >= 0)) return f;
   } catch {}
   return FORMA_PADRAO;
 }
@@ -92,7 +93,7 @@ function vistaEsqueleto() {
     uso: Array.from({ length: f.uso }, (_, i) => ({ id: 'u' + i, nome: 'Claude', conta: 'conta', semana: 0, renova: null })),
     sessoes: Array.from({ length: f.sessoes }, (_, i) => ({ id: 's' + i, nome: 'Sessão', projeto: '', pergunta: 'Pergunta', desde: new Date(agora - 300000).toISOString() })),
     teclas: Array.from({ length: f.teclas }, (_, i) => ({ id: 'e' + i, nome: 'Tecla', tipo: 'comando', valor: '', icone: 'svg:raio' })),
-    perfilAtivo: '', perfis: [], acesas: [], selos: {}, agenda: null, whatsapp: null,
+    perfilAtivo: '', perfis: [], acesas: [], selos: {}, agenda: null, reuniao: null, whatsapp: null, monitor: null,
   };
 }
 const semMusica = () => !V.spotify;
@@ -114,6 +115,9 @@ function abrirMenu(el) {
   l.style.left = pos.left + 'px'; l.style.top = pos.top + 'px';
 }
 const relogioHTML = () => `<div class="relogio" aria-label="Hora"><div class="placa" data-i="0"></div><div class="placa" data-i="1"></div><div class="dois-pontos" aria-hidden="true"><i></i><i></i></div><div class="placa" data-i="2"></div><div class="placa" data-i="3"></div></div><div class="data-linha"><div class="data"></div></div>`;
+/* Relógio da composição C, no estilo do Fliqo: dois blocos bem quadrados, as horas em cima e os minutos embaixo, cada um com os dois
+   algarismos na mesma placa que vira. O resto do relógio (tique, virarPlaca) é o mesmo das placas de um algarismo. */
+const relogioQHTML = () => `<div class="relogio relogio-q" aria-label="Hora"><div class="placa" data-i="h"></div><div class="placa" data-i="m"></div></div>`;
 const nivel = p => p == null ? '' : p >= 90 ? 'cheio' : p >= 70 ? 'alto' : '';
 const medidor = (rot, p) => `<div class="medidor ${nivel(p)}" aria-label="${rot}: ${p == null ? 'sem medição' : p + '%'}"><span class="trilho"><i style="width:${p ?? 0}%"></i></span><b>${p == null ? '-' : p + '%'}</b></div>`;
 function usoCartao() {
@@ -124,6 +128,41 @@ function usoCartao() {
 function usoTira() {
   if (!usoVisivel().length) return ''; // nenhuma conta para mostrar: a faixa some
   return `<div class="uso-tira depende">${esconder('uso')}${usoVisivel().map(u => { const p = u.semana, txt = p == null ? '-' : p + '%'; return `<span class="${nivel(p)}" aria-label="${esc(u.nome)} ${esc(u.conta)}: ${p == null ? 'sem medição' : txt}">${icServico(u.nome)}<span class="nome-u">${esc(u.nome === 'Claude' ? u.conta : u.nome)}</span> <span class="mini"><i style="width:${p ?? 0}%"></i></span><b>${txt}</b></span>` }).join('')}</div>`;
+}
+/* Monitor do Mac: uma faixa pequena com o que a pessoa deixou ligado nos Ajustes do Mac (`itens` do estado).
+   Bateria some sozinha em Mac sem bateria. Processador, memória e rede ficam com "-" até a primeira medida. */
+const MONITOR_ITENS = ['cpu', 'memoria', 'bateria', 'rede'];
+const monitorItens = () => {
+  const m = V.monitor; if (!m) return [];
+  return MONITOR_ITENS.filter(k => (m.itens || []).includes(k) && (k !== 'bateria' || m.bateria != null)); // `itens`: o que a pessoa deixou ligado nos Ajustes do Mac
+};
+const velocidade = b => b == null ? '-' : b >= 1048576 ? (b / 1048576).toFixed(b >= 10485760 ? 0 : 1).replace('.', ',') + ' MB/s' : Math.round(b / 1024) + ' KB/s';
+// na tela o "/s" é um pedaço à parte: na linha apertada da horizontal ele sai e a seta já diz que é por segundo
+const velocidadeTela = b => esc(velocidade(b)).replace(/\/s$/, '<span class="por-s">/s</span>');
+const nivelBateria = m => m.naTomada || m.bateria > 20 ? '' : m.bateria <= 10 ? 'cheio' : 'alto';
+function monitorHTML() {
+  const itens = monitorItens(); if (!itens.length) return '';
+  const m = V.monitor, pct = (rot, nome, p, nv) => `<span class="${nv ?? nivel(p)}" aria-label="${nome}: ${p == null ? 'sem medição' : p + '%'}"><span class="rot-m">${rot}</span> <span class="mini"><i style="width:${p ?? 0}%"></i></span><b>${p == null ? '-' : p + '%'}</b></span>`;
+  const por = {
+    cpu: () => pct('CPU', 'Processador', m.cpu),
+    memoria: () => pct('Mem', 'Memória', m.memoria),
+    bateria: () => pct(m.naTomada ? 'Tomada' : 'Bat', 'Bateria' + (m.naTomada ? ', na tomada' : ''), m.bateria, nivelBateria(m)),
+    rede: () => `<span aria-label="Rede: baixando ${velocidade(m.baixa)}, enviando ${velocidade(m.sobe)}"><span class="rot-m">${SVG.baixa}</span><b>${velocidadeTela(m.baixa)}</b> <span class="rot-m">${SVG.sobe}</span><b>${velocidadeTela(m.sobe)}</b></span>`,
+  };
+  return `<div class="monitor-tira" role="group" aria-label="Monitor do Mac">${itens.map(k => por[k]()).join('')}</div>`;
+}
+/* Composição C: o mesmo mês da Agenda (nome grande em vermelho, setas, números grandes, pontinho nos dias com evento, hoje em círculo
+   vermelho). As setas só mexem neste bloco. O resto do bloco é um botão que abre a agenda */
+function mesCHTML() {
+  const hoje = new Date(V.ref), m = mesCAtual(), ano = m.getFullYear(), mes = m.getMonth(), dias = new Date(ano, mes + 1, 0).getDate();
+  const nome = m.toLocaleDateString('pt-BR', { month: 'long' }) + (ano !== hoje.getFullYear() ? ' ' + ano : ''), temEv = diasComEvento(mesC.ev, m);
+  let grade = '<span></span>'.repeat(new Date(ano, mes, 1).getDay());
+  for (let n = 1; n <= dias; n++) {
+    const d = new Date(ano, mes, n), dow = d.getDay(), tem = temEv.get(n) || 0;
+    grade += `<span class="sb-dia ${dow === 0 || dow === 6 ? 'fds' : ''} ${mesmoDia(d, hoje) ? 'hoje' : ''} ${tem ? 'tem' : ''}">${n}</span>`;
+  }
+  return `<div class="mes-c"><div class="mes-topo"><h2>${esc(nome)}</h2><button class="seta" data-mes-c="-1" aria-label="Mês anterior">${SVG.esq}</button><button class="seta" data-mes-c="1" aria-label="Próximo mês">${SVG.dir}</button></div>
+    <button class="mes-c-corpo" data-painel="calendario" aria-label="${esc(nome)}. Abrir a agenda"><span class="sb-semana" aria-hidden="true"><span class="fds">D</span><span>S</span><span>T</span><span>Q</span><span>Q</span><span>S</span><span class="fds">S</span></span><span class="sb-grade mes-c-dias">${grade}</span></button></div>`;
 }
 const usoAtual = () => posicao === 'horizontal' && V.comp === 'a' ? usoCartao() : usoTira();
 const temModos = s => s.repetir !== undefined || s.aleatorio !== undefined; // Mac antigo não manda: sem inventar, os botões não aparecem
@@ -160,22 +199,41 @@ function horaDoEvento(ev) {
   const dia = dias <= 0 ? '' : dias === 1 ? 'amanhã' : d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '');
   return ev.diaTodo ? dia || 'hoje' : (dia + ' ' + hh).trim();
 }
+// tecla que acende: a que tem comando de conferir (`estado`) ou liga e desliga (`desligar`, o Mac guarda o estado)
+const acendeTecla = t => !!(t.estado || t.desligar);
+/* Tecla de microfone ou de câmera da reunião (Meet, Zoom, Teams): o Mac manda o estado de cada uma em `reuniao`
+   (ligado, desligado, desconhecido, sem-reuniao). Mac antigo não manda: a tecla fica como sempre foi. Mac novo que não
+   respondeu esta tecla conta como desconhecido (não finge) */
+const itemDeReuniao = t => t.tipo === 'app' && t.acao?.id === 'reuniao-microfone' ? 'microfone' : t.tipo === 'app' && t.acao?.id === 'reuniao-camera' ? 'camera' : null;
+const ESTADOS_REUNIAO = ['ligado', 'desligado', 'desconhecido', 'sem-reuniao'];
+const estadoDaReuniao = t => itemDeReuniao(t) && V.reuniao ? (ESTADOS_REUNIAO.includes(V.reuniao[t.id]) ? V.reuniao[t.id] : 'desconhecido') : null;
+// ligado não escreve nada (a tecla acesa já diz). Desligado diz qual dos dois, "?" é "não consegui ler"
+const textoDaReuniao = (t, r) => r === 'desconhecido' ? '?' : r === 'desligado' ? (itemDeReuniao(t) === 'microfone' ? 'Mutado' : 'Sem vídeo') : '';
 // o que muda na tecla a cada estado: acesa, selo (WhatsApp, "!" da Agenda) e horário da Agenda
 function infoTecla(t) {
   const cal = painelDe(t) === 'calendario';
   const selo = V.selos[t.id] ?? (cal && V.agenda && V.agenda.permissao === false ? '!' : null);
   const prox = cal && !selo && V.agenda?.proximo ? V.agenda.proximo : null;
-  return { acesa: !!t.estado && V.acesas.includes(t.id), selo, hora: prox ? horaDoEvento(prox) : null, titulo: prox?.titulo };
+  const reu = estadoDaReuniao(t);
+  if (reu) return { acesa: reu === 'ligado', selo: null, hora: null, reuniao: reu };
+  return { acesa: acendeTecla(t) && V.acesas.includes(t.id), selo, hora: prox ? horaDoEvento(prox) : null, titulo: prox?.titulo };
 }
+// aria-pressed: tecla de estado (acende ou apaga), e a de reunião só quando o Mac leu ligado ou desligado
+const pressionada = (t, i) => i.reuniao ? (i.reuniao === 'ligado' || i.reuniao === 'desligado' ? String(i.acesa) : null) : acendeTecla(t) ? String(i.acesa) : null;
+const rotuloDaReuniao = (t, r) => {
+  const mic = itemDeReuniao(t) === 'microfone', nome = mic ? 'Microfone' : 'Câmera';
+  return r === 'ligado' ? `${nome}: ${mic ? 'aberto' : 'ligada'}` : r === 'desligado' ? `${nome}: ${mic ? 'mutado' : 'desligada'}` : r === 'sem-reuniao' ? `${nome}: nenhuma reunião aberta` : `${nome}: não consegui ler`;
+};
 function extraTecla(t, i) {
   const seloTxt = i.selo == null ? '' : /^\d+$/.test(i.selo) && +i.selo > 99 ? '99+' : i.selo;
   const aria = i.selo === '!' ? 'Agenda sem permissão' : `${i.selo} não lidas`;
   return (i.selo != null ? `<span class="selo" aria-label="${esc(aria)}">${esc(seloTxt)}</span>` : '')
+    + (i.reuniao ? `<span class="estado-tecla ${i.reuniao}" aria-label="${esc(rotuloDaReuniao(t, i.reuniao))}">${esc(textoDaReuniao(t, i.reuniao))}</span>` : '')
     + (i.hora ? `<span class="hora-tecla" aria-label="Próximo: ${esc(i.titulo)} ${esc(i.hora)}">${esc(i.hora)}</span>` : '');
 }
 function teclaHTML(t) {
   const i = infoTecla(t);
-  return `<button class="tecla depende ${i.acesa ? 'acesa' : ''}" data-id="${esc(t.id)}" ${t.estado ? `aria-pressed="${i.acesa}"` : ''}>
+  return `<button class="tecla depende ${i.acesa ? 'acesa' : ''} ${i.reuniao ? 'reuniao-' + i.reuniao : ''}" data-id="${esc(t.id)}" ${pressionada(t, i) != null ? `aria-pressed="${pressionada(t, i)}"` : ''}>
     <span class="editar" aria-hidden="true">${SVG.lapis}</span>
     ${iconeDaTecla(t)}<span class="nome">${esc(t.nome)}</span><span class="led" aria-hidden="true"></span>${extraTecla(t, i)}
     </button>`;
@@ -197,8 +255,8 @@ const porPagina = () => V.comp === 'b' ? (posicao === 'vertical' ? 6 : 9) : posi
 
 /* ---------- desenho ---------- */
 // o que, se mudar, obriga a refazer a tela inteira
-const chaveLayout = () => JSON.stringify([posicao, V.comp, !!V.carregando, V.blocos.sessoes !== false, usoVisivel().length > 0, V.perfilAtivo, V.perfis, V.teclas.map(t => [t.id, t.nome, t.tipo, t.valor, t.icone, !!t.estado]), appsMac.versao]);
-const chaveTeclas = () => JSON.stringify(V.teclas.map(t => { const i = infoTecla(t); return [i.acesa, i.selo, i.hora] }));
+const chaveLayout = () => JSON.stringify([posicao, V.comp, monitorItens(), !!V.carregando, V.blocos.sessoes !== false, usoVisivel().length > 0, V.perfilAtivo, V.perfis, V.teclas.map(t => [t.id, t.nome, t.tipo, t.valor, t.icone, acendeTecla(t)]), appsMac.versao]);
+const chaveTeclas = () => JSON.stringify(V.teclas.map(t => { const i = infoTecla(t); return [i.acesa, i.selo, i.hora, i.reuniao] }));
 const chavePlayer = () => { const s = V.spotify; return s ? JSON.stringify([s.faixa, s.artista, s.album, s.capaId, s.cores, s.duracao, temModos(s), conectado(s)]) : null };
 
 function render() {
@@ -208,21 +266,26 @@ function render() {
   const c = $('#conteudo');
   c.classList.toggle('carregando', !!V.carregando);
   c.setAttribute('aria-busy', String(!!V.carregando));
-  c.innerHTML = V.comp === 'a'
-    ? `<div class="comp-a ${sem}"><div class="topo">
-        <div class="esquerda"><div class="relogio-linha">${relogioHTML()}${posicao === 'vertical' ? usoTira() : ''}</div>${posicao === 'vertical' ? '' : usoCartao()}</div>
+  const cm = monitorItens().length ? ' com-monitor' : '';
+  c.innerHTML = V.comp === 'c'
+    // C: o relógio quadrado à esquerda, uma linha cinza e o mês à direita. Sem fileira de teclas (pedido de 12/11/2026)
+    ? `<div class="comp-c${cm}"><div class="c-relogio">${relogioQHTML()}${monitorHTML()}</div><div class="c-divisor" role="separator"></div>${mesCHTML()}</div>`
+    : V.comp === 'a'
+    ? `<div class="comp-a ${sem}${cm}"><div class="topo">
+        <div class="esquerda"><div class="relogio-linha">${relogioHTML()}${posicao === 'vertical' ? usoTira() : ''}${monitorHTML()}</div>${posicao === 'vertical' ? '' : usoCartao()}</div>
         <div class="direita">${playerHTML()}${sessoesHTML()}</div>
       </div><div class="teclas" id="teclas">${teclasHTML(porPagina())}</div></div>`
-    : `<div class="comp-b ${sem}"><div class="esquerda">
-        <div class="relogio-linha"><div>${relogioHTML()}</div>${usoTira()}</div>
+    : `<div class="comp-b ${sem}${cm}"><div class="esquerda">
+        <div class="relogio-linha"><div>${relogioHTML()}</div>${usoTira()}${monitorHTML()}</div>
         ${playerHTML()}${sessoesHTML()}
       </div><div class="teclas" id="teclas">${teclasHTML(porPagina())}</div></div>`;
   marcarRelogioGrande();
   tique(true);
+  lerMesC();
   ligarCarrossel();
   const pg = $('#teclas .paginas'); if (pg && x) pg.scrollLeft = x;
   pintarEscondidos();
-  ultima = { layout: chaveLayout(), semMusica: semMusica(), player: chavePlayer(), uso: usoAtual(), sessoes: sessoesHTML(), teclas: chaveTeclas() };
+  ultima = { layout: chaveLayout(), semMusica: semMusica(), player: chavePlayer(), uso: usoAtual(), sessoes: sessoesHTML(), teclas: chaveTeclas(), monitor: monitorHTML(), mes: V.comp === 'c' ? mesCHTML() : '' };
   pintarProgresso(true);
 }
 // só o que mudou: o relógio, o carrossel e os gestos em andamento não são refeitos a cada segundo
@@ -231,7 +294,7 @@ function atualizar() {
   pintarEscondidos();
   if (chaveLayout() !== ultima.layout) { render(); return }
   const sem = semMusica();
-  if (V.spotify) {
+  if (V.spotify && V.comp !== 'c') { // a C não tem o player pequeno
     const kp = chavePlayer();
     if (kp !== ultima.player) { $('.player').outerHTML = playerHTML(); ultima.player = kp }
     const pl = $('.player');
@@ -241,9 +304,12 @@ function atualizar() {
     pintarMidia(pl, V.spotify);
   }
   if (folhaAberta?.id === 'f-player') pintarPlayerCheio();
-  if (sem !== ultima.semMusica) { ultima.semMusica = sem; alternarMusica(sem) }
+  if (sem !== ultima.semMusica) { ultima.semMusica = sem; if (V.comp !== 'c') alternarMusica(sem) } // a C não tem player: o relógio já ocupa o lugar
   const uso = usoAtual(), elUso = $('.cartao.uso, .uso-tira');
   if (elUso && uso !== ultima.uso) { elUso.outerHTML = uso; ultima.uso = uso }
+  const mon = monitorHTML(), elMon = $('.monitor-tira');
+  if (elMon && mon !== ultima.monitor) { elMon.outerHTML = mon; ultima.monitor = mon }
+  if (V.comp === 'c') { const mes = mesCHTML(), elMes = $('.mes-c'); if (elMes && mes !== ultima.mes) { elMes.outerHTML = mes; ultima.mes = mes } }
   const ses = sessoesHTML(), elSes = $('.sessoes');
   if (elSes && ses !== ultima.sessoes) { elSes.outerHTML = ses; ultima.sessoes = ses }
   const kt = chaveTeclas();
@@ -276,8 +342,10 @@ function pintarTeclas() {
     const el = $(`.tecla[data-id="${CSS.escape(t.id)}"]`); if (!el) continue;
     const i = infoTecla(t);
     el.classList.toggle('acesa', i.acesa);
-    if (t.estado) el.setAttribute('aria-pressed', String(i.acesa));
-    $$('.selo, .hora-tecla', el).forEach(x => x.remove());
+    const pr = pressionada(t, i);
+    if (pr != null) el.setAttribute('aria-pressed', pr); else el.removeAttribute('aria-pressed');
+    for (const r of ESTADOS_REUNIAO) el.classList.toggle('reuniao-' + r, i.reuniao === r);
+    $$('.selo, .hora-tecla, .estado-tecla', el).forEach(x => x.remove());
     el.insertAdjacentHTML('beforeend', extraTecla(t, i));
   }
 }
@@ -373,7 +441,8 @@ function virarPlaca(el, novo) {
 function tique(inicial) {
   const agora = new Date();
   const dig = (String(agora.getHours()).padStart(2, '0') + String(agora.getMinutes()).padStart(2, '0')).split('');
-  $$('.placa').forEach(el => { const d = dig[el.dataset.i]; if (inicial || !el.dataset.d) montarPlaca(el, d); else if (el.dataset.d !== d) virarPlaca(el, d) });
+  const alvo = { ...dig, h: dig[0] + dig[1], m: dig[2] + dig[3] }; // h e m: as placas de dois algarismos da composição C
+  $$('.placa').forEach(el => { const d = alvo[el.dataset.i]; if (inicial || !el.dataset.d) montarPlaca(el, d); else if (el.dataset.d !== d) virarPlaca(el, d) });
   const [dia, ...resto] = agora.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }).split(', ');
   $$('.data').forEach(d => { d.innerHTML = `<b>${dia}</b>, ${resto.join(', ')}` });
 }
@@ -408,8 +477,8 @@ async function executar(id) {
   // resposta otimista: a tecla acende (ou pisca) e o aviso aparece no toque. Se o Mac recusar, volta e o aviso vira o erro
   const el = $(`.tecla[data-id="${CSS.escape(id)}"]`), quer = !V.acesas.includes(id);
   el?.classList.add('piscando'); setTimeout(() => el?.classList.remove('piscando'), 400);
-  if (t.estado) { otmTeclas[id] = { acesa: quer, ate: performance.now() + JANELA_OTM }; V = vistaReal(); atualizar(); avisar(`${t.nome}: ${quer ? 'ligado' : 'desligado'}`) }
-  else avisar(t.tipo === 'app' ? `Abrindo ${t.nome} no Mac` : `${t.nome}: feito`);
+  if (acendeTecla(t)) { otmTeclas[id] = { acesa: quer, ate: performance.now() + JANELA_OTM }; V = vistaReal(); atualizar(); avisar(`${t.nome}: ${quer ? 'ligado' : 'desligado'}`) }
+  else avisar(t.tipo === 'app' && !itemDeReuniao(t) ? `Abrindo ${t.nome} no Mac` : `${t.nome}: feito`);
   try { await canal.botao(id); atualizarJa() }
   catch (e) { delete otmTeclas[id]; el?.classList.remove('piscando'); if (V) { V = vistaReal(); atualizar() } tratarErro(e) }
   finally { ocupadas.delete(id) }
@@ -456,7 +525,7 @@ function pintarPlayerCheio() {
     $('#pc-corpo').innerHTML = playerCheioHTML(s); pintarProgresso(true);
   }
   pintarMidia($('.pc', f), s); pintarExtras(s);
-  if (lp.qual === 'fila' && s.faixa !== lp.faixa) { lp.faixa = s.faixa; lerListaPlayer() } // a fila anda com a música
+  if (lp.qual === 'fila' && s.faixa !== lp.faixa) { lp.faixa = s.faixa; pintarTopoFila(); lerListaPlayer() } // a fila anda com a música: o alto troca na hora, a lista quando o Mac responder
   const img = $('.capa-grande', f); if (img?.dataset.erro && s.capaId) { delete img.dataset.erro; img.src = canal.capaUrl(s.capaId) }
 }
 async function ativarPerfil(id) {
@@ -477,6 +546,7 @@ tela.addEventListener('click', ev => {
   const m = ev.target.closest('[data-midia]'); if (m) return midia(m.dataset.midia);
   if (!organizando && ev.target.closest('[data-abrir-spotify]') && V.spotify) return abrirPlayer();
   if (!organizando && ev.target.closest('.relogio, .data-linha')) return abrirRelogio();
+  const sm = ev.target.closest('[data-mes-c]'); if (sm) return moverMesC(Number(sm.dataset.mesC)); // as setas do mês da C não abrem a agenda
   const pn = ev.target.closest('[data-painel]'); if (pn && !organizando) return abrirPainel(pn.dataset.painel);
   if (ev.target.closest('[data-fechar]') || ev.target.id === 'veu') return fecharFolha();
   const t = ev.target.closest('.tecla');
@@ -546,7 +616,9 @@ tela.addEventListener('pointerdown', ev => {
     gesto.timer = setTimeout(() => { gesto.segurou = true; t.classList.remove('segurando', 'apertada'); entrarOrganizar() }, 500);
   }
 });
-tela.addEventListener('pointermove', ev => {
+// pointermove/up/cancel no documento: soltar o dedo fora da tela (faixa preta, borda do aparelho) também termina o arrasto.
+// Só na tela, o fantasma da tecla e a tecla apagada (25%) ficavam para sempre
+document.addEventListener('pointermove', ev => {
   if (!gesto) return;
   const longe = Math.hypot(ev.clientX - gesto.x, ev.clientY - gesto.y) > 8;
   if (!organizando && !gesto.segurou) { if (longe) cancelarGesto(); return }
@@ -554,7 +626,7 @@ tela.addEventListener('pointermove', ev => {
   if (!gesto.arrastando && longe) comecarArrasto(ev);
   if (gesto.arrastando) moverArrasto(ev);
 });
-tela.addEventListener('pointerup', () => {
+document.addEventListener('pointerup', () => {
   if (!gesto) return;
   const g = gesto; clearTimeout(g.timer); g.el.classList.remove('segurando', 'apertada');
   if (g.arrastando) return soltarArrasto();
@@ -565,8 +637,10 @@ tela.addEventListener('pointerup', () => {
   executar(g.id);
 });
 tela.addEventListener('dragstart', e => e.preventDefault());
-tela.addEventListener('pointercancel', () => { if (gesto?.arrastando) soltarArrasto(); cancelarGesto() });
+document.addEventListener('pointercancel', () => { if (gesto?.arrastando) soltarArrasto(); cancelarGesto() });
 function cancelarGesto() { if (!gesto) return; clearTimeout(gesto.timer); gesto.el.classList.remove('segurando', 'apertada'); gesto = null }
+// rede de segurança: nenhum rastro de arrasto sobrevive ao fim do gesto (fantasma, tecla apagada, tecla apertada)
+function limparRastroDeArrasto() { $$('.fantasma').forEach(f => f.remove()); fantasma = null; $$('.tecla.arrastando, .tecla.apertada, .tecla.segurando').forEach(t => t.classList.remove('arrastando', 'apertada', 'segurando')) }
 
 let fantasma = null;
 function comecarArrasto(ev) {
@@ -598,7 +672,7 @@ function renderTeclas() {
 }
 async function soltarArrasto() {
   const g = gesto; gesto = null;
-  fantasma?.remove(); fantasma = null; renderTeclas();
+  limparRastroDeArrasto(); renderTeclas();
   const ordem = V.teclas.map(t => t.id), pid = V.perfilAtivo;
   if (ordem.join() === perfilVisto(g.antes).teclas.map(t => t.id).join()) return; // soltou onde estava
   const antes = g.antes;
@@ -620,6 +694,55 @@ tela.addEventListener('scroll', () => { tela.scrollTop = 0; tela.scrollLeft = 0 
 function abrirFolha(id) { folhaAberta = $(id); folhaAberta.classList.add('aberta'); tela.classList.add('com-folha') }
 function fecharFolha() { if (folhaAberta?.contains(document.activeElement)) document.activeElement.blur(); folhaAberta?.classList.remove('aberta'); folhaAberta = null; tela.classList.remove('com-folha') }
 $$('[data-fechar]').forEach(b => { if (!b.textContent.trim()) b.innerHTML = SVG.x });
+
+/* Puxar de cima para baixo fecha a tela aberta (folhas e relógio). A tela acompanha o dedo e, se soltar cedo, volta.
+   Não rouba o gesto de lista que ainda rola para cima, de barra arrastável nem de campo de texto */
+let puxar = null, puxouAte = 0;
+const LONGE_PUXAR = .25, RAPIDO_PUXAR = .5; // fração da altura, e px por ms
+const telaAberta = () => $('#f-relogio.aberta') || folhaAberta;
+function rolaParaCima(el, topo) { // algum pai ainda tem rolagem a desfazer? Então o gesto é dele
+  for (; el && el !== topo; el = el.parentElement) if (el.scrollHeight > el.clientHeight + 1 && el.scrollTop > 0 && getComputedStyle(el).overflowY !== 'visible') return true;
+  return false;
+}
+function devolverTela(f, fechar) {
+  f.style.transition = ''; f.style.translate = '';
+  if (fechar) { if (f.id === 'f-relogio') fecharRelogio(); else fecharFolha() }
+}
+tela.addEventListener('touchstart', e => {
+  puxar = null;
+  const f = telaAberta(); if (!f || e.touches.length !== 1 || !f.contains(e.target)) return;
+  if (e.target.closest('input, textarea, select, .progresso, .volume, .trilho') || rolaParaCima(e.target, f)) return;
+  const t = e.touches[0]; puxar = { f, x: t.clientX, y: t.clientY, t: e.timeStamp, dy: 0, seguindo: false };
+}, { passive: true });
+tela.addEventListener('touchmove', e => {
+  if (!puxar) return;
+  const t = e.touches[0], dx = t.clientX - puxar.x, dy = t.clientY - puxar.y, f = puxar.f;
+  if (!puxar.seguindo) {
+    if (Math.abs(dx) > 10 && Math.abs(dx) >= Math.abs(dy) || dy < -10) { puxar = null; return } // para o lado ou para cima: não é fechar
+    // No iPhone a rolagem nativa começa nos primeiros pixels e, depois dela, o touchmove não é mais cancelável: o gesto é cancelado
+    // já no primeiro movimento para baixo (a lista está no topo, então não há o que rolar para esse lado)
+    if (dy > 0 && dy > Math.abs(dx) && e.cancelable) e.preventDefault();
+    if (dy < 10 || dy < Math.abs(dx) * 1.5) return;
+    puxar.seguindo = true; f.style.transition = 'none';
+  }
+  puxar.dy = Math.max(0, dy); f.style.translate = `0 ${puxar.dy / escalaTela().k}px`;
+  e.preventDefault();
+}, { passive: false });
+function soltarPuxada(e, cancelado) {
+  const p = puxar; puxar = null; if (!p?.seguindo) return;
+  puxouAte = e.timeStamp + 400;
+  const alto = p.f.getBoundingClientRect().height, rapido = !cancelado && p.dy > 30 && p.dy / Math.max(1, e.timeStamp - p.t) > RAPIDO_PUXAR;
+  const fechar = !cancelado && (p.dy > alto * LONGE_PUXAR || rapido);
+  if (fechar && p.f.id === 'f-relogio') { // o relógio some em fade: desce junto até acabar o fade
+    p.f.style.transition = 'translate var(--mov-sai-padrao) var(--curva-sai), opacity var(--mov-sai-padrao) var(--curva-sai)'; p.f.style.translate = `0 ${alto / escalaTela().k}px`;
+    fecharRelogio(); setTimeout(() => devolverTela(p.f, false), msCss('--mov-sai-padrao') + 60); return;
+  }
+  devolverTela(p.f, fechar);
+}
+tela.addEventListener('touchend', e => soltarPuxada(e, false));
+tela.addEventListener('touchcancel', e => soltarPuxada(e, true));
+// o toque que terminou a puxada não aperta o que estava embaixo do dedo
+tela.addEventListener('click', e => { if (performance.now() < puxouAte) { e.stopPropagation(); e.preventDefault() } }, true);
 
 let editando = null, rasc = null;
 const TIPOS = {

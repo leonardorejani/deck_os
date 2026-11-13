@@ -6,7 +6,7 @@ Rules that can **never** be violated. If a change breaks any invariant, it is re
 
 1. **O Mac configura, o iPhone mostra.** Toda configuração mora no `config.json` do Mac. O iPhone só grava pelo modo organizar, pela API, no mesmo arquivo. Nunca existe config só no iPhone.
 2. **Nada sai da rede de casa.** Sem servidor externo, sem site público. A API só responde com o código de acesso do pareamento.
-3. **Dado de outro app é só leitura.** O banco do WhatsApp, a agenda e os jobs do Claude Code são lidos, nunca escritos.
+3. **Dado de outro app é só leitura.** O banco do WhatsApp, a agenda e os jobs do Claude Code são lidos, nunca escritos. Única exceção (decisão de 12/11/2026, SPEC seção 13): "Novo compromisso" da agenda cria um evento no Calendário ou um lembrete no app Lembretes, só pela rota autenticada `POST /api/agenda/criar`, só o que a pessoa pediu. Nunca altera nem apaga o que já existe.
 
 ## About sensitive data
 

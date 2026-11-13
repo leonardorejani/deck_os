@@ -24,6 +24,7 @@
   --raio-mini: 4px;
   --ic-vazio: 48px;
   --texto-campo: 16px;
+  --foto-msg: 240px;        /* largura máxima da foto dentro do balão */
   --micro-gap: 2px;         /* entre itens de lista colada */      /* campo com 16 não dá zoom no iPhone */
 }
 
@@ -89,11 +90,11 @@ button.cartao { font: inherit; color: inherit; text-align: left; border: 0; curs
 .uso-nome > span { overflow: hidden; text-overflow: ellipsis }
 .uso-nome small { color: var(--texto-2); font-size: var(--texto-xs) }
 .medidor { display: grid; grid-template-columns: 1fr 36px; gap: var(--item); align-items: center; font-size: var(--texto-xs); color: var(--texto-2); font-variant-numeric: tabular-nums }
-.medidor .trilho, .uso-tira .mini, .progresso .trilho { height: 6px; border-radius: var(--raio-pilula); background: var(--superficie-2); overflow: hidden; display: block }
-.medidor .trilho i, .uso-tira .mini i, .progresso .trilho i { display: block; height: 100%; border-radius: var(--raio-pilula); background: var(--texto-2) }
+.medidor .trilho, .uso-tira .mini, .monitor-tira .mini, .progresso .trilho { height: 6px; border-radius: var(--raio-pilula); background: var(--superficie-2); overflow: hidden; display: block }
+.medidor .trilho i, .uso-tira .mini i, .monitor-tira .mini i, .progresso .trilho i { display: block; height: 100%; border-radius: var(--raio-pilula); background: var(--texto-2) }
 .medidor b { font-weight: 600; color: var(--texto); text-align: right }
-.medidor.alto .trilho i, .uso-tira .alto .mini i { background: var(--aviso) }
-.medidor.alto b, .uso-tira .alto, .uso-tira .alto b { color: var(--aviso) }
+.medidor.alto .trilho i, .uso-tira .alto .mini i, .monitor-tira .alto .mini i { background: var(--aviso) }
+.medidor.alto b, .uso-tira .alto, .uso-tira .alto b, .monitor-tira .alto, .monitor-tira .alto b { color: var(--aviso) }
 .medidor.cheio .trilho i { background: var(--perigo) }
 .medidor.cheio b { color: var(--perigo) }
 .uso-tira { display: flex; gap: var(--icone); flex-wrap: nowrap; overflow: hidden; font-size: var(--texto-xs); color: var(--texto-2); font-variant-numeric: tabular-nums; margin-top: var(--icone) }
@@ -118,7 +119,6 @@ button.cartao { font: inherit; color: inherit; text-align: left; border: 0; curs
 .midia svg { width: 22px; height: 22px }
 .midia .tocar { background: var(--texto); color: var(--fundo) }
 .midia .tocar svg { width: 20px; height: 20px }
-.midia .tocar.play svg { translate: 2px 0 } /* play óptico: 2px pra direita (tatile, forma 4) */
 .vazio-bloco { color: var(--texto-2); font-size: var(--texto-sm); display: grid; gap: var(--item); align-content: center; height: 100% }
 .vazio-bloco strong { color: var(--texto); font-size: var(--texto-base); font-weight: 600 }
 
@@ -151,6 +151,9 @@ button.cartao { font: inherit; color: inherit; text-align: left; border: 0; curs
 .tecla.acesa .led { width: 40px; height: 5px; background: var(--led); box-shadow: 0 0 10px 1px var(--led) }
 .tecla.acesa .nome { color: var(--texto) }
 .tecla .selo { position: absolute; top: var(--item); right: var(--item); min-width: var(--selo); height: var(--selo); padding: 0 var(--item); border-radius: var(--raio-pilula); background: var(--perigo); color: var(--fundo); font-size: var(--texto-xs); font-weight: 700; display: grid; place-items: center; font-variant-numeric: tabular-nums }
+.tecla .estado-tecla { position: absolute; top: var(--item); left: 0; right: 0; text-align: center; font-size: var(--texto-xs); font-weight: 700; color: var(--texto-2); line-height: var(--selo) }
+.tecla .estado-tecla.desligado { color: var(--perigo) }
+.tecla.reuniao-sem-reuniao { opacity: .5 } /* sem reunião aberta a tecla fica apagada (ainda toca: o Mac explica o que falta) */
 .tecla .hora-tecla { position: absolute; top: var(--item); left: 0; right: 0; text-align: center; font-size: var(--texto-sm); font-weight: 700; color: var(--texto); font-variant-numeric: tabular-nums; line-height: var(--selo) }
 /* topo de toda tecla reserva a altura do selo: ícone fica no mesmo lugar com ou sem selo */
 .tecla.menu { background: transparent; box-shadow: inset 0 0 0 1.5px var(--borda) }
@@ -203,6 +206,46 @@ button.cartao { font: inherit; color: inherit; text-align: left; border: 0; curs
 .comp-b .capa { --lado: 80px }
 .comp-b .faixa { font-size: var(--texto-base) }
 .comp-b .sessoes .sessao:nth-of-type(n+4) { display: none }
+
+/* ---------- Monitor do Mac (bloco pequeno, só aparece com ele ligado nos Ajustes do Mac) ---------- */
+.monitor-tira { display: flex; flex-wrap: wrap; gap: var(--item) var(--icone); font-size: var(--texto-xs); color: var(--texto-2); font-variant-numeric: tabular-nums; margin-top: var(--icone); min-width: 0 }
+.monitor-tira > span { display: inline-flex; align-items: center; gap: var(--item); white-space: nowrap }
+.monitor-tira .rot-m { display: inline-flex; align-items: center }
+.monitor-tira .rot-m svg { width: 12px; height: 12px }
+.monitor-tira .mini { width: 28px }
+.monitor-tira b { color: var(--texto); font-weight: 600 }
+.monitor-tira .cheio .mini i { background: var(--perigo) }
+.monitor-tira .cheio, .monitor-tira .cheio b { color: var(--perigo) }
+.vertical .monitor-tira { justify-content: center; flex-wrap: nowrap; gap: var(--icone); margin-top: var(--item) }
+.vertical :is(.comp-a, .comp-b).com-monitor:not(.relogio-grande) .placa { --h: 84px; --w: 59px } /* o monitor toma uma linha: as placas cedem a altura dela */
+.vertical .monitor-tira .mini { display: none } /* em pé o monitor é uma linha só, com o número */
+/* A e B não têm altura sobrando: o monitor vira uma linha só, sem as barrinhas, e o relógio cede o que ela toma */
+.monitor-tira { flex-wrap: nowrap; gap: var(--icone) calc(var(--item) - 4px); margin-top: var(--item); overflow: hidden }
+.monitor-tira .mini { display: none }
+.horizontal .comp-a:not(.comp-c).com-monitor:not(.relogio-grande) .placa { --h: 92px; --w: 64px }
+.horizontal .comp-b.com-monitor:not(.relogio-grande) .placa { --h: 84px; --w: 58px }
+.horizontal .comp-b.com-monitor:not(.relogio-grande) .sessoes .sessao ~ .sessao { display: none } /* a linha do monitor toma o lugar da segunda sessão: melhor uma inteira que duas cortadas */
+.monitor-tira > span { gap: 3px }
+.horizontal .monitor-tira .por-s { display: none } /* a linha é de uma fileira só e o iPhone deitado tem pouca largura */
+
+/* ---------- Composição C: relógio quadrado (estilo Fliqo) à esquerda, uma linha cinza, e o mês da Agenda à direita ---------- */
+/* Sem fileira de teclas. O mês usa as mesmas classes da Agenda (.mes-topo, .seta, .sb-semana, .sb-grade, .sb-dia). */
+.comp-c { --q: 172px; --dia-cal: 40px; display: grid; grid-template-columns: auto 1px minmax(0, 1fr); gap: var(--secao); height: 100%; min-height: 0 }
+.comp-c.com-monitor { --q: 140px }
+.comp-c.com-monitor .c-relogio { width: 250px }
+.comp-c .monitor-tira { flex-wrap: wrap; justify-content: center; row-gap: var(--micro-gap) }
+.comp-c .c-relogio { display: flex; flex-direction: column; justify-content: center; align-items: center; min-width: 0; min-height: 0 }
+.comp-c .relogio-q { flex-direction: column; gap: var(--grade) }
+.comp-c .relogio-q .placa { --w: var(--q); --h: var(--q); font-size: calc(var(--q) * .68); letter-spacing: -.02em }
+.comp-c .c-divisor { align-self: stretch; margin: var(--pad) 0; background: var(--borda) }
+.comp-c .mes-c { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: var(--item); min-width: 0; min-height: 0; padding-top: var(--item) }
+.comp-c .mes-c-corpo { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: var(--item); min-height: 0; padding: 0; border: 0; background: none; color: var(--texto); font: inherit; cursor: pointer }
+.vertical .comp-c { --q: 184px; --dia-cal: 44px; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1px minmax(0, 1fr); gap: var(--pad); padding-top: var(--item) }
+.vertical .comp-c.com-monitor { --q: 160px }
+.vertical .comp-c .c-relogio { width: auto }
+.vertical .comp-c .sb-grade { grid-auto-rows: 54px } /* folga para o pontinho do dia com evento não encostar no número de baixo */
+.vertical .comp-c .monitor-tira { flex-wrap: nowrap }
+.vertical .comp-c .c-divisor { margin: 0 var(--pad) }
 
 /* ---------- Em pé ---------- */
 .vertical .comp-a, .vertical .comp-b { display: flex; flex-direction: column; gap: var(--grade); padding-top: var(--item) }
@@ -305,19 +348,44 @@ button.cartao { font: inherit; color: inherit; text-align: left; border: 0; curs
 .mensagens p { overflow-wrap: anywhere; margin: 0; background: var(--superficie-2); border-radius: var(--raio-sm) var(--raio) var(--raio) var(--raio); padding: var(--item) var(--icone); font-size: var(--texto-sm); max-width: 90% }
 .mensagens p small { display: block; color: var(--texto-2); font-size: var(--texto-xs) }
 .mensagens .btn { justify-self: start }
+.avatar { overflow: hidden }
+.avatar img { width: 100%; height: 100%; object-fit: cover; display: block }
+.mensagens p .hora-msg { display: block; text-align: right; color: var(--texto-2); font-size: var(--texto-xs); font-variant-numeric: tabular-nums; margin-top: var(--micro-gap) }
+.mensagens p.midia-msg { display: grid; gap: var(--item) }
+.mensagens .foto-msg { display: block; min-height: var(--alvo); max-width: var(--foto-msg) }
+.mensagens .foto-msg img { display: block; width: 100%; height: auto; border-radius: var(--raio-sm) }
+.mensagens .foto-espera { display: block; color: var(--texto-2); font-size: var(--texto-xs) }
+.mensagens .audio-msg { display: block }
+.mensagens .audio-msg audio { width: 100%; max-width: var(--foto-msg); height: var(--alvo-sm); display: block }
+.mensagens .audio-msg .btn { display: inline-flex; align-items: center; gap: var(--item) }
+.mensagens .audio-msg .btn svg, .mensagens .unica svg { width: var(--ic-mini); height: var(--ic-mini); flex: none }
+.mensagens .audio-msg .btn.carregando { opacity: .6 }
+.mensagens .unica { display: inline-flex; align-items: center; gap: var(--item); color: var(--texto-2) }
 
-/* sessões (folha): um cartão por sessão, e a sessão aberta com a pergunta inteira */
+/* sessões (folha): um cartão por sessão, e a sessão aberta com o pedido em destaque e o contexto embaixo */
 .grade-sessoes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--grade) }
 .vertical .grade-sessoes { grid-template-columns: minmax(0, 1fr) }
-.cartao-sessao { display: grid; gap: var(--micro-gap); align-content: start; min-width: 0; font: inherit; color: inherit; text-align: left; background: var(--superficie); box-shadow: var(--sombra-1); border: 0; border-radius: var(--raio-card); padding: var(--pad); cursor: pointer; transition: scale var(--mov-rapido) var(--curva-move) }
+.cartao-sessao { position: relative; display: grid; gap: var(--micro-gap); align-content: start; min-width: 0; font: inherit; color: inherit; text-align: left; background: var(--superficie); box-shadow: var(--sombra-1); border: 0; border-radius: var(--raio-card); padding: var(--pad) calc(var(--pad) + var(--item)) var(--pad) calc(var(--pad) + var(--item)); cursor: pointer; overflow: hidden; transition: scale var(--mov-rapido) var(--curva-move) }
+.cartao-sessao::before { content: ""; position: absolute; inset: var(--pad) auto var(--pad) 0; width: 4px; border-radius: 0 var(--raio-pilula) var(--raio-pilula) 0; background: var(--destaque) }
+.cartao-sessao.velha::before { background: var(--aviso) }
 .cartao-sessao:active { scale: .98 }
-.cartao-sessao b { font-size: var(--texto-base); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
-.cartao-sessao small { color: var(--texto-2); font-size: var(--texto-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
-.cartao-sessao p { overflow-wrap: anywhere; margin: var(--item) 0 0; color: var(--texto-2); font-size: var(--texto-sm); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden }
-.detalhe-sessao { background: var(--superficie); border-radius: var(--raio-card); padding: var(--pad) }
-.detalhe-sessao .pergunta { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; font-size: var(--texto-md); line-height: 1.5 }
-.detalhe-sessao .btn { margin-top: var(--pad) }
-.detalhe-sessao .nota-sessao { margin: var(--pad) 0 0; color: var(--texto-2); font-size: var(--texto-sm) }
+.cartao-sessao b { font-size: var(--texto-md); line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.cartao-sessao small { color: var(--texto-2); font-size: var(--texto-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums }
+.cartao-sessao.velha small { color: var(--aviso) }
+.cartao-sessao p { overflow-wrap: anywhere; margin: var(--item) 0 0; color: var(--texto); font-size: var(--texto-sm); line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden }
+.detalhe-sessao { display: grid; gap: var(--secao); padding-bottom: var(--secao) }
+.detalhe-sessao .rotulo { display: block; margin-bottom: var(--item); color: var(--texto-2); font-size: var(--texto-xs); font-weight: 600; letter-spacing: .04em; text-transform: uppercase }
+.detalhe-sessao .pede { background: var(--destaque-suave); border-radius: var(--raio-card); padding: var(--pad) var(--pad) var(--pad) calc(var(--pad) + var(--item)); position: relative; overflow: hidden }
+.detalhe-sessao .pede::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 4px; background: var(--destaque) }
+.detalhe-sessao .pede .rotulo { color: var(--destaque) }
+.detalhe-sessao .pergunta { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; font-size: var(--texto-md); font-weight: 600; line-height: 1.5 }
+.detalhe-sessao .sugestao { margin-top: var(--pad); padding-top: var(--pad); border-top: 1px solid var(--borda) }
+.detalhe-sessao .sugestao p { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; font-size: var(--texto-sm); line-height: 1.5; color: var(--texto) }
+.detalhe-sessao .btn { justify-self: stretch }
+.detalhe-sessao .contexto { background: var(--superficie); border-radius: var(--raio-card); padding: var(--pad) }
+.detalhe-sessao .texto-contexto { display: grid; gap: var(--icone) }
+.detalhe-sessao .texto-contexto p { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; font-size: var(--texto-sm); line-height: 1.55; color: var(--texto) }
+.detalhe-sessao .nota-sessao { margin: 0; color: var(--texto-2); font-size: var(--texto-sm); text-align: center }
 #f-sessoes > footer { border-top: 0; padding: var(--item) 0 calc(var(--item) + var(--seguro-baixo)) }
 #f-sessoes.detalhe .corpo { padding-bottom: 0 }
 
@@ -425,6 +493,8 @@ button.cartao { font: inherit; color: inherit; text-align: left; border: 0; curs
 .folha.calendario { grid-template-rows: minmax(0, 1fr) }
 .fechar-cal { position: absolute; top: var(--pad); right: var(--seguro-dir); z-index: 2 }
 .cal-corpo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--secao); min-height: 0; padding: var(--pad) 0 var(--seguro-baixo) }
+/* janela do mês: o mês arrastado segue o dedo só dentro da coluna dele, sem passar por cima (nem por baixo) da lista */
+.mes-janela { display: grid; grid-template-rows: minmax(0, 1fr); min-width: 0; min-height: 0; overflow: hidden }
 .mes-sb { display: grid; grid-template-rows: auto auto minmax(0, 1fr); gap: var(--item); min-height: 0; touch-action: pan-y; transition: opacity var(--mov-padrao) var(--curva-move), translate var(--mov-padrao) var(--curva-move) }
 .mes-sb.saindo-esq { opacity: 0; translate: calc(-1 * var(--margem)) 0; transition-duration: var(--mov-sai-rapido) }
 .mes-sb.saindo-dir { opacity: 0; translate: var(--margem) 0; transition-duration: var(--mov-sai-rapido) }
@@ -443,6 +513,39 @@ button.cartao { font: inherit; color: inherit; text-align: left; border: 0; curs
 .lista-cal { overflow: auto; overscroll-behavior: contain; scrollbar-width: none; border-left: 1px solid var(--borda); padding: var(--secao) var(--seguro-dir) 0 var(--pad); margin-right: calc(-1 * var(--seguro-dir)) }
 .lista-cal::-webkit-scrollbar { display: none }
 .folha.cheia .grupo-data h3 { background: var(--cal-fundo) }
+/* Novo compromisso: a parte da direita inteira vira o formulário (a lista fica escondida, o mês continua ali) */
+/* puxador discreto na borda da lista: deslizar a lista para a esquerda (ou tocar nele) abre o formulário */
+.lista-cal { touch-action: pan-y }
+.puxa-novo { position: absolute; right: var(--seguro-dir); top: 50%; translate: 0 -50%; width: var(--alvo); height: calc(var(--alvo) * 2); border: 0; background: none; cursor: pointer; touch-action: pan-y; display: grid; place-items: center end; z-index: 1; padding: 0 var(--item) 0 0 }
+.puxa-novo[hidden] { display: none }
+.puxa-novo span { width: 4px; height: 36px; border-radius: var(--raio-pilula); background: var(--texto-3); opacity: .6 }
+.vertical .puxa-novo { top: auto; bottom: var(--seguro-baixo); translate: none; height: var(--alvo) }
+.entra-direita { animation: entra-direita var(--mov-padrao) var(--curva-entra) }
+.entra-esquerda { animation: entra-esquerda var(--mov-padrao) var(--curva-entra) }
+@keyframes entra-direita { from { opacity: 0; translate: var(--margem) 0 } }
+@keyframes entra-esquerda { from { opacity: 0; translate: calc(-1 * var(--margem)) 0 } }
+@media (prefers-reduced-motion: reduce) { .entra-direita, .entra-esquerda { animation: none } }
+.novo-comp { grid-column: 2; grid-row: 1; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: var(--item); min-height: 0; border-left: 1px solid var(--borda); padding: var(--item) var(--seguro-dir) 0 var(--pad); margin-right: calc(-1 * var(--seguro-dir)); color-scheme: dark }
+.novo-comp h3 { margin: 0; font-size: var(--texto-lg); font-weight: 700; line-height: var(--altura-titulo) }
+.nc-corpo { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: var(--item) var(--icone); align-content: start; overflow: auto; overscroll-behavior: contain; scrollbar-width: none }
+.nc-corpo::-webkit-scrollbar { display: none }
+.nc-titulo { grid-column: 1 / -1 }
+.nc-dia, .nc-ini, .nc-fim { grid-column: span 4 }
+.nc-onde, .nc-alerta, .nc-todo, .nc-padrao { grid-column: span 6 }
+.novo-comp .campo { min-width: 0 }
+.novo-comp .campo select, .novo-comp .campo input[type="date"], .novo-comp .campo input[type="time"] { font: inherit; font-size: var(--texto-campo); min-height: var(--alvo); border-radius: var(--raio-sm); border: 1px solid var(--borda); background: var(--fundo); color: var(--texto); padding: 0 var(--icone); min-width: 0; width: 100% }
+.novo-comp input[type="time"]::-webkit-calendar-picker-indicator, .novo-comp input[type="date"]::-webkit-calendar-picker-indicator { display: none } /* o iPhone não desenha esse ícone, e no Chrome ele roubava espaço do valor */
+.novo-comp .campo input:disabled { opacity: .5 }
+.nc-check { display: flex; align-items: center; gap: var(--item); min-height: var(--alvo); font-size: var(--texto-sm); color: var(--texto); cursor: pointer }
+.nc-check input { width: 20px; height: 20px; accent-color: var(--destaque); flex: none }
+.nc-padrao { color: var(--texto-2) }
+.novo-comp footer { display: flex; align-items: center; gap: var(--item); padding: var(--item) 0 }
+.nc-msg { flex: 1; min-width: 0; margin: 0 var(--item) 0 0; min-height: calc(var(--texto-sm) * 2.6); display: flex; align-items: center; font-size: var(--texto-sm); line-height: 1.3; color: var(--texto-2) }
+.nc-msg.erro { color: var(--perigo) }
+.novo-comp footer .btn { min-width: 96px }
+.novo-comp footer .btn:disabled { opacity: .5 }
+.vertical .novo-comp { grid-column: 1; grid-row: 2; border-left: 0; border-top: 1px solid var(--borda); padding: var(--pad) 0 0; margin: 0 }
+.vertical .nc-corpo { gap: var(--pad) var(--icone) }
 .vertical .cal-corpo { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); padding-top: var(--seguro-cima) }
 .vertical .lista-cal { border-left: 0; border-top: 1px solid var(--borda); padding: 0; margin: 0 }
 .vertical .sb-grade { grid-auto-rows: var(--dia-cal) }
@@ -528,6 +631,7 @@ button.cartao.sessoes:active { scale: .98 }
 .tela-offline.acesso { z-index: 26 }
 
 /* esqueleto das listas das folhas: nada nos primeiros 200 ms, depois barras com a forma das linhas */
+
 .esq-lista { opacity: 0; animation: esq-entra 0ms linear 200ms forwards; pointer-events: none }
 @keyframes esq-entra { to { opacity: 1 } }
 .esq-lista .barra { display: block; height: var(--texto-sm); border-radius: var(--raio-mini); background: var(--superficie-2); margin: var(--item) 0; animation: pulso 1200ms linear infinite alternate }
@@ -642,8 +746,18 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; text
 .volume.arrastando .trilho { height: 8px }
 .volume.arrastando .trilho i::after { content: ""; position: absolute; right: calc(-1 * var(--item) + 1px); top: 50%; width: 14px; height: 14px; translate: 0 -50%; border-radius: 50%; background: var(--texto); box-shadow: var(--sombra-2) }
 .vol-num { flex: none; min-width: 3ch; text-align: right }
-.pc-lista { position: absolute; inset: 0; z-index: 3; display: grid; grid-template-rows: auto minmax(0, 1fr); padding: 0 var(--seguro-dir) 0 var(--seguro-esq); background: var(--cal-fundo) }
+.pc-lista { position: absolute; inset: 0; z-index: 3; display: grid; grid-template-rows: auto auto minmax(0, 1fr); padding: 0 var(--seguro-dir) 0 var(--seguro-esq); background: var(--cal-fundo); translate: 100% 0; visibility: hidden; transition: translate var(--mov-sai-padrao) var(--curva-sai), visibility 0s linear var(--mov-sai-padrao) }
+.pc-lista.aberta { translate: 0 0; visibility: visible; transition: translate var(--mov-padrao) var(--curva-entra) } /* desliza da direita para a esquerda, e sai de volta para a direita */
 .pc-lista[hidden] { display: none }
+.pc-lista > header { grid-row: 1 }
+.pc-lista-topo { grid-row: 2; display: flex; align-items: center; gap: var(--icone); padding: var(--item) 0 var(--icone); border-bottom: 1px solid var(--borda) }
+.pc-lista-topo[hidden] { display: none }
+.pc-lista-topo .capa-mini { flex: none; width: 72px; height: 72px; border-radius: var(--raio); object-fit: cover; background: var(--superficie-2); box-shadow: var(--sombra-2) }
+.pc-lista-topo .tx { min-width: 0; display: grid }
+.pc-lista-topo b { font-size: var(--texto-md); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.pc-lista-topo small { color: var(--texto-2); font-size: var(--texto-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.pc-lista-topo .rotulo { color: var(--sucesso); font-size: var(--texto-xs) }
+.pc-lista > .corpo { grid-row: 3 }
 .pc-lista > header { display: flex; align-items: center; gap: var(--icone); padding: var(--pad) 0 var(--item); min-height: var(--linha) }
 .pc-lista > header h2 { margin: 0; flex: 1; font-size: var(--texto-md) }
 .pc-lista .corpo { overflow: auto; overscroll-behavior: contain; scrollbar-width: none; padding: 0 0 var(--seguro-baixo) }
@@ -658,3 +772,57 @@ button.item-lista:disabled { opacity: .5; cursor: default }
 .item-lista .tag { flex: none; font-size: var(--texto-xs); color: var(--sucesso); background: var(--sucesso-suave); border-radius: var(--raio-pilula); padding: var(--micro-gap) var(--icone) }
 .volume-aparelho { padding: 0 0 var(--item) }
 .vertical .pc-corpo { padding-top: calc(var(--seguro-cima) + var(--alvo-sm)) }
+
+/* ---------- Controles do Mac (controles.js): uma linha por controle, barra arrastável como a do volume do player ---------- */
+.ctl-linha { display: flex; align-items: center; gap: var(--item); padding: var(--pad) 0; color: var(--texto-2); font-size: var(--texto-sm); font-variant-numeric: tabular-nums }
+.ctl-linha + .ctl-linha { border-top: 1px solid var(--superficie-2) }
+.ctl-ic { flex: none; display: grid; place-items: center; width: var(--alvo); height: var(--alvo) }
+.ctl-ic svg { width: 24px; height: 24px }
+.ctl-meio { flex: 1; min-width: 0; display: grid; gap: var(--item) }
+.ctl-topo { display: flex; align-items: center; justify-content: space-between; gap: var(--item); min-height: var(--alvo) }
+.ctl-nome { color: var(--texto) }
+.ctl-linha .trilho { position: relative; height: 6px; border-radius: var(--raio-pilula); background: var(--superficie-2); touch-action: none; cursor: pointer }
+.ctl-linha .trilho::before { content: ""; position: absolute; left: 0; right: 0; top: calc(-1 * (var(--pad) + var(--item))); bottom: calc(-1 * (var(--pad) + var(--item))) } /* área de toque de 54 pt de altura */
+.ctl-linha .trilho i { position: relative; display: block; height: 100%; width: 0; border-radius: inherit; background: var(--texto) }
+.ctl-linha.arrastando .trilho { height: 8px }
+.ctl-linha.arrastando .trilho i::after { content: ""; position: absolute; right: calc(-1 * var(--item) + 1px); top: 50%; width: 14px; height: 14px; translate: 0 -50%; border-radius: 50%; background: var(--texto); box-shadow: var(--sombra-2) }
+.ctl-linha.mudo .trilho i { background: var(--texto-2) }
+.ctl-num { flex: none; min-width: 3ch; text-align: right }
+.ctl-linha .btn[aria-pressed="true"] { background: var(--destaque-suave); color: var(--texto) }
+.ctl-linha.esq .barra { display: block; height: 10px }
+
+/* ---------- Monitor de Atividade (monitor.js): grade de cartões escuros, rótulo cinza em cima, número grande, barra fina embaixo ---------- */
+.mn-grade { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); grid-auto-rows: minmax(104px, 1fr); gap: var(--grade); min-height: 100%; padding-bottom: var(--pad); box-sizing: border-box }
+.mn-grade[data-n="1"] { grid-template-columns: minmax(0, 1fr) }
+.mn-grade[data-n="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)) }
+.mn-grade[data-n="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)) }
+.mn-grade[data-n="4"] { grid-template-columns: repeat(4, minmax(0, 1fr)) }
+.mn-grade:is([data-n="5"], [data-n="6"]) { grid-template-columns: repeat(3, minmax(0, 1fr)) }
+.mn-grade:is([data-n="7"], [data-n="8"]) { grid-template-columns: repeat(4, minmax(0, 1fr)) }
+.vertical .mn-grade { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(112px, auto); min-height: 0 }
+.vertical .mn-grade[data-n="1"] { grid-template-columns: minmax(0, 1fr) }
+.mn-cartao { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: var(--item); padding: var(--pad) var(--icone); border-radius: var(--raio-card); background: var(--superficie-2); min-width: 0; font-variant-numeric: tabular-nums; transition: background-color var(--mov-padrao) var(--curva-move) }
+.mn-topo { display: flex; align-items: center; gap: var(--item); min-width: 0; color: var(--texto-2); font-size: var(--texto-sm) }
+.mn-ic { flex: none; display: grid; place-items: center }
+.mn-ic svg { width: 16px; height: 16px }
+.mn-rot { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.mn-tag { margin-left: auto; flex: none; font-size: var(--texto-xs); color: var(--texto-2); white-space: nowrap }
+.mn-tag:empty { display: none }
+.mn-nota { grid-area: 3 / 1; align-self: end; line-height: 20px; font-size: var(--texto-xs); color: var(--texto-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.mn-nota:empty { display: none }
+.mn-num { align-self: center; font-size: var(--texto-2xl); font-weight: 700; line-height: 1; color: var(--texto); white-space: nowrap; font-variant-numeric: tabular-nums; transition: color var(--mov-padrao) var(--curva-move) }
+.mn-num small { font-size: var(--texto-md); font-weight: 600; color: var(--texto-2); margin-left: var(--micro-gap) }
+.mn-vel { font-size: var(--texto-xl) }
+.mn-vel.mn-menor { font-size: var(--texto-md); font-weight: 600; color: var(--texto-2) }
+.mn-barra { display: block; height: 4px; margin: var(--item) 0; border-radius: var(--raio-pilula); background: var(--superficie); overflow: hidden }
+.mn-barra[hidden] { display: block; visibility: hidden } /* a linha da barra fica reservada: o cartão sem barra tem a mesma altura dos outros */
+.mn-barra i { display: block; height: 100%; width: 100%; border-radius: inherit; background: var(--texto-2); transform: scaleX(0); transform-origin: left; transition: transform var(--mov-contar) var(--curva-entra), background-color var(--mov-padrao) var(--curva-move) }
+.mn-cartao.alto .mn-barra i { background: var(--aviso) }
+.mn-cartao.alto .mn-num { color: var(--aviso) }
+.mn-cartao.cheio .mn-barra i { background: var(--perigo) }
+.mn-cartao.cheio .mn-num { color: var(--perigo) }
+.mn-duas { align-self: center; display: grid; gap: var(--item) }
+.mn-linha { display: flex; align-items: center; gap: var(--item); min-width: 0 }
+.mn-seta { display: inline-flex; flex: none; color: var(--texto-2) }
+.mn-seta svg { width: 18px; height: 18px }
+.mn-vazio { height: auto; min-height: 120px; padding-bottom: var(--secao) }

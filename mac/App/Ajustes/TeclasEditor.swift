@@ -78,7 +78,9 @@ struct EditorDeTecla: View {
         VStack(alignment: .leading, spacing: Tema.Espaco.icone) {
             titulo(2, tipo.tituloDoPasso)
             switch tipo {
-            case .app: PassoApp(tela: tela, tecla: tecla)
+            case .app:
+                AjustesDaTecla(tela: tela, tecla: tecla)
+                PassoApp(tela: tela, tecla: tecla)
             case .atalho: PassoAtalho(tela: tela, tecla: tecla)
             case .tecla: PassoTeclado(tela: tela, tecla: tecla)
             case .comando: PassoComando(tela: tela, tecla: tecla)
@@ -257,7 +259,11 @@ private struct CelulaDeApp: View {
         let forma = RoundedRectangle(cornerRadius: Tema.Raio.normal, style: .continuous)
         Button(action: acao) {
             VStack(spacing: Tema.Espaco.mini) {
-                if let c = app.caminhoDoIcone {
+                if let desenho = app.svg {
+                    Svg(desenho, lado: Tema.Medida.appBusca / 2).foregroundColor(Tema.Cor.texto)
+                        .frame(width: Tema.Medida.appBusca, height: Tema.Medida.appBusca)
+                        .background(Tema.Cor.superficie2, in: RoundedRectangle(cornerRadius: Tema.Raio.icone, style: .continuous))
+                } else if let c = app.caminhoDoIcone {
                     Image(nsImage: IconesDeApps.imagem(c)).resizable().interpolation(.high)
                         .frame(width: Tema.Medida.appBusca, height: Tema.Medida.appBusca)
                         .clipShape(RoundedRectangle(cornerRadius: Tema.Raio.icone, style: .continuous))
@@ -297,21 +303,26 @@ private struct PassoApp: View {
         }
     }
 
+    /// As de fábrica (que filtram pela busca como os apps) ficam na frente.
+    private var deFabrica: [AppDoMac] { LogicaTeclas.filtrar(TeclasDeFabrica.todas, busca: tela.busca) { $0.nome } }
+
     @ViewBuilder private var lista: some View {
         let achados = LogicaTeclas.filtrar(catalogo.apps, busca: tela.busca) { $0.nome }
         if tela.busca.trimmingCharacters(in: .whitespaces).isEmpty {
             VStack(alignment: .leading, spacing: Tema.Espaco.item) {
+                titulinho("Do Deck").padding(.top, Tema.Espaco.micro)
+                GradeDeApps(apps: deFabrica, valor: tecla.valor, escolher: tela.escolherApp)
                 titulinho("Mais usados").padding(.top, Tema.Espaco.micro)
                 GradeDeApps(apps: catalogo.maisUsados, valor: tecla.valor, escolher: tela.escolherApp)
                 titulinho("Todos, de A a Z").padding(.top, Tema.Espaco.micro)
                 GradeDeApps(apps: catalogo.apps.filter { a in !catalogo.maisUsados.contains(a) }, valor: tecla.valor, escolher: tela.escolherApp)
             }
-        } else if achados.isEmpty {
+        } else if achados.isEmpty && deFabrica.isEmpty {
             Text(#"Nenhum app com "\#(tela.busca)" na pasta Aplicativos."#)
                 .font(.system(size: Tema.Texto.sm)).foregroundColor(Tema.Cor.texto2)
                 .padding(.vertical, Tema.Espaco.pad)
         } else {
-            GradeDeApps(apps: achados, valor: tecla.valor, escolher: tela.escolherApp)
+            GradeDeApps(apps: deFabrica + achados, valor: tecla.valor, escolher: tela.escolherApp)
         }
     }
 
@@ -321,10 +332,11 @@ private struct PassoApp: View {
         let col = GradeDeApps.colunas, h = MedidasDaBusca.celulaDeApp
         if tela.busca.trimmingCharacters(in: .whitespaces).isEmpty {
             let resto = catalogo.apps.filter { a in !catalogo.maisUsados.contains(a) }.count
-            return 2 * MedidasDaBusca.titulinho + 4 * Tema.Espaco.item + MedidasDaBusca.grade(itens: catalogo.maisUsados.count, colunas: col, linha: h)
+            return 3 * MedidasDaBusca.titulinho + 6 * Tema.Espaco.item + MedidasDaBusca.grade(itens: deFabrica.count, colunas: col, linha: h)
+                + MedidasDaBusca.grade(itens: catalogo.maisUsados.count, colunas: col, linha: h)
                 + MedidasDaBusca.grade(itens: resto, colunas: col, linha: h)
         }
-        return MedidasDaBusca.grade(itens: LogicaTeclas.filtrar(catalogo.apps, busca: tela.busca) { $0.nome }.count, colunas: col, linha: h)
+        return MedidasDaBusca.grade(itens: deFabrica.count + LogicaTeclas.filtrar(catalogo.apps, busca: tela.busca) { $0.nome }.count, colunas: col, linha: h)
     }
 }
 
@@ -400,17 +412,20 @@ private struct LinhaDeAtalho: View {
 
 private struct Chip: View {
     var texto: String
+    var escolhido = false
     var acao: () -> Void
 
     var body: some View {
         Button(action: acao) {
-            Text(texto).font(.system(size: Tema.Texto.xs)).foregroundColor(Tema.Cor.texto2)
+            Text(texto).font(.system(size: Tema.Texto.xs)).foregroundColor(escolhido ? Tema.Cor.texto : Tema.Cor.texto2)
                 .padding(.horizontal, Tema.Espaco.icone)
                 .frame(minHeight: Tema.Medida.chipAlt)
-                .background(Tema.Cor.superficie2, in: Capsule())
+                .background(escolhido ? Tema.Cor.sucessoSuave : Tema.Cor.superficie2, in: Capsule())
+                .overlay { if escolhido { Capsule().strokeBorder(Tema.Cor.led, lineWidth: Tema.Traco.fino) } }
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)
+        .accessibilityAddTraits(escolhido ? .isSelected : [])
     }
 }
 
@@ -426,11 +441,11 @@ private struct PassoTeclado: View {
             Button(action: tela.alternarGravacao) {
                 Quebra(espaco: Tema.Espaco.item) {
                     if tela.ouvindo {
-                        Text("Aperte a combinação no teclado. Esc cancela").font(.system(size: Tema.Texto.sm)).foregroundColor(Tema.Cor.texto)
+                        Text("Aperte a combinação no teclado. Esc cancela").font(.system(size: Tema.Texto.pequeno)).foregroundColor(Tema.Cor.texto)
                     } else if !tecla.valor.isEmpty {
                         ForEach(Array(CombinacaoEmTexto.pecas(tecla.valor).enumerated()), id: \.offset) { _, p in Kbd(texto: p) }
                     } else {
-                        Text("Clique aqui e aperte as teclas").font(.system(size: Tema.Texto.sm)).foregroundColor(Tema.Cor.texto2)
+                        Text("Clique aqui e aperte as teclas").font(.system(size: Tema.Texto.pequeno)).foregroundColor(Tema.Cor.texto2)
                     }
                 }
                 .padding(.vertical, Tema.Espaco.micro)
@@ -445,6 +460,9 @@ private struct PassoTeclado: View {
                 .contentShape(forma)
             }
             .buttonStyle(.plain)
+            if tela.ouvindo && !tela.capturaGlobal {
+                ajuda("O Deck não conseguiu pegar a tecla antes de outros apps. Libere a Acessibilidade em Acessos do Mac e grave de novo.")
+            }
             ajuda("Serve para atalho de qualquer app, mesmo em segundo plano. Exemplos:")
             Quebra(espaco: Tema.Espaco.item) {
                 ForEach(Self.exemplos, id: \.0) { v, d in Chip(texto: d) { tela.escolherCombinacao(v) } }
@@ -457,7 +475,7 @@ private struct PassoTeclado: View {
 private struct Kbd: View {
     var texto: String
     var body: some View {
-        Text(texto).font(.system(size: Tema.Texto.xs)).foregroundColor(Tema.Cor.texto)
+        Text(texto).font(.system(size: Tema.Texto.pequeno)).foregroundColor(Tema.Cor.texto)
             .padding(.horizontal, Tema.Espaco.item)
             .frame(minWidth: Tema.Medida.chipAlt, minHeight: Tema.Medida.chipAlt)
             .background {
@@ -479,7 +497,9 @@ private struct PassoComando: View {
                                                 ("Esvaziar Lixeira", #"osascript -e 'tell app "Finder" to empty trash'"#)]
 
     var body: some View {
+        let ligaEDesliga = tecla.desligar != nil
         VStack(alignment: .leading, spacing: Tema.Espaco.icone) {
+            if ligaEDesliga { Text("Comando para ligar").tatile(Tema.Texto.xs, .semibold, Tema.Cor.texto2) }
             CampoDeComando(texto: Binding(get: { tecla.valor }, set: { tela.escolherComando($0) }))
                 .font(.system(size: Tema.Texto.sm, design: .monospaced))
                 .foregroundColor(Tema.Cor.texto)
@@ -489,11 +509,12 @@ private struct PassoComando: View {
                 .frame(minHeight: Tema.Medida.comandoMin, alignment: .topLeading)
                 .background(Tema.Cor.telaFundo, in: RoundedRectangle(cornerRadius: Tema.Raio.sm, style: .continuous))
                 .overlay { RoundedRectangle(cornerRadius: Tema.Raio.sm, style: .continuous).strokeBorder(Tema.Cor.borda, lineWidth: Tema.Traco.fino) }
-                .accessibilityLabel("Comando")
+                .accessibilityLabel(ligaEDesliga ? "Comando para ligar" : "Comando")
+            LigaEDesliga(tela: tela, tecla: tecla)
             HStack(spacing: Tema.Espaco.item) {
                 Text(tela.saidaDoTeste).font(.system(size: Tema.Texto.xs, design: .monospaced)).foregroundColor(Tema.Cor.texto2).lineLimit(2)
                 Spacer(minLength: 0)
-                Button("Testar agora", action: tela.testarComando).buttonStyle(EstiloDoBotao())
+                Button(ligaEDesliga ? "Testar (liga ou desliga)" : "Testar agora", action: tela.testarComando).buttonStyle(EstiloDoBotao())
             }
             ajuda("Roda no zsh do Mac. Prontos para usar:")
             Quebra(espaco: Tema.Espaco.item) {

@@ -6,8 +6,7 @@ struct ArmazemConfig {
     var nomeMac: String
 
     static var urlPadrao: URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Application Support/Deck/config.json")
+        Variante.atual.pastaDeDados().appendingPathComponent("config.json")
     }
 
     init(url: URL = ArmazemConfig.urlPadrao, nomeMac: String = "Mac") {
@@ -82,9 +81,9 @@ struct ArmazemConfig {
 
     /// Chaves que o app conhece em cada nível. O resto, vindo do arquivo antigo, volta para o novo.
     private static let conhecidas: [String: Set<String>] = [
-        "config": ["versao", "perfis", "perfilAtivo", "comp", "contas", "blocos", "nomeMac", "porta", "codigoAcesso", "teclas"],
+        "config": ["versao", "perfis", "perfilAtivo", "comp", "contas", "blocos", "monitor", "controles", "nomeMac", "porta", "codigoAcesso", "teclas"],
         "perfil": ["id", "nome", "teclas"],
-        "tecla": ["id", "nome", "tipo", "valor", "estado", "icone"],
+        "tecla": ["id", "nome", "tipo", "valor", "estado", "icone", "desligar"],
         "conta": ["id", "nome", "conta", "perfil", "mostrar"],
     ]
 

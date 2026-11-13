@@ -233,7 +233,8 @@ const TIPOS_MAC = {
   comando: { nome: 'Comando', diz: 'Roda no Terminal', ic: SVG.terminal },
   atalho: { nome: 'Atalho', diz: 'Roda um atalho', ic: SVG.raio },
 };
-const NOMES_KBD = { ctrl: '⌃ control', opt: '⌥ option', cmd: '⌘ command', shift: '⇧ shift' };
+const NOMES_KBD = { ctrl: '⌃ control', opt: '⌥ option', cmd: '⌘ command', shift: '⇧ shift', fn: 'fn' };
+// montar a combinação escolhendo as teclas na tela (atalho que outro app já usa e o gravador não alcança). Mesma ordem do Mac
 // todos os apps da pasta Aplicativos (de mentira). Os com ícone vêm de APPS, o resto ganha a inicial
 const TODOS_APPS = [...APPS.map(a => a.nome), 'Ableton Live', 'App Store', 'Arc', 'Atalhos', 'Calculadora', 'Contatos', 'Discord', 'FaceTime', 'Figma', 'Final Cut Pro', 'Fotos', 'GarageBand', 'Google Chrome', 'Lembretes', 'Logic Pro', 'Mail', 'Mapas', 'Mensagens', 'Música', 'Notion', 'OBS', 'Obsidian', 'Prévia', 'ProPresenter', 'Slack', 'Ajustes do Sistema', 'Visual Studio Code', 'Xcode', 'Zoom'].sort((a, b) => a.localeCompare(b, 'pt-BR'));
 const ATALHOS = ['Hora do Dia', 'Modo Ensaio', 'Ligar Luzes', 'Enviar Mensagem', 'Iniciar Gravação', 'Foco: Trabalho', 'Converter Imagem', 'Dividir Conta'];

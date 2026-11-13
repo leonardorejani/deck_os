@@ -9,9 +9,22 @@ struct PaineisReais: ProvedorPaineis {
     let armazem: ArmazemDeConfig
     let agregador: Agregador
     let agenda: FonteAgenda
+    var ponteQR: PonteWhatsAppQR? = nil
+    var abridorWhatsApp: AbridorWhatsApp? = nil
 
     func estado() -> Estado { agregador.estado(config: armazem.ler()) }
     func whatsapp() -> [ConversaWhatsApp] { agregador.conversasWhatsApp() }
+    func fotoWhatsApp(arquivo: String) -> MidiaBaixada? { ponteQR?.foto(arquivo: arquivo) }
+    func midiaWhatsApp(chat: String, id: String) -> ResultadoMidia {
+        guard let ponteQR else { return .erro("O WhatsApp por QR não está ligado.") }
+        return ponteQR.midia(chat: chat, id: id)
+    }
+    func abrirConversaWhatsApp(id: String) -> AberturaDeConversa {
+        guard let abridorWhatsApp else { return .falhou("Não consegui abrir a conversa.") }
+        // O id vem do iPhone, mas só vale o que está na lista de agora: o número sai da conversa, nunca do pedido.
+        guard let c = agregador.conversasWhatsApp().first(where: { $0.id == id }) else { return .falhou("Não achei essa conversa. Abra a lista de novo.") }
+        return abridorWhatsApp.abrirConversa(numero: c.numero, grupo: c.grupo)
+    }
     func sessoes() -> [Sessao] { agregador.sessoes() }
 
     func agenda(de: String, dias: Int) -> [Evento] {
@@ -200,20 +213,38 @@ enum Ligacao {
                          executor: any Executor = ExecutorShell(), fontes: Fontes? = nil,
                          agenda: FonteAgenda = .viva(), rodizio: Rodizio = Rodizio(),
                          certificadoCA: URL? = nil, contaSpotify: ContaSpotify? = nil,
-                         apps: (any ProvedorDeApps)? = nil) -> Roteador {
+                         apps: (any ProvedorDeApps)? = nil, criadorDeAgenda: (any CriadorDeAgenda)? = nil,
+                         usoMedido: (@Sendable ([ContaIA], Date) -> [String: UsoConta])? = nil,
+                         ponteQR: PonteWhatsAppQR? = nil) -> Roteador {
         // A mesma decisão de origem do WhatsApp serve a leitura (estado) e a abertura (tecla e "Abrir no Mac").
         let origemWhats = OrigemWhatsApp(executor: executor, banco: FonteWhatsApp.caminhoPadrao(casa: NSHomeDirectory()),
                                          config: { armazem.ler().whatsapp })
         let complemento = contaSpotify.map { ComplementoSpotify(conta: $0) }
-        let agregador = Agregador(fontes: fontes ?? .vivas(executor: executor, origemWhatsApp: origemWhats, complementoSpotify: complemento))
+        var fontesDoMac = fontes ?? .vivas(executor: executor, origemWhatsApp: origemWhats, ponteQR: ponteQR, complementoSpotify: complemento)
+        if let usoMedido {
+            // O uso medido por token (o que o Mac mostra em Uso das IAs) também vale para o iPhone.
+            let lerArquivos = fontesDoMac.uso
+            fontesDoMac.uso = { contas, agora in FonteUso.mesclar(lerArquivos(contas, agora), medidos: usoMedido(contas, agora)) }
+        }
+        let agregador = Agregador(fontes: fontesDoMac)
         let abridor = AbridorWhatsApp(origem: origemWhats, executor: executor)
         return Roteador(
-            paineis: PaineisReais(armazem: armazem, agregador: agregador, agenda: agenda),
+            paineis: PaineisReais(armazem: armazem, agregador: agregador, agenda: agenda, ponteQR: ponteQR, abridorWhatsApp: abridor),
             teclas: ExecutorAcoes(shell: executor, whatsappWeb: { abridor.abrir() }), spotify: SpotifyReal(executor: executor, conta: contaSpotify, complemento: complemento),
             config: armazem, pareamento: pareamento, pagina: pagina, rodizio: rodizio, certificadoCA: certificadoCA,
-            reunioes: AbridorDeReuniao(shell: executor),
+            reunioes: AbridorDeReuniao(shell: executor), criadorDeAgenda: criadorDeAgenda ?? Self.criadorPadrao(),
             abridorDeSessao: AbridorDeSessaoNoMac(raiz: URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".claude/jobs"), shell: executor),
-            apps: apps ?? AppsDoMac(pastaDeCache: AppsDoMac.pastaDeCachePadrao(), executor: executor))
+            apps: apps ?? AppsDoMac(pastaDeCache: AppsDoMac.pastaDeCachePadrao(), executor: executor),
+            controles: ControlesReais(executor: executor), processos: ProcessosReais(executor: executor))
+    }
+
+    /// Só o Mac grava na agenda: no Linux (CI) a rota fica sem criador e responde 404.
+    static func criadorPadrao() -> (any CriadorDeAgenda)? {
+        #if canImport(EventKit) && canImport(CoreGraphics)
+        return CriadorEventKit()
+        #else
+        return nil
+        #endif
     }
 
     /// Nome do Mac para a config padrão ("MacBook do Leo"), ou "Mac" se o sistema não responde.

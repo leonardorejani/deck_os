@@ -145,6 +145,20 @@ final class TokenClaudeTestes: XCTestCase {
         XCTAssertNil(sem["claude-leo"]?.semana)
     }
 
+    /// Conta de token (iacall) sem número ficava "Sem medição" sem dizer por quê. Agora cada causa tem o seu texto.
+    func testContaSemNumeroDizPorQue() async {
+        let casa = FileManager.default.temporaryDirectory.appendingPathComponent("deck-vazio-\(UUID().uuidString)")
+        let iacall = ContaIA(id: "claude-token-1", nome: "Claude", conta: "iacall", perfil: nil, mostrar: nil)
+        let semToken = await PainelUso.lerUsoComMotivos(contas: [iacall], casa: casa, cofre: CofreFalso(), leitor: LeitorFalso(resultado: .recusado), agora: Date())
+        XCTAssertEqual(semToken.motivos["claude-token-1"], PainelUso.motivoSemToken)
+        let cofre = CofreFalso(); try? cofre.guardar("t", conta: "claude-token-1")
+        let recusado = await PainelUso.lerUsoComMotivos(contas: [iacall], casa: casa, cofre: cofre, leitor: LeitorFalso(resultado: .recusado), agora: Date())
+        XCTAssertEqual(recusado.motivos["claude-token-1"], PainelUso.motivo(.recusado))
+        let ok = await PainelUso.lerUsoComMotivos(contas: [iacall], casa: casa, cofre: cofre, leitor: LeitorFalso(resultado: .ok(UsoDoToken(semana: 3, renova: nil))), agora: Date())
+        XCTAssertNil(ok.motivos["claude-token-1"])
+        XCTAssertEqual(ok.usos["claude-token-1"]?.semana, 3)
+    }
+
     func testServicoDoTokenSegueOTipoDoPerfil() {
         XCTAssertEqual(TokenDoPerfil.servico(perfil: ["type": "oauth_token", "keychainService": "A"]), "A")
         XCTAssertEqual(TokenDoPerfil.servico(perfil: ["type": "native_archive", "keychainService": "X-archive", "measureKeychainService": "M"]), "M")
