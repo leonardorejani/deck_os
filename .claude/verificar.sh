@@ -12,6 +12,8 @@ bash scripts/teste/abrir-deck.test.sh | tail -1
 bash scripts/teste/assinatura.test.sh | tail -1
 # a bancada tem dados, porta e Chaveiro próprios e nunca encosta nos do Deck de verdade
 bash scripts/teste/bancada.test.sh | tail -1
+# repo público: sem dado real, sem binário versionado, uma versão só (arquivo VERSAO)
+bash scripts/teste/seguranca-build.test.sh | tail -1
 # auditores da tatile (design system do autor): só rodam onde a skill está instalada
 if [ -d ~/.claude/skills/tatile ]; then
   node ~/.claude/skills/tatile/auditor/auditar.mjs prototipo | tail -1
