@@ -19,9 +19,12 @@ struct AgendaDoMac {
     /// Sessão que durou isso já foi uma conversa de verdade: a próxima tentativa volta para a espera mínima.
     static let sessaoBoa: TimeInterval = 20
     /// iPhone que atendeu mas não tem o serviço (app fechado, ou anúncio velho que o macOS guardou): não é aperto de mão
-    /// falhando, então não cresce. Sem isto, o Mac já estava no teto de 30 s quando o app abria e o pareamento (que espera
-    /// 15 s) acabava antes de ele voltar (diário de 13/11/2026).
+    /// falhando, então a espera começa curta. Sem isso, o Mac já estava no teto de 30 s quando o app abria e o pareamento (que
+    /// espera 15 s) acabava antes de ele voltar (diário de 13/11/2026). Mas com o app fechado por horas, 5 s fixos davam ~12
+    /// conexões por minuto para sempre (810 no log de produção, 16/11/2026): depois da primeira, cresce em degraus até 30 s.
+    /// Quem volta a anunciar depois de `silencioQueZera` (app reaberto) zera, então o pareamento continua rápido.
     static let esperaSemServico: TimeInterval = 5
+    static let degrausSemServico: [TimeInterval] = [5, 10, 20, 30]
     /// Connect que nem abriu o enlace (didFailToConnect, tempo limite): o iPhone pode estar só com o Bluetooth reiniciando, e
     /// no diário de 13/11/2026 a espera dobrando até 30 s fazia o Mac chegar depois de o pareamento (15 s) desistir. Fica
     /// abaixo desse prazo. Quem abre o enlace e falha no aperto de mão continua dobrando até o teto.
@@ -35,6 +38,7 @@ struct AgendaDoMac {
     private var esperas: [String: TimeInterval] = [:]
     private var ultimoAnuncio: [String: Date] = [:]
     private var falhasSemPedido: [String: Int] = [:]
+    private var semServicoSeguidos: [String: Int] = [:]
 
     /// O iPhone `id` anunciou agora. Se ele sumiu por `silencioQueZera` e voltou, a espera acumulada some. O tempo de
     /// conexão aberta não conta como silêncio (o iPhone não anuncia conectado): `terminou` marca o fim dela.
@@ -42,6 +46,7 @@ struct AgendaDoMac {
         if let visto = ultimoAnuncio[id], !ocupados.contains(id), agora.timeIntervalSince(visto) >= Self.silencioQueZera {
             esperas[id] = nil
             proxima[id] = nil
+            semServicoSeguidos[id] = nil
         }
         ultimoAnuncio[id] = agora
     }
@@ -65,9 +70,12 @@ struct AgendaDoMac {
         ocupados.remove(id)
         ultimoAnuncio[id] = agora
         if semServico {
-            proxima[id] = agora.addingTimeInterval(Self.esperaSemServico)
+            let n = semServicoSeguidos[id] ?? 0
+            semServicoSeguidos[id] = n + 1
+            proxima[id] = agora.addingTimeInterval(Self.degrausSemServico[min(n, Self.degrausSemServico.count - 1)])
             return
         }
+        semServicoSeguidos[id] = nil
         let espera: TimeInterval
         if let duracao, duracao >= Self.sessaoBoa {
             espera = Self.esperaMinima
