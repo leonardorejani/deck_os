@@ -117,6 +117,13 @@ function vistaEsqueleto() {
     perfilAtivo: '', perfis: [], acesas: [], selos: {}, agenda: null, reuniao: null, whatsapp: null, monitor: null,
   };
 }
+/* Parcial: o esqueleto do resto com as teclas de verdade, para quando a config chega antes do estado. */
+function vistaParcial() {
+  const base = vistaEsqueleto(), perfil = (config.perfis || []).find(p => p.id === config.perfilAtivo);
+  return { ...base, parcial: true, comp: ['b', 'c'].includes(config.comp) ? config.comp : 'a', blocos: { ...base.blocos, ...config.blocos, uso: base.blocos.uso },
+    teclas: perfil?.teclas || [], perfilAtivo: config.perfilAtivo, perfis: (config.perfis || []).map(p => ({ id: p.id, nome: p.nome, n: p.teclas.length })) };
+}
+function mostrarParcial() { if (esqueletoPronto && V?.carregando && !V.parcial) { V = vistaParcial(); atualizar() } }
 const semMusica = () => !V.spotify;
 const usoVisivel = () => V.uso;
 
@@ -295,7 +302,7 @@ const porPagina = () => V.comp === 'b' ? (posicao === 'vertical' ? 6 : 9) : posi
 
 /* ---------- desenho ---------- */
 // o que, se mudar, obriga a refazer a tela inteira
-const chaveLayout = () => JSON.stringify([posicao, V.comp, monitorItens(), !!V.carregando, V.blocos.sessoes !== false, usoVisivel().length > 0, V.perfilAtivo, V.perfis, V.teclas.map(t => [t.id, t.nome, t.tipo, t.valor, t.icone, acendeTecla(t)]), appsMac.versao]);
+const chaveLayout = () => JSON.stringify([posicao, V.comp, monitorItens(), !!V.carregando, !!V.parcial, V.blocos.sessoes !== false, usoVisivel().length > 0, V.perfilAtivo, V.perfis, V.teclas.map(t => [t.id, t.nome, t.tipo, t.valor, t.icone, acendeTecla(t)]), appsMac.versao]);
 const chaveTeclas = () => JSON.stringify(V.teclas.map(t => { const i = infoTecla(t); return [i.acesa, i.selo, i.hora, i.reuniao, i.fase] }));
 const chavePlayer = () => { const s = V.spotify; return s ? JSON.stringify([s.faixa, s.artista, s.album, s.capaId, s.cores, s.duracao, temModos(s), conectado(s)]) : null };
 
@@ -305,6 +312,7 @@ function render() {
   const sem = `${semMusica() ? 'sem-musica' : ''} ${V.blocos.sessoes === false ? 'sem-sessoes' : ''} ${usoVisivel().length ? '' : 'sem-uso'}`;
   const c = $('#conteudo');
   c.classList.toggle('carregando', !!V.carregando);
+  c.classList.toggle('parcial', !!V.parcial);
   c.setAttribute('aria-busy', String(!!V.carregando));
   const cm = monitorItens().length ? ' com-monitor' : '';
   c.innerHTML = V.comp === 'c'
@@ -878,16 +886,23 @@ function pintarGlobal() {
 }
 const precisaConfig = e => !pendentes && !gesto?.arrastando && (!config || config.perfilAtivo !== e.perfilAtivo || config.comp !== e.comp || config.nomeMac !== e.nomeMac
   || JSON.stringify(config.blocos) !== JSON.stringify(e.blocos) || ++tiquesConfig % 5 === 0); // e de vez em quando: teclas editadas no Mac. Nunca por cima de uma gravação a caminho
-let esqueletoDesde = 0, esqueletoTimer = 0, configFalhou = false;
+let configFalhou = false, esqueletoDesde = 0, esqueletoTimer = 0, esqueletoPronto = false, configEmVoo = null;
+const pedirConfig = () => configEmVoo ??= canal.config().finally(() => { configEmVoo = null }); // nunca dois GET /api/config ao mesmo tempo
 let ultimoOk = performance.now(); // a última resposta boa do Mac
 async function passo() {
   try {
+    // Primeira abertura: sem config não há teclas, e ela não depende do estado (que no Mac espera a leitura do Spotify).
+    // Pede as duas juntas e, se a config chegar primeiro, as teclas já saem de verdade (mostrarParcial).
+    if (!config) {
+      const gen = geracaoConfig;
+      pedirConfig().then(nova => { if (!config && !estado && gen === geracaoConfig && !pendentes) { config = nova; configFalhou = false; mostrarParcial() } }, () => {}); // o erro é tratado abaixo, quando alguém espera por ela
+    }
     const e = await canal.estado();
     estado = e; falhas = 0; ultimoOk = performance.now(); offline = false; semAcesso = false;
     if (e.nomeMac) guardar('deck-nome-mac', e.nomeMac);
     if (precisaConfig(e)) {
       const gen = geracaoConfig;
-      try { const nova = await canal.config(); if (gen === geracaoConfig && !pendentes) config = nova; configFalhou = false }
+      try { const nova = await pedirConfig(); if (gen === geracaoConfig && !pendentes) config = nova; configFalhou = false }
       catch (er) {
         if (er.status === 401) throw er;
         // sem config não há teclas: avisa uma vez e continua tentando a cada passo
@@ -906,13 +921,13 @@ async function passo() {
   }
 }
 function mostrarVista() {
-  // o esqueleto, depois de aparecer, fica pelo menos 400 ms (resposta que chega logo depois não pisca a tela)
-  const resta = esqueletoDesde ? esqueletoDesde + 400 - performance.now() : 0;
+  // o esqueleto, depois de aparecer, fica pelo menos 200 ms (resposta que chega logo depois não pisca a tela)
+  const resta = esqueletoDesde ? esqueletoDesde + 200 - performance.now() : 0;
   if (resta > 0) { clearTimeout(esqueletoTimer); esqueletoTimer = setTimeout(mostrarVista, resta); return }
-  const eraEsqueleto = !!V?.carregando;
+  const eraEsqueleto = !!V?.carregando, eraParcial = !!V?.parcial; // parcial já mostra as teclas reais: sem fade por cima delas
   V = vistaReal(); guardarForma(); esqueletoDesde = 0;
   atualizar();
-  if (eraEsqueleto) $('#conteudo').animate([{ opacity: 0 }, { opacity: 1 }], { duration: parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--mov-rapido')) || 180 });
+  if (eraEsqueleto && !eraParcial) $('#conteudo').animate([{ opacity: 0 }, { opacity: 1 }], { duration: parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--mov-rapido')) || 180 });
 }
 let emVoo = null, acordar = null, lacoAtivo = false;
 const buscar = () => emVoo ??= passo().finally(() => { emVoo = null }); // nunca dois pedidos de estado ao mesmo tempo
@@ -936,8 +951,9 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && !s
 // carregando: nada nos primeiros 200 ms, depois o esqueleto com a forma da última visita
 posicionar();
 setTimeout(() => {
+  esqueletoPronto = true;
   if (V || offline || semAcesso) return;
-  V = vistaEsqueleto(); esqueletoDesde = performance.now(); atualizar();
-}, 200);
+  V = config ? vistaParcial() : vistaEsqueleto(); esqueletoDesde = performance.now(); atualizar();
+}, 100);
 pintarGlobal();
 laco();

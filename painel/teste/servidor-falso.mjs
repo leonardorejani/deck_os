@@ -53,6 +53,7 @@ const padrao = () => ({
   config500: false,          // GET /api/config responde erro 500
   rejeitar: '',              // PUT /api/config recusa com esse motivo (422), como a validação do Mac
   rodizio: '',               // trocar (o primeiro pedido troca o código) | botao (só um pedido de tecla troca)
+  atrasoConfig: 0,           // ms de espera antes de responder o GET /api/config
   atrasoGravar: 0,           // ms de espera antes de o Mac aceitar o PUT /api/config
   atrasoAcao: 0,             // ms de espera antes de o Mac fazer uma tecla (POST /api/botao) ou um comando do Spotify
   spotifyRecusa: '',         // todo comando do Spotify é recusado (422) com esse motivo
@@ -349,6 +350,7 @@ async function api(req, res, url) {
     if (!res.writableEnded && !res.destroyed) json(res, 200, estado());
     return;
   }
+  if (rota === '/api/config' && m === 'GET' && c.atrasoConfig) await new Promise(r => setTimeout(r, c.atrasoConfig));
   if (rota === '/api/config' && m === 'GET') return c.config500 ? json(res, 500, { erro: 'config quebrada' }) : json(res, 200, configCompleta());
   if (rota === '/api/config' && m === 'PUT') {
     const nova = await lerCorpo(req); cont.configsGravadas.push(nova);
