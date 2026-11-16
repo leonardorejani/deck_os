@@ -11,7 +11,7 @@ function alvoDoVolume(s) {
   return tem[pref] ? pref : tem.spotify ? 'spotify' : tem.mac ? 'mac' : null;
 }
 const volumeDe = (s, alvo) => alvo === 'mac' ? s.volumeMac : s.volume;
-const chaveExtras = s => JSON.stringify([alvoDoVolume(s), s.volume != null && s.volumeMac != null, conectado(s)]); // o que muda a forma da linha (o valor da barra não)
+const chaveExtras = s => JSON.stringify([alvoDoVolume(s), s.volume != null && s.volumeMac != null, conectado(s), textoLimite(s)]); // o que muda a forma da linha (o valor da barra não)
 
 /* ---------- repetir: com o Spotify conectado são três jeitos (nada, a lista, só a música) ---------- */
 const modoRepetir = s => conectado(s) ? (s.repetirFaixa ? 'faixa' : s.repetir ? 'contexto' : 'nao') : (s.repetir ? 'contexto' : 'nao');
@@ -31,6 +31,12 @@ function curtir() {
   return enfileirarSpotify(async () => { try { await canal.curtir(quer); await atualizarJa() } catch (e) { desfazerSpotify(); tratarErro(e) } });
 }
 
+/* O Spotify limitou as leituras da API (429): o Mac manda até quando, e o painel diz em vez de falhar calado. Tocar, pausar e pular seguem pelo Mac. */
+function textoLimite(s) {
+  const ate = s?.limitadoAte; if (!(ate * 1000 > Date.now())) return '';
+  return `O Spotify limitou as leituras até ${new Date(ate * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}. Tocar, pausar e pular continuam funcionando.`;
+}
+
 /* ---------- a linha de extras do player grande ---------- */
 function extrasPlayerHTML(s) {
   const alvo = alvoDoVolume(s), login = conectado(s);
@@ -40,7 +46,8 @@ function extrasPlayerHTML(s) {
       ${dois ? `<button class="vol-alvo" data-vol-alvo aria-label="${rot}. Toque para mexer no volume do ${alvo === 'mac' ? 'Spotify' : 'Mac'}">${SVG.volume}<small>${alvo === 'mac' ? 'Mac' : 'Spotify'}</small></button>` : `<span class="vol-icone" aria-hidden="true">${SVG.volume}</span>`}
       <span class="trilho" role="slider" aria-label="${rot}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${v}"><i style="width:${v}%"></i></span><span class="vol-num">${v}</span></div>` : '';
   const botoes = login ? `<button class="extra" data-curtir aria-label="Curtir" aria-pressed="${!!s.curtida}">${SVG.curtir}</button><button class="extra" data-aparelhos aria-label="Tocar em outro aparelho">${SVG.aparelhos}</button><button class="extra" data-fila aria-label="Fila">${SVG.fila}</button>` : '';
-  return `<div class="pc-extras">${vol}${botoes}</div>`;
+  const limite = login ? textoLimite(s) : '';
+  return `<div class="pc-extras">${vol}${botoes}</div>${limite ? `<p class="pc-limite" role="status">${esc(limite)}</p>` : ''}`;
 }
 /* o valor que a barra mostra: o que o dedo pôs, até o Mac confirmar (ou desistir, depois de JANELA_OTM) */
 const otmVol = {};
@@ -125,6 +132,7 @@ function pintarListaPlayer(rolarPara) {
   $$('#pc-lista-abas [data-aba]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.aba === lp.aba)));
   pintarTopoFila();
   corpo.setAttribute('aria-busy', String(!lp.dados && !lp.erro));
+  if (lp.erro && !lp.semLogin && textoLimite(V.spotify)) { corpo.innerHTML = `<div class="vazio-bloco"><strong>Spotify limitou as leituras</strong><span>${esc(textoLimite(V.spotify))}</span></div>`; return }
   if (lp.erro) { corpo.innerHTML = lp.semLogin ? `<div class="vazio-bloco"><strong>Spotify não conectado</strong><span>${esc(lp.erro)}</span></div>` : erroLista(lp.erro, 0); return }
   if (!lp.dados) { if (!corpo.querySelector('.esq-lista')) corpo.innerHTML = esqueletoLinhas(); return }
   const y = rolarPara ?? corpo.scrollTop;

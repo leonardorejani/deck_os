@@ -65,6 +65,7 @@ const padrao = () => ({
   sessaoAbreRecusa: '',      // POST /api/sessoes/<id>/abrir falha (422) com esse motivo
   spotifyExtras: 'nao',      // nao (Mac antigo: sem volume nem login) | volume (só o do Spotify) | dois (Spotify e Mac) | login (conectado: curtir, aparelhos, fila e repetir só a música)
   volume: 60, volumeMac: 40, curtida: false, repetirFaixa: false, aparelhoAtivo: 'd-mac', volumeAparelho: 35,
+  spotifyLimite: 0,          // segundos de bloqueio do Spotify (429): o estado traz limitadoAte e a fila diz que é para esperar
   filaVazia: false,          // GET /api/spotify/fila devolve a fila sem próximas
   filaContexto: '',          // nome da lista que toca ("Próximas de: ..."). Vazio: o Mac não soube dizer
   filaRecusa: '',            // POST /api/spotify/pular falha (422) com esse motivo
@@ -266,7 +267,7 @@ function estadoSpotify() {
   return { tocando, faixa: X(c.faixa), artista: X(c.artista), posicao: Math.min(221, Math.floor(s)), duracao: 221, capaId: X('capa-1'), cores: c.xss ? [X('#963030'), X('#285A64')] : ['#963030', '#285A64'],
     ...(c.spotifyModos === 'sem' ? {} : { album: X(c.album), repetir: c.repetir, aleatorio: c.aleatorio }),
     ...(c.spotifyExtras === 'nao' ? {} : { volume: c.volume, ...(c.spotifyExtras === 'volume' ? {} : { volumeMac: c.volumeMac }),
-      ...(c.spotifyExtras === 'login' ? { conectado: true, curtida: c.curtida, repetirFaixa: c.repetirFaixa, aparelho: aparelhos().find(a => a.ativo).nome } : { conectado: false }) }) };
+      ...(c.spotifyExtras === 'login' ? { conectado: true, ...(c.spotifyLimite ? { limitadoAte: Math.ceil(Date.now() / 1000) + c.spotifyLimite } : {}), curtida: c.curtida, repetirFaixa: c.repetirFaixa, aparelho: aparelhos().find(a => a.ativo).nome } : { conectado: false }) }) };
 }
 function estado() {
   const semMed = c.uso === 'sem-medicao';
@@ -403,7 +404,7 @@ async function api(req, res, url) {
     c.filaPulou = (c.filaPulou || 0) + n; c.faixa = alvo.faixa;
     return json(res, 200, { ok: true });
   }
-  if (rota === '/api/spotify/fila' && m === 'GET') { cont.filas = (cont.filas || 0) + 1; if (semLogin()) return; return json(res, 200, FILA()) }
+  if (rota === '/api/spotify/fila' && m === 'GET') { cont.filas = (cont.filas || 0) + 1; if (semLogin()) return; if (c.spotifyLimite) return json(res, 429, { erro: 'O Spotify pediu para esperar um pouco. Tente de novo em instantes.' }); return json(res, 200, FILA()) }
   if (rota.startsWith('/api/spotify/') && m === 'POST') {
     const acao = rota.slice(13);
     if (c.atrasoAcao) await new Promise(r => setTimeout(r, c.atrasoAcao));

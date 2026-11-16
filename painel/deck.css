@@ -761,6 +761,7 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; text
 .pc-extras { display: flex; align-items: center; gap: var(--item); min-width: 0 }
 .pc-extras .extra { flex: none; width: var(--alvo); height: var(--alvo); display: grid; place-items: center; border: 0; border-radius: 50%; background: none; color: var(--texto); cursor: pointer }
 .pc-extras .extra svg { width: 22px; height: 22px }
+.pc-limite { margin: 0; font-size: var(--texto-sm); color: var(--texto-2); overflow-wrap: anywhere }
 .pc-extras .extra[aria-pressed="true"] { background: var(--sucesso-suave); color: var(--sucesso) }
 .pc-extras .extra[aria-pressed="true"] svg { fill: currentColor }
 .volume { flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--item); color: var(--texto-2); font-size: var(--texto-sm); font-variant-numeric: tabular-nums }

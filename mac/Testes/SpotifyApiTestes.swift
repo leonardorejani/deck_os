@@ -883,18 +883,37 @@ final class SpotifyApiTestes: XCTestCase {
         XCTAssertGreaterThan(t.pedidos.count, depoisDaPrimeira)
     }
 
-    func testComplementoLeACurtidaDaMesmaMusicaSoACada30SegundosEOJogadorACada5() {
+    func testComplementoLeACurtidaUmaVezPorFaixaEOJogadorSoUmaVezComOPlayerFechado() {
         let t = TransporteFalso { r in r.url.contains("/contains") ? respostaJson(200, [true]) : respostaJson(200, ["repeat_state": "off"]) }
         let (c, _) = logada(t)
-        let comp = ComplementoSpotify(conta: c, validade: 5, espera: 30, disparar: { $0() })
+        let comp = ComplementoSpotify(conta: c, validade: 30, espera: 30, disparar: { $0() })
         let base = EstadoSpotify(tocando: true, faixa: "A", artista: "B", posicao: 0, duracao: 1, capaId: nil, cores: [])
         let t0 = Date(timeIntervalSince1970: 1_000_000)
         func contar(_ trecho: String) -> Int { t.pedidos.filter { $0.url.contains(trecho) }.count }
-        for s in stride(from: 0.0, through: 60.0, by: 6.0) { _ = comp.aplicar(base, uri: "spotify:track:x", agora: t0.addingTimeInterval(s)) }
-        XCTAssertEqual(contar("/me/player"), 11, "o jogador segue a cada 5 s (11 leituras em 60 s)")
-        XCTAssertLessThanOrEqual(contar("/contains"), 3, "a curtida da mesma música não é pedida a cada 5 s")
-        _ = comp.aplicar(base, uri: "spotify:track:outra", agora: t0.addingTimeInterval(62))
+        for s in stride(from: 0.0, through: 600.0, by: 6.0) { _ = comp.aplicar(base, uri: "spotify:track:x", agora: t0.addingTimeInterval(s)) }
+        XCTAssertEqual(contar("/me/player"), 1, "com o player fechado o /me/player é lido uma vez só")
+        XCTAssertEqual(contar("/contains"), 1, "a curtida da mesma música é lida uma vez, não a cada 30 s")
+        _ = comp.aplicar(base, uri: "spotify:track:outra", agora: t0.addingTimeInterval(602))
         XCTAssertEqual(t.pedidos.last?.url.contains("/contains"), true, "música nova lê a curtida na hora")
+        // Com o player cheio aberto o /me/player segue, com validade de 30 s.
+        comp.abrirPlayer(agora: t0.addingTimeInterval(610))
+        for s in stride(from: 610.0, through: 670.0, by: 6.0) { _ = comp.aplicar(base, uri: "spotify:track:outra", agora: t0.addingTimeInterval(s)) }
+        XCTAssertEqual(contar("/me/player"), 1 + 3, "aberto: na hora e depois a cada 30 s (610, 640, 670)")
+    }
+
+    func testComplementoRepetirVemDoAppleScriptEOModoDaFaixaDoQueODeckEscolheu() {
+        let t = TransporteFalso { _ in respostaJson(200, ["repeat_state": "off"]) }
+        let (c, _) = logada(t)
+        let comp = ComplementoSpotify(conta: c, disparar: { _ in })
+        var base = EstadoSpotify(tocando: true, faixa: "A", artista: "B", posicao: 0, duracao: 1, capaId: nil, cores: [])
+        comp.marcarRepetir("faixa")
+        base.repetir = true
+        XCTAssertEqual(comp.aplicar(base, uri: nil).repetirFaixa, true)
+        base.repetir = false
+        XCTAssertEqual(comp.aplicar(base, uri: nil).repetirFaixa, false, "desligado pelo Spotify: vale o AppleScript")
+        base.repetir = true
+        XCTAssertEqual(comp.aplicar(base, uri: nil).repetirFaixa, false, "ligado de novo por fora: assume a lista até a API confirmar")
+        XCTAssertEqual(t.pedidos.count, 0)
     }
 
     func testComplementoMostraNaHoraACurtidaEARepeticaoQueAPessoaAcabouDeMudar() {

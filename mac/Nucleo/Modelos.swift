@@ -188,6 +188,8 @@ struct EstadoSpotify: Codable, Equatable, Sendable {
     var repetirFaixa: Bool? = nil
     /// Só com login: nome do aparelho onde o Spotify toca agora.
     var aparelho: String? = nil
+    /// Só quando o Spotify mandou esperar (429): até quando (segundos desde 1970). O painel avisa em vez de falhar calado.
+    var limitadoAte: Double? = nil
 }
 
 struct UsoConta: Codable, Equatable, Sendable {
