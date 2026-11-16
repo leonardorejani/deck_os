@@ -93,6 +93,20 @@ enum AvisoDeConexao {
     }
 }
 
+extension MetodoDeConexao {
+    /// Os métodos que ganham o ponto verde no seletor de Conexões: o aparelho daquele método está falando agora. WhatsApp
+    /// só conta quando a leitura é pelo QR e a fase é "conectado", Spotify quando o login está de pé. Sem isso o ponto só
+    /// aparecia em Cabo e PWA e uma conexão que a própria tela dizia "Conectado" ficava sem sinal no seletor.
+    static func aoVivo(cabo: Bool, pwa: Bool, whatsappOrigem: String, whatsappQR: FaseQR, spotifyConectado: Bool) -> Set<MetodoDeConexao> {
+        var r = Set<MetodoDeConexao>()
+        if cabo { r.insert(.cabo) }
+        if pwa { r.insert(.pwa) }
+        if whatsappOrigem == "qr", whatsappQR == .conectado { r.insert(.whatsapp) }
+        if spotifyConectado { r.insert(.spotify) }
+        return r
+    }
+}
+
 /// O Deck some da frente quando o macOS abre outra janela por ele (Ajustes do Sistema) ou quando um pedido
 /// de acesso termina. Aqui está a espera que traz o Deck de volta.
 enum PrimeiroPlano {

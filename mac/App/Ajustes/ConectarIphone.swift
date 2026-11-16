@@ -47,7 +47,7 @@ struct ConectarIphone: View {
         TimelineView(.periodic(from: .now, by: 5)) { contexto in
             let agora = modelo.relogio?() ?? contexto.date
             VStack(alignment: .leading, spacing: Tema.Espaco.secao) {
-                SeletorDeMetodo(escolhido: modelo.metodoDeConexao, aoVivo: aoVivoPorMetodo(agora)) { modelo.metodoDeConexao = $0 }
+                SeletorComConexoes(modelo: modelo, agora: agora)
                 switch modelo.metodoDeConexao {
                 case .cabo: MetodoCaboEBluetooth(modelo: modelo, codigo: ParearIphone.codigoEmGrupos(codigo.codigo), agora: agora)
                 case .pwa: metodoPwa(agora)
@@ -82,14 +82,6 @@ struct ConectarIphone: View {
         }
     }
 
-    /// O ponto verde de cada método: só quando há aparelho daquele método falando agora (mesma fonte do cabeçalho).
-    private func aoVivoPorMetodo(_ agora: Date) -> Set<MetodoDeConexao> {
-        var r = Set<MetodoDeConexao>()
-        if let n = modelo.nativo, IphonePareado(nome: n.nome, canal: n.canal, visto: n.visto).aoVivo(agora: agora) { r.insert(.cabo) }
-        if let i = modelo.iphone, i.aoVivo(agora: agora) { r.insert(.pwa) }
-        return r
-    }
-
     @ViewBuilder private func metodoPwa(_ agora: Date) -> some View {
         if let iphone = modelo.iphone {
             GrupoDeAjuste(titulo: "Aparelho", nota: nil) {
@@ -116,6 +108,34 @@ struct ConectarIphone: View {
             BotaoDeAjuste(texto: "Desconectar iPhones", estilo: .perigo) { confirmando = true }
                 .frame(maxWidth: .infinity, alignment: .trailing)
         }
+    }
+}
+
+/// O seletor com os pontos verdes. Observa o WhatsApp por QR e o Spotify à parte: quem lê só `modelo` não redesenha quando o QR
+/// conecta ou o login entra, e o ponto ficava de fora até o relógio de 5 s.
+struct SeletorComConexoes: View {
+    @ObservedObject var modelo: ModeloApp
+    @ObservedObject private var qr: ModeloWhatsAppQR
+    @ObservedObject private var spotify: ModeloSpotify
+    var agora: Date
+
+    init(modelo: ModeloApp, agora: Date) {
+        self.modelo = modelo
+        self.qr = modelo.whatsappQR
+        self.spotify = modelo.spotify
+        self.agora = agora
+    }
+
+    /// O ponto verde de cada método: só quando há aparelho ou conta daquele método falando agora (mesma fonte do cabeçalho).
+    private var aoVivo: Set<MetodoDeConexao> {
+        let cabo = modelo.nativo.map { IphonePareado(nome: $0.nome, canal: $0.canal, visto: $0.visto).aoVivo(agora: agora) } ?? false
+        let pwa = modelo.iphone?.aoVivo(agora: agora) ?? false
+        return MetodoDeConexao.aoVivo(cabo: cabo, pwa: pwa, whatsappOrigem: modelo.config.whatsapp.origem,
+                                      whatsappQR: qr.estado.fase, spotifyConectado: spotify.situacao == .conectado)
+    }
+
+    var body: some View {
+        SeletorDeMetodo(escolhido: modelo.metodoDeConexao, aoVivo: aoVivo) { modelo.metodoDeConexao = $0 }
     }
 }
 
