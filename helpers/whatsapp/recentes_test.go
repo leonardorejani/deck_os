@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -264,5 +265,65 @@ func TestAnalisarDesembrulhaTemporariaEDocumentoComLegenda(t *testing.T) {
 	tmp := &waE2E.Message{EphemeralMessage: &waE2E.FutureProofMessage{Message: &waE2E.Message{Conversation: proto.String("some em 24h")}}}
 	if c, ok := Analisar(tmp, false); !ok || c.Texto != "some em 24h" {
 		t.Fatalf("temporária: %+v %v", c, ok)
+	}
+}
+
+// UltimaMinha: a conversa respondida pelo dono sai marcada, e a mensagem nova do contato desliga a marca. Vale para o
+// histórico, para o que o dono escreve ao vivo e para a mídia que a mensagem não decifra (só zera a conversa).
+func TestUltimaMinhaSegueQuemFalouPorUltimo(t *testing.T) {
+	a, e := ajudanteDeTeste(t)
+	base := time.Date(2026, 11, 16, 12, 0, 0, 0, time.UTC)
+	// histórico: A terminou com mensagem do dono, B com mensagem do contato
+	a.tratar(context.Background(), historia(
+		&waHistorySync.Conversation{ID: proto.String(contatoA.String()), Name: proto.String("Ana"), UnreadCount: proto.Uint32(0), ConversationTimestamp: proto.Uint64(uint64(base.Unix())),
+			Messages: []*waHistorySync.HistorySyncMsg{histMsg("m1", "ate mais", true, base.Unix(), "")}},
+		&waHistorySync.Conversation{ID: proto.String(contatoB.String()), Name: proto.String("Beto"), UnreadCount: proto.Uint32(0), ConversationTimestamp: proto.Uint64(uint64(base.Unix() - 60)),
+			Messages: []*waHistorySync.HistorySyncMsg{histMsg("b1", "valeu", false, base.Unix()-60, "")}},
+	))
+	l := e.Recentes()
+	if ana, beto := porID(l, contatoA.String()), porID(l, contatoB.String()); !ana.UltimaMinha || beto.UltimaMinha {
+		t.Fatalf("histórico: ana=%v beto=%v", ana.UltimaMinha, beto.UltimaMinha)
+	}
+	// o contato escreve: sai de "minha"
+	a.tratar(context.Background(), msgAoVivo(contatoA, "m2", "tudo bem?", false, base.Add(time.Minute)))
+	if ana := porID(e.Recentes(), contatoA.String()); ana.UltimaMinha || ana.NaoLidas != 1 {
+		t.Fatalf("depois do contato: %+v", ana)
+	}
+	// o dono responde: volta
+	a.tratar(context.Background(), msgAoVivo(contatoA, "m3", "tudo", true, base.Add(2*time.Minute)))
+	if ana := porID(e.Recentes(), contatoA.String()); !ana.UltimaMinha || ana.NaoLidas != 0 {
+		t.Fatalf("depois do dono: %+v", ana)
+	}
+	// grupo e contato novo, escritos ao vivo pelo dono
+	a.tratar(context.Background(), msgAoVivo(grupoG, "g1", "oi", false, base))
+	a.tratar(context.Background(), msgAoVivo(grupoG, "g2", "chego já", true, base.Add(time.Minute)))
+	if g := porID(e.Recentes(), grupoG.String()); !g.UltimaMinha {
+		t.Fatalf("grupo: %+v", g)
+	}
+	// o campo sai no JSON só quando é verdade
+	b, _ := json.Marshal(porID(e.Recentes(), contatoB.String()))
+	if strings.Contains(string(b), "ultimaMinha") {
+		t.Fatalf("beto não devia levar o campo: %s", b)
+	}
+	b, _ = json.Marshal(porID(e.Recentes(), contatoA.String()))
+	if !strings.Contains(string(b), `"ultimaMinha":true`) {
+		t.Fatalf("ana devia levar o campo: %s", b)
+	}
+}
+
+// Resposta do dono sem conteúdo que o ajudante entende (só zera a conversa) também conta como "respondi".
+func TestEnviadaSemConteudoMarcaUltimaMinha(t *testing.T) {
+	e := NovoEstado("")
+	base := time.Date(2026, 11, 16, 12, 0, 0, 0, time.UTC)
+	e.Recebida(contatoA.String(), "Ana", false, Msg{Texto: "oi", Hora: base.Format(time.RFC3339), ID: "a1"}, base)
+	e.Enviada(contatoA.String(), base.Add(time.Minute))
+	if c := porID(e.Recentes(), contatoA.String()); !c.UltimaMinha || c.NaoLidas != 0 {
+		t.Fatalf("%+v", c)
+	}
+	// resposta atrasada (mais velha que a última) não marca
+	e.Recebida(contatoB.String(), "Beto", false, Msg{Texto: "oi", Hora: base.Format(time.RFC3339), ID: "b1"}, base.Add(time.Hour))
+	e.Enviada(contatoB.String(), base)
+	if c := porID(e.Recentes(), contatoB.String()); c.UltimaMinha {
+		t.Fatalf("atrasada não marca: %+v", c)
 	}
 }

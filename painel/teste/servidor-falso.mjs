@@ -31,6 +31,7 @@ const padrao = () => ({
   whatsappVersao: null,      // número: o Mac por QR dá versão à lista (?v=<versão> igual responde só {igual}). null: Mac sem versão, a lista vai sempre inteira
   whatsappExtra: false,      // chega uma conversa nova na lista (mede a velocidade com que a folha aberta a mostra)
   whatsappTudo: false,       // lista do aparelho conectado com conversas lidas e não lidas, fixada, silenciada e arquivadas lidas e não lidas (precisa de whatsappOrigem 'qr')
+  whatsappVolta: false,      // com whatsappTudo: o contato que o dono tinha respondido manda mensagem nova (3 não lidas)
   whatsappOrigem: 'app',     // app | web (só o total, pelo título da aba) | web-fechado (sem aba aberta) | qr (aparelho conectado, com lista) | qr-caido | qr-reconectando (subindo ou queda curta, sem lista) | qr-reconectando-lista (queda curta com a lista de antes)
   uso: 'normal',             // normal | sem-medicao
   usoDetalhe: 'normal',      // normal | calculando (a primeira varredura ainda roda) | vazio (sem contas) | erro (500) | antigo (Mac sem a rota: 404) | xss (nomes com HTML)
@@ -168,12 +169,16 @@ const WAV_B64 = (() => { const n = 800, b = Buffer.alloc(44 + n); b.write('RIFF'
    mesmo sendo a mais velha, e as arquivadas (lida e não lida) só aparecem no filtro delas. Nomes inventados. */
 const WHATSAPP_TUDO = () => {
   const ha = min => new Date(T0 - min * 60000).toISOString(), M = (texto, min, de = '') => ({ de, texto, hora: ha(min) });
+  const volta = !!c.whatsappVolta; // o contato respondeu depois do dono: a conversa volta com não lida e sem a marca
   return [
     { id: 't1@s.whatsapp.net', nome: 'Ana Souza', grupo: false, naoLidas: 2, ultima: ha(1), mensagens: [M('Bom dia', 3), M('Consegue ver isso?', 1)] },
     { id: 't2@lid', nome: 'Beto Lima', grupo: false, naoLidas: 0, ultima: ha(5), mensagens: [M('Valeu, até mais', 5)] },
-    { id: 't3@g.us', nome: 'Equipe do Palco', grupo: true, naoLidas: 0, ultima: ha(9), mensagens: [M('Passo no ensaio', 9, 'Você')] },
+    { id: 't3@g.us', nome: 'Equipe do Palco', grupo: true, naoLidas: 0, ultima: ha(9), ultimaMinha: true, mensagens: [M('Passo no ensaio', 9, 'Você')] },
     { id: 't4@g.us', nome: 'Louvor', grupo: true, naoLidas: 4, ultima: ha(12), mensagens: [M('Setlist nova', 14, 'Carla'), M('Quem leva o cabo?', 12, 'Pedro')] },
     { id: 't5@s.whatsapp.net', nome: 'Carla Dias', grupo: false, naoLidas: 0, ultima: ha(3000), fixada: true, silenciada: true, mensagens: [M('Foto', 3000)] },
+    volta ? { id: 't6@s.whatsapp.net', nome: 'Dani Respondida', grupo: false, naoLidas: 3, ultima: ha(0), mensagens: [M('Fechado, combinado', 2), M('Mais uma coisa', 1), M('Me liga?', 0)] }
+      : { id: 't6@s.whatsapp.net', nome: 'Dani Respondida', grupo: false, naoLidas: 0, ultima: ha(7), ultimaMinha: true, mensagens: [M('Fechado, combinado', 7)] },
+    { id: 't7@g.us', nome: 'Banda', grupo: true, naoLidas: 0, ultima: ha(11), mensagens: [M('Chego às 19h', 11, 'Rui')] },
     { id: 'ta1@s.whatsapp.net', nome: 'Bia Arquivada', grupo: false, naoLidas: 3, ultima: ha(20), arquivada: true, mensagens: [M('Mensagem de arquivada', 20)] },
     { id: 'ta2@g.us', nome: 'Promo Arquivada', grupo: true, naoLidas: 0, ultima: ha(40), arquivada: true, mensagens: [M('Oferta do dia', 40, 'Loja')] },
     { id: 'ta3@g.us', nome: 'Sorteio Arquivado', grupo: true, naoLidas: 6, ultima: ha(60), arquivada: true, mensagens: [M('Resultado saiu', 60, 'Admin')] },

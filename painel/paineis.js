@@ -86,14 +86,18 @@ function pintarWhats() {
   $('#wa-filtro').hidden = w?.origem === 'web' || (w?.origem === 'qr' && w.aberto === false && !reconectando);
   if (w?.origem === 'web') return pintarWhatsWeb();
   if (w?.origem === 'qr' && w.aberto === false && !reconectando) return pintarWhatsQrCaido();
-  const todas = wa.lista || [], naoArq = todas.filter(c => !c.arquivada), arq = todas.filter(c => c.arquivada);
+  const todas = wa.lista || [], naoArq = todas.filter(c => !c.arquivada);
   /* o total e "N em M conversas" contam só as não arquivadas e só as que têm não lida (a lista traz as lidas também) */
   const contam = naoArq.filter(c => c.naoLidas > 0), total = contam.reduce((s, c) => s + (c.naoLidas || 0), 0);
-  /* Todas = não arquivadas, lidas e não lidas, pela última mensagem, com as fixadas no topo. Arquivadas só no filtro delas */
+  /* Mesma regra nas 4 abas: a conversa fica enquanto espera resposta dele (a última mensagem não é dele, ou há não lida) e some quando
+     ele responde, até o outro lado escrever de novo. A aba só muda a categoria: Todas (contatos e grupos), Contatos, Grupos e Arquivadas.
+     Pela última mensagem, com as fixadas no topo */
   const tempo = c => Date.parse(c.ultima) || 0, ordenar = l => [...l].sort((a, b) => (!!b.fixada - !!a.fixada) || (tempo(b) - tempo(a)));
-  const lista = ordenar(todas.filter(c => wa.filtro === 'arquivadas' ? !!c.arquivada : !c.arquivada && (wa.filtro === 'todas' || (wa.filtro === 'grupos') === !!c.grupo)));
-  const naoLidasArq = arq.reduce((s, c) => s + (c.naoLidas || 0), 0);
-  const linhaArq = qr && wa.filtro === 'todas' && arq.length ? `<button class="arquivadas-linha" data-wa-arq><span class="avatar">${SVG.arquivo}</span><span style="min-width:0"><div class="nome-c">Arquivadas</div></span><span class="lado">${naoLidasArq > 0 ? `<span class="qtd">${naoLidasArq}</span>` : ''}</span></button>` : '';
+  const categoria = { todas: c => !c.arquivada, contatos: c => !c.arquivada && !c.grupo, grupos: c => !c.arquivada && !!c.grupo, arquivadas: c => !!c.arquivada };
+  const espera = c => c.naoLidas > 0 || !c.ultimaMinha;
+  const lista = ordenar(todas.filter(c => categoria[wa.filtro](c) && espera(c)));
+  /* selo de cada aba: o total de não lidas da categoria */
+  $$('#wa-filtro button').forEach(b => { const n = todas.filter(categoria[b.dataset.f]).reduce((q, c) => q + (c.naoLidas || 0), 0), el = b.querySelector('.selo-aba'); el.textContent = n; el.hidden = !(n > 0) });
   $('#wa-titulo').innerHTML = wa.lista ? `WhatsApp <small><span class="n-total">${total}</span> não lidas em ${contam.length} ${contam.length === 1 ? 'conversa' : 'conversas'}</small>` : 'WhatsApp';
   if (wa.lista) animarTotal(total);
   $$('#wa-filtro button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.f === wa.filtro)));
@@ -101,7 +105,7 @@ function pintarWhats() {
   const notaReconecta = reconectando ? '<div class="vazio-bloco" style="min-height:96px"><strong>Reconectando ao WhatsApp</strong><span>Volta sozinho em instantes. Não precisa ler o QR de novo.</span></div>' : '';
   if (reconectando && !todas.length) { manterRolagem($('#wa-lista'), notaReconecta); $('#wa-titulo').textContent = 'WhatsApp'; return }
   if (!wa.lista) { const el = $('#wa-lista'); if (wa.erro) el.innerHTML = erroLista(wa.erro); else if (!el.querySelector('.esq-lista')) el.innerHTML = esqueletoWa(); return }
-  manterRolagem($('#wa-lista'), notaReconecta + linhaArq + lista.map(c => {
+  manterRolagem($('#wa-lista'), notaReconecta + lista.map(c => {
     const msgs = c.mensagens || [], ult = msgs[msgs.length - 1] || { de: '', texto: '' }, aberta = wa.aberta === c.id;
     const corpo = aberta ? `<div class="mensagens">${msgs.map(m => balaoWa(c, m)).join('')}<button class="btn secundario pequeno" data-wa-mac="${esc(c.id)}">Responder no Mac</button></div>` : '';
     return `<button class="conversa" data-wa="${esc(c.id)}" aria-expanded="${aberta}">${avatarWa(c)}
@@ -250,7 +254,6 @@ async function responderNoMac(id) {
 }
 $('#wa-filtro').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { wa.filtro = b.dataset.f; wa.aberta = null; pintarWhats() } });
 $('#wa-lista').addEventListener('click', e => {
-  if (e.target.closest('[data-wa-arq]')) { wa.filtro = 'arquivadas'; wa.aberta = null; return pintarWhats() }
   if (e.target.closest('[data-tentar]')) { wa.erro = ''; pintarWhats(); return lerWhats() }
   const resp = e.target.closest('[data-wa-mac]'); if (resp) return responderNoMac(resp.dataset.waMac);
   const ou = e.target.closest('[data-ouvir]'); if (ou) return ouvirAudioWa(ou);

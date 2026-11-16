@@ -370,6 +370,15 @@ final class FontesWhatsAppQRTestes: XCTestCase {
         XCTAssertEqual(l.valor?.resumo.conversas, 1, "conversas lidas não entram em 'N não lidas em M conversas'")
     }
 
+    func testListaLeUltimaMinhaParaOPainelTirarARespondida() throws {
+        let linha = #"{"t":"conversas","lista":[{"id":"a","nome":"Ana","grupo":false,"naoLidas":0,"ultima":"2026-11-12T13:00:00Z","ultimaMinha":true,"mensagens":[{"de":"","texto":"fechado","hora":"2026-11-12T13:00:00Z"}]},{"id":"b","nome":"Bia","grupo":false,"naoLidas":1,"ultima":"2026-11-12T12:00:00Z","mensagens":[{"de":"","texto":"oi","hora":"2026-11-12T12:00:00Z"}]}]}"#
+        let p = try ponte("echo '{\"t\":\"fase\",\"fase\":\"conectado\",\"detalhe\":\"\"}'; echo '\(linha)'; cat >/dev/null")
+        defer { p.desligar() }
+        p.garantirLigada()
+        esperar("conversas") { p.atual.conversas.count == 2 }
+        XCTAssertEqual(p.ler().valor?.conversas.map(\.ultimaMinha), [true, nil])
+    }
+
     func testConversaSemNomeNuncaVaiEmBranco() throws {
         let linha = #"{"t":"conversas","lista":[{"id":"1@lid","nome":"","grupo":false,"naoLidas":1,"ultima":"2026-11-12T13:00:00Z","mensagens":[]},{"id":"g","nome":" ","grupo":true,"naoLidas":1,"ultima":"2026-11-12T13:00:00Z","mensagens":[]}]}"#
         let p = try ponte("echo '{\"t\":\"fase\",\"fase\":\"conectado\",\"detalhe\":\"\"}'; echo '\(linha)'; cat >/dev/null")
