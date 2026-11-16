@@ -102,13 +102,15 @@ function pintarWhats() {
     return `<button class="conversa" data-wa="${esc(c.id)}" aria-expanded="${aberta}">${avatarWa(c)}
       <span style="min-width:0"><div class="nome-c">${esc(nomeWa(c))}${c.grupo ? '<small>grupo</small>' : ''}</div><div class="previa">${ult.de ? esc(ult.de) + ': ' : ''}${esc(ult.texto)}</div></span>
       <span class="lado"><span>${esc(horaConversa(c.ultima))}</span><span class="qtd">${esc(c.naoLidas)}</span></span></button>${corpo}`;
-  }).join('') || vazioWa(todas.filter(c => c.arquivada).length));
+  }).join('') || vazioWa(todas.filter(c => c.arquivada).length, contam.length));
   carregarMidiasWa();
 }
 /* Lista sem linhas: se há arquivadas com não lidas, a tela diz isso e leva até elas (arquivada só aparece no filtro Arquivadas, então Todas vazia parecia sem conexão) */
-function vazioWa(arquivadas) {
+function vazioWa(arquivadas, naoArquivadas) {
   if (wa.filtro === 'arquivadas') return '<div class="vazio-bloco" style="min-height:120px"><strong>Nada aqui</strong><span>Nenhuma arquivada com mensagem nova.</span></div>';
   if (!arquivadas) return '<div class="vazio-bloco" style="min-height:120px"><strong>Nada aqui</strong><span>Sem não lidas nesse filtro.</span></div>';
+  const rotulo = `${arquivadas} ${arquivadas === 1 ? 'conversa arquivada com não lidas' : 'conversas arquivadas com não lidas'}`;
+  if (naoArquivadas) return `<div class="vazio-bloco" style="min-height:120px"><strong>Sem não lidas nesse filtro</strong><span>${rotulo}.</span><button class="btn secundario pequeno" data-wa-arquivadas>Ver arquivadas</button></div>`; // há conversas em outro filtro: o título da folha não pode dizer "nenhuma"
   return `<div class="vazio-bloco" style="min-height:120px"><strong>Nenhuma não lida</strong><span>${arquivadas} ${arquivadas === 1 ? 'conversa arquivada com não lidas' : 'conversas arquivadas com não lidas'}.</span><button class="btn secundario pequeno" data-wa-arquivadas>Ver arquivadas</button></div>`;
 }
 /* O total de não lidas conta até o valor novo (tatile, movimento 9). Sem movimento reduzido, 600 ms com ease-out cúbico */

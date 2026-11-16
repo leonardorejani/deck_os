@@ -30,6 +30,7 @@ const padrao = () => ({
   whatsappRico: false,       // lista do aparelho conectado com foto, áudio, visualização única, arquivada e conversa sem nome (precisa de whatsappOrigem 'qr')
   whatsappVersao: null,      // número: o Mac por QR dá versão à lista (?v=<versão> igual responde só {igual}). null: Mac sem versão, a lista vai sempre inteira
   whatsappSoArquivadas: false, // só conversas arquivadas com não lidas (Todas, Contatos e Grupos ficam sem linhas; precisa de whatsappRico)
+  whatsappSemGrupoAtivo: false, // tira os grupos não arquivados (Grupos fica sem linhas, mas há contatos e um grupo arquivado; precisa de whatsappRico)
   whatsappExtra: false,      // chega uma conversa nova na lista (mede a velocidade com que a folha aberta a mostra)
   whatsappOrigem: 'app',     // app | web (só o total, pelo título da aba) | web-fechado (sem aba aberta) | qr (aparelho conectado, com lista) | qr-caido | qr-reconectando (subindo ou queda curta, sem lista) | qr-reconectando-lista (queda curta com a lista de antes)
   uso: 'normal',             // normal | sem-medicao
@@ -178,7 +179,7 @@ const WHATSAPP_RICO = () => {
 // WhatsApp: as 5 conversas do protótipo (o tempo é relativo a agora, para "hoje" e "ontem" não envelhecerem)
 const WHATSAPP = () => {
   if (c.whatsapp === 'vazio') return [];
-  if (c.whatsappRico) return c.whatsappSoArquivadas ? WHATSAPP_RICO().filter(x => x.arquivada) : WHATSAPP_RICO();
+  if (c.whatsappRico) return c.whatsappSoArquivadas ? WHATSAPP_RICO().filter(x => x.arquivada) : c.whatsappSemGrupoAtivo ? WHATSAPP_RICO().filter(x => x.arquivada || !x.grupo) : WHATSAPP_RICO();
   const ha = min => new Date(T0 - min * 60000).toISOString(), M = (de, texto, hora = '10:00') => ({ de: X(de), texto: X(texto), hora });
   const base = [
     { id: 'w1', nome: X('Ministério de Louvor'), grupo: true, naoLidas: 12, ultima: ha(3), mensagens: [M('Carla', c.textoLongo ? 'Olha o PR: https://github.com/leonardorejani/deck_os/pull/30/files#diff-8f3b2c1d9e7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e' : 'Ensaio confirmado quinta 20h?'), M('Pedro', 'Mandei a setlist no drive'), M('Carla', 'Quem leva o cabo P10?')] },

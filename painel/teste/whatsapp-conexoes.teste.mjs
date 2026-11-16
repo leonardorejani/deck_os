@@ -117,4 +117,15 @@ export default async function (h) {
   h.ok((await nomes(p)).join('|') === 'Bia Arquivada|Promo Arquivada', `o atalho abre o filtro Arquivadas com as conversas (${(await nomes(p)).join('|')})`);
   h.ok(await p.evaluate(() => document.querySelector('#wa-filtro [data-f="arquivadas"]').getAttribute('aria-pressed')) === 'true', 'o filtro Arquivadas fica marcado depois do atalho');
   await p.context().close();
+  /* Há não lidas em outro filtro: Grupos vazio não diz "Nenhuma não lida" (contradiz o título) e mantém o atalho */
+  await h.reset();
+  await h.cenario({ whatsappOrigem: 'qr', whatsappRico: true, whatsappSemGrupoAtivo: true });
+  p = await h.pagina(); await pronta(h, p);
+  await p.click('.tecla[data-id="whatsapp"]');
+  await h.espera(p, () => document.querySelectorAll('#wa-lista .conversa').length === 3);
+  await p.click('#wa-filtro [data-f="grupos"]'); await p.waitForTimeout(80);
+  const vz = await texto(p, '#wa-lista .vazio-bloco');
+  h.ok(vz === 'Sem não lidas nesse filtro2 conversas arquivadas com não lidas.Ver arquivadas', `Grupos vazio com não lidas em Contatos não diz "Nenhuma não lida" (${vz})`);
+  h.ok(!!(await p.$('#wa-lista [data-wa-arquivadas]')), 'e mantém o atalho para as arquivadas');
+  await p.context().close();
 }
