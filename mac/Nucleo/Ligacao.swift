@@ -87,6 +87,7 @@ struct SpotifyReal: ControleSpotify {
         case "proxima": comando = "next track"
         default: return "Essa ação do Spotify não existe."
         }
+        conta?.cancelarCorrecaoDoPulo()
         return rodar(comando)
     }
 
@@ -115,7 +116,7 @@ struct SpotifyReal: ControleSpotify {
 
     func dispositivos() -> Result<[DispositivoSpotify], ErroSpotify> { conta?.dispositivos() ?? .failure(.naoConectado) }
 
-    func transferir(para id: String) -> ErroSpotify? { conta?.transferir(para: id) ?? .naoConectado }
+    func transferir(para id: String) -> ErroSpotify? { conta?.cancelarCorrecaoDoPulo(); return conta?.transferir(para: id) ?? .naoConectado }
 
     /// Quem diz qual é a faixa é o próprio Spotify do Mac, na hora do toque (não um valor guardado).
     func curtir(_ curtir: Bool) -> ErroSpotify? {
@@ -133,9 +134,11 @@ struct SpotifyReal: ControleSpotify {
 
     func recentes() -> Result<RecentesSpotify, ErroSpotify> { conta?.recentes() ?? .failure(.naoConectado) }
 
-    func pularFila(posicao: Int, uri: String?) -> ErroSpotify? {
+    func pularFila(posicao: Int, uri: String?) -> ErroSpotify? { pularFila(posicao: posicao, uri: uri, contexto: nil) }
+
+    func pularFila(posicao: Int, uri: String?, contexto: String?) -> ErroSpotify? {
         guard let conta else { return .naoConectado }
-        if let erro = conta.pularFila(posicao: posicao, uri: uri) { return erro }
+        if let erro = conta.pularFila(posicao: posicao, uri: uri, contexto: contexto) { return erro }
         return nil
     }
 

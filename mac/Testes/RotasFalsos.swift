@@ -106,6 +106,10 @@ struct SpotifyFalso: ControleSpotify {
         guard conectado else { return .naoConectado }
         registro.anotar("pularFila \(posicao) \(uri ?? "-")"); return nil
     }
+    func pularFila(posicao: Int, uri: String?, contexto: String?) -> ErroSpotify? {
+        guard conectado else { return .naoConectado }
+        registro.anotar("pularFila \(posicao) \(uri ?? "-") ctx=\(contexto ?? "-")"); return nil
+    }
     func repetirModo(_ modo: String) -> ErroSpotify? {
         guard conectado else { return .naoConectado }
         registro.anotar("repetirModo \(modo)"); return nil

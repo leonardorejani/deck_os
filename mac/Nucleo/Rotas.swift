@@ -112,6 +112,8 @@ protocol ControleSpotify: Sendable {
     func recentes() -> Result<RecentesSpotify, ErroSpotify>
     /// Toca a música da fila na vez `posicao` (1 é a próxima), pulando as de antes. `uri` confere que a fila não andou.
     func pularFila(posicao: Int, uri: String?) -> ErroSpotify?
+    /// Igual, com a lista ou o álbum que toca (o painel já sabe): o Mac manda o play na hora e confere depois.
+    func pularFila(posicao: Int, uri: String?, contexto: String?) -> ErroSpotify?
     /// "faixa" (repetir só a música), "nao" ou "contexto". Pela API, por isso só com login.
     func repetirModo(_ modo: String) -> ErroSpotify?
 }
@@ -124,6 +126,7 @@ extension ControleSpotify {
     func fila() -> Result<FilaSpotify, ErroSpotify> { .failure(.naoConectado) }
     func recentes() -> Result<RecentesSpotify, ErroSpotify> { .failure(.naoConectado) }
     func pularFila(posicao: Int, uri: String?) -> ErroSpotify? { .naoConectado }
+    func pularFila(posicao: Int, uri: String?, contexto: String?) -> ErroSpotify? { pularFila(posicao: posicao, uri: uri) }
     func repetirModo(_ modo: String) -> ErroSpotify? { .naoConectado }
 }
 
@@ -530,7 +533,7 @@ struct Roteador: Sendable {
             guard let n = r.query["n"].flatMap(Int.init), (1...50).contains(n) else {
                 return .erro(400, "Informe a vez da música na fila, por exemplo pular?n=3.")
             }
-            return respostaSpotify(spotify.pularFila(posicao: n, uri: r.query["uri"]))
+            return respostaSpotify(spotify.pularFila(posicao: n, uri: r.query["uri"], contexto: r.query["ctx"]))
         case "repetir", "aleatorio":
             // Com `modo`, é o repetir da API (só a música, pede login). Sem ele, o do AppleScript, que já existia.
             if acao == "repetir", let modo = r.query["modo"] {
