@@ -25,6 +25,8 @@ type Msg struct {
 	Unica bool `json:"unica,omitempty"`
 	// Midia: dá para baixar sob demanda (foto e áudio comuns).
 	Midia bool `json:"midia,omitempty"`
+	// Minha: a mensagem é do próprio dono. Só viaja dentro do ajudante (quem sai é Conversa.UltimaMinha).
+	Minha bool `json:"-"`
 	// Ref é a mídia para o download. Fica só no disco desta sessão, nunca vai para o núcleo.
 	Ref []byte `json:"ref,omitempty"`
 }
@@ -48,6 +50,9 @@ type Conversa struct {
 	// Previa é a última mensagem da conversa, de quem for (a do dono inclusive), sem a mídia: é o que a linha de uma
 	// conversa lida mostra. Só texto curto, para o disco ficar enxuto.
 	Previa *Msg `json:"previa,omitempty"`
+	// UltimaMinha: a última mensagem da conversa é do dono (já respondeu). O Deck tira a conversa de Todas até o
+	// contato escrever de novo, e a mensagem nova do contato desliga a marca.
+	UltimaMinha bool `json:"ultimaMinha,omitempty"`
 }
 
 // maxRecentes é quantas conversas (as mais recentes) a lista leva. As com não lidas entram sempre.
@@ -217,6 +222,7 @@ func (e *Estado) guardarPrevia(c *Conversa, m Msg) {
 		return
 	}
 	c.Previa = previaDe(m)
+	c.UltimaMinha = m.Minha
 }
 
 // Recebida soma uma mensagem nova de outra pessoa.
@@ -246,6 +252,9 @@ func (e *Estado) Enviada(id string, quando time.Time) {
 	defer e.mu.Unlock()
 	if c, ok := e.conversas[id]; ok {
 		c.NaoLidas = 0
+		if !c.maisNovaQue(quando) {
+			c.UltimaMinha = true
+		}
 		c.Ultima = maisNova(c.Ultima, quando)
 	}
 }
@@ -258,6 +267,7 @@ func (e *Estado) EnviadaMsg(id, nome string, grupo bool, m Msg, quando time.Time
 	c := e.obter(id, nome, grupo)
 	c.NaoLidas = 0
 	c.Ultima = maisNova(c.Ultima, quando)
+	m.Minha = true
 	e.guardarPrevia(c, m)
 }
 

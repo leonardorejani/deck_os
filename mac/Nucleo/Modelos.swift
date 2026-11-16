@@ -349,6 +349,8 @@ struct ConversaWhatsApp: Codable, Equatable, Sendable {
     /// Só na origem "qr". Fixada no topo do WhatsApp e silenciada. Ausentes = não.
     var fixada: Bool? = nil
     var silenciada: Bool? = nil
+    /// Só na origem "qr". A última mensagem é do dono (já respondeu): o painel tira a conversa da lista até o outro lado escrever. Ausente = não.
+    var ultimaMinha: Bool? = nil
 }
 
 // MARK: - Rotas (todas exigem o código de acesso, menos os arquivos da página e /api/parear)

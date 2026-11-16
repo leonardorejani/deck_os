@@ -602,6 +602,7 @@ func (a *ajudante) previaDoHistorico(ctx context.Context, chat types.JID, lista 
 		}
 	}
 	m := a.mensagemDe(c, de, w.GetKey().GetID(), time.Unix(tmax, 0))
+	m.Minha = w.GetKey().GetFromMe()
 	return &m, tmax
 }
 

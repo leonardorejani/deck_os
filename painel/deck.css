@@ -300,6 +300,9 @@ button.cartao { font: inherit; color: inherit; text-align: left; border: 0; curs
 .campo .ajuda { font-size: var(--texto-xs); color: var(--texto-2) }
 .segmentos { --folga: 3px; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; background: var(--fundo); border-radius: var(--raio-sm); padding: var(--folga); gap: var(--folga) }
 .segmentos button { font: inherit; font-size: var(--texto-sm); min-height: var(--alvo-sm); border: 0; border-radius: calc(var(--raio-sm) - var(--folga)); background: none; color: var(--texto-2); cursor: pointer; padding: 0 var(--icone); white-space: nowrap }
+.segmentos button { display: inline-flex; align-items: center; justify-content: center; gap: var(--item) }
+.segmentos .selo-aba { min-width: var(--icone); height: var(--icone); padding: 0 var(--item); border-radius: var(--raio-pilula); background: var(--sucesso); color: var(--fundo); font-size: var(--texto-xs); font-weight: 700; line-height: 1; display: inline-grid; place-items: center; font-variant-numeric: tabular-nums }
+.segmentos .selo-aba[hidden] { display: none }
 .segmentos button[aria-pressed="true"] { background: var(--superficie-2); color: var(--texto); box-shadow: var(--sombra-1) }
 .lista-apps { display: grid; grid-template-columns: repeat(auto-fill, minmax(68px, 1fr)); gap: var(--item) }
 .lista-apps button { display: grid; justify-items: center; gap: var(--item); padding: var(--item) 0; border: 0; border-radius: var(--raio); background: none; color: var(--texto-2); font: inherit; font-size: var(--texto-xs); cursor: pointer }
@@ -338,19 +341,19 @@ button.cartao { font: inherit; color: inherit; text-align: left; border: 0; curs
 .tecla-gravada kbd { font: inherit; font-size: var(--texto-sm); min-width: var(--alvo-sm); height: var(--alvo-sm); padding: 0 var(--icone); display: grid; place-items: center; border-radius: var(--raio-sm); background: var(--superficie-2); box-shadow: var(--sombra-kbd) }
 
 /* WhatsApp */
-.conversa, .arquivadas-linha { display: grid; grid-template-columns: var(--avatar) minmax(0, 1fr) auto; gap: var(--icone); align-items: center; min-height: var(--linha); padding: var(--item) 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; width: 100%; cursor: pointer }
-.conversa + .conversa, .conversa + .mensagens + .conversa, .arquivadas-linha + .conversa { border-top: 1px solid var(--borda) }
+.conversa { display: grid; grid-template-columns: var(--avatar) minmax(0, 1fr) auto; gap: var(--icone); align-items: center; min-height: var(--linha); padding: var(--item) 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; width: 100%; cursor: pointer }
+.conversa + .conversa, .conversa + .mensagens + .conversa { border-top: 1px solid var(--borda) }
 .avatar { width: var(--avatar); height: var(--avatar); border-radius: 50%; background: var(--superficie-2); display: grid; place-items: center; font-weight: 600; font-size: var(--texto-sm); color: var(--texto-2) }
 .avatar svg { width: 20px; height: 20px }
-.conversa .nome-c, .arquivadas-linha .nome-c { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.conversa .nome-c { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
 .conversa .nome-c small { color: var(--texto-2); font-weight: 400; font-size: var(--texto-xs); margin-left: var(--item) }
 .conversa .previa { color: var(--texto-2); font-size: var(--texto-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
-.conversa .lado, .arquivadas-linha .lado { display: grid; justify-items: end; gap: var(--item); font-size: var(--texto-xs); color: var(--texto-2); font-variant-numeric: tabular-nums }
+.conversa .lado { display: grid; justify-items: end; gap: var(--item); font-size: var(--texto-xs); color: var(--texto-2); font-variant-numeric: tabular-nums }
 .conversa .lado .nova { color: var(--sucesso) }
 .conversa .marcas { display: flex; align-items: center; gap: var(--item) }
 .conversa .marca { display: grid; color: var(--texto-2) }
 .conversa .marca svg { width: 14px; height: 14px }
-.conversa .qtd, .arquivadas-linha .qtd { min-width: 22px; height: 22px; padding: 0 var(--item); border-radius: var(--raio-pilula); background: var(--sucesso); color: var(--fundo); font-weight: 700; display: grid; place-items: center }
+.conversa .qtd { min-width: 22px; height: 22px; padding: 0 var(--item); border-radius: var(--raio-pilula); background: var(--sucesso); color: var(--fundo); font-weight: 700; display: grid; place-items: center }
 .mensagens { margin: 0 0 var(--icone) calc(var(--avatar) + var(--icone)); display: grid; gap: var(--item) }
 .mensagens p { overflow-wrap: anywhere; margin: 0; background: var(--superficie-2); border-radius: var(--raio-sm) var(--raio) var(--raio) var(--raio); padding: var(--item) var(--icone); font-size: var(--texto-sm); max-width: 90% }
 .mensagens p small { display: block; color: var(--texto-2); font-size: var(--texto-xs) }
