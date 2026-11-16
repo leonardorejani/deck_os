@@ -135,6 +135,12 @@ func (a *ajudante) trabalharFoto(id string) {
 	}
 	nenhuma := errors.Is(err, errSemFoto)
 	a.mu.Unlock()
+	if nenhuma && a.pasta != "" {
+		// A pessoa tirou (ou escondeu) a foto: a antiga não fica no disco nem na lista.
+		_ = os.Remove(filepath.Join(a.pasta, "fotos", arquivoDaFoto(id)))
+		a.estado.Foto(id, "")
+		a.marcarSujo()
+	}
 
 	if err == nil {
 		if guardarArquivo(filepath.Join(a.pasta, "fotos"), arquivoDaFoto(id), dados) == nil {
