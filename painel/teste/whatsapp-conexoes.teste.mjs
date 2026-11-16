@@ -102,5 +102,18 @@ export default async function (h) {
   await p.click('#wa-lista [data-wa="r2@lid"]');
   await p.click('#wa-lista [data-wa-mac]');
   h.ok(await h.espera(p, () => document.querySelector('#aviso-txt')?.textContent.includes('Abrindo a conversa'), undefined, 4000), `Responder no Mac que demora espera a resposta em vez de mostrar erro (${await texto(p, '#aviso-txt')})`);
+  /* ---------- Só arquivadas com não lidas: Todas vazia diz isso e leva até elas (16/11/2026: "já consta a conexão e nao aparece nada") ---------- */
+  await h.reset();
+  await h.cenario({ whatsappOrigem: 'qr', whatsappRico: true, whatsappSoArquivadas: true });
+  p = await h.pagina(); await pronta(h, p);
+  await p.click('.tecla[data-id="whatsapp"]');
+  h.ok(await h.espera(p, () => !!document.querySelector('#wa-lista [data-wa-arquivadas]')), 'Todas sem linhas mostra o atalho para as arquivadas');
+  h.ok(await texto(p, '#wa-lista .vazio-bloco') === 'Nenhuma não lida2 conversas arquivadas com não lidas.Ver arquivadas', `o texto explica onde estão (${await texto(p, '#wa-lista .vazio-bloco')})`);
+  await p.click('#wa-filtro [data-f="grupos"]'); await p.waitForTimeout(80);
+  h.ok(!!(await p.$('#wa-lista [data-wa-arquivadas]')), 'Grupos vazio também leva às arquivadas');
+  await p.click('#wa-filtro [data-f="todas"]'); await p.waitForTimeout(80);
+  await p.click('#wa-lista [data-wa-arquivadas]'); await p.waitForTimeout(80);
+  h.ok((await nomes(p)).join('|') === 'Bia Arquivada|Promo Arquivada', `o atalho abre o filtro Arquivadas com as conversas (${(await nomes(p)).join('|')})`);
+  h.ok(await p.evaluate(() => document.querySelector('#wa-filtro [data-f="arquivadas"]').getAttribute('aria-pressed')) === 'true', 'o filtro Arquivadas fica marcado depois do atalho');
   await p.context().close();
 }
