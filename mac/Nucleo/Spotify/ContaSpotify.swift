@@ -153,6 +153,8 @@ final class ContaSpotify: @unchecked Sendable {
         self.armazem = armazem
         self.transporte = transporte
         self.agora = agora
+        // O pedido de espera sobrevive ao reinício do app: sem isso o 429 volta e a punição só cresce.
+        if let ate = armazem.ler().bloqueadoAte { _bloqueadoAte = Date(timeIntervalSince1970: ate) }
     }
 
     // MARK: Estado
@@ -404,7 +406,9 @@ final class ContaSpotify: @unchecked Sendable {
     /// O Spotify disse 429: respeita o Retry-After (sem ele, 30 s). Insistir durante a espera só a alonga.
     private func registrarLimite(_ segundos: TimeInterval?, metodo: String, caminho: String) {
         let s = min(max(segundos ?? Self.esperaPadraoDoLimite, 1), 86_400)
-        travaLimite.lock(); _bloqueadoAte = agora().addingTimeInterval(s); travaLimite.unlock()
+        let ate = agora().addingTimeInterval(s)
+        travaLimite.lock(); _bloqueadoAte = ate; travaLimite.unlock()
+        var d = armazem.ler(); d.bloqueadoAte = ate.timeIntervalSince1970; armazem.gravar(d)
         registrar("spotify: limite de pedidos em \(metodo) \(caminho) (HTTP 429), esperando \(Int(s.rounded(.up))) s\(segundos == nil ? " (o Spotify não disse quanto)" : "")")
     }
 

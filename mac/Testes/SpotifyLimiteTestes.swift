@@ -83,6 +83,24 @@ final class SpotifyLimiteTestes: XCTestCase {
         XCTAssertNil(comp.aplicar(estado(tocando: true), uri: "spotify:track:f0", agora: rel.agora).limitadoAte)
     }
 
+    func testPedidoDeEsperaSobreviveAoReinicioDoApp() {
+        let rel = RelogioDoLimite(Date(timeIntervalSince1970: 2_000_000))
+        let armazem = ArmazemSpotifyMemoria(DadosSpotify(clientId: chaveDeTeste, acesso: "ACESSO", renovacao: "RENOVA", expiraEm: rel.agora.timeIntervalSince1970 + 90_000))
+        let t = TransporteFalso { _ in RespostaWeb(status: 429, corpo: Data(), esperar: 26_657) }
+        let conta = ContaSpotify(armazem: armazem, transporte: t, agora: { rel.agora })
+        _ = conta.curtida("spotify:track:x")
+        XCTAssertNotNil(conta.limiteRestante())
+        // O app reinicia: conta nova com o mesmo armazém.
+        rel.ir(3600)
+        let t2 = TransporteFalso { _ in respostaJson(200, [false]) }
+        let nova = ContaSpotify(armazem: armazem, transporte: t2, agora: { rel.agora })
+        XCTAssertEqual(nova.limiteRestante() ?? 0, 26_657 - 3600, accuracy: 2)
+        _ = nova.curtida("spotify:track:y")
+        XCTAssertEqual(t2.pedidos.count, 0, "dentro da espera nenhum pedido sai, nem depois de reiniciar")
+        rel.ir(26_657)
+        XCTAssertNil(nova.limiteRestante())
+    }
+
     func testTocarPausarEPularSeguemSemAApiNoBloqueio() {
         let (t, conta, _, rel, _) = montar { _ in RespostaWeb(status: 429, corpo: Data(), esperar: 3600) }
         _ = conta.curtida("spotify:track:x")
