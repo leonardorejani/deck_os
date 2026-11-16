@@ -64,5 +64,9 @@ function mac(atrasoDoRodizio) {
   await w.DeckCanal.spotify('posicao', 42); await w.DeckCanal.spotify('repetir', true); await w.DeckCanal.spotify('aleatorio', false);
   await w.DeckCanal.spotify('aleatorio'); await w.DeckCanal.spotify('proxima');
   assert.deepStrictEqual(vistos, ['/api/spotify/posicao {"s":"42"}', '/api/spotify/repetir {"v":"1"}', '/api/spotify/aleatorio {"v":"0"}', '/api/spotify/aleatorio {}', '/api/spotify/proxima {}'], 'query de cada ação do Spotify: ' + JSON.stringify(vistos));
+  // 6. Pular na fila: a uri da lista (ctx) chega ao Mac, senão o pulo instantâneo nunca liga no app. Sem uri não leva ctx.
+  vistos.length = 0;
+  await w.DeckCanal.pularFila(2, 'u:b', 'spotify:playlist:p'); await w.DeckCanal.pularFila(3, 'u:c'); await w.DeckCanal.pularFila(1);
+  assert.deepStrictEqual(vistos, ['/api/spotify/pular {"n":"2","uri":"u:b","ctx":"spotify:playlist:p"}', '/api/spotify/pular {"n":"3","uri":"u:c"}', '/api/spotify/pular {"n":"1"}'], 'query do pular: ' + JSON.stringify(vistos));
   console.log('ponte.js: ok');
 })().catch(e => { console.error(e); process.exit(1); });

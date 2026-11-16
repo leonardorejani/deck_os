@@ -724,6 +724,9 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; text
 .pc-info { display: grid; gap: var(--secao); min-width: 0 }
 .pc-titulos { display: grid; gap: var(--item); min-width: 0 }
 .pc-titulos .faixa { font-size: var(--texto-2xl); white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; line-height: var(--altura-titulo) }
+/* o X de fechar fica no canto de cima à direita, em cima da primeira linha do título: o título acaba antes dele (em pé o X fica acima e o título é centrado) */
+.pc-titulos .faixa { padding-right: calc(var(--alvo-sm) + var(--item)) }
+.vertical .pc-titulos .faixa { padding-right: 0 }
 .pc-titulos .artista { font-size: var(--texto-md); display: flex; align-items: center; min-width: 0 }
 .pc-titulos .texto-artista { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 .pc-titulos .album { color: var(--texto-2); font-size: var(--texto-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }

@@ -48,6 +48,8 @@ struct FilaSpotify: Codable, Equatable, Sendable {
     var proximas: [ItemDaFila]
     /// Nome da lista, do álbum ou do artista que está tocando ("Próximas de: ..."). nil quando o Spotify não deixa saber.
     var contexto: String? = nil
+    /// A uri do contexto (lista ou álbum) que toca. O painel devolve ela em pular, e o Mac toca sem perguntar de novo.
+    var contextoUri: String? = nil
 }
 
 struct RecentesSpotify: Codable, Equatable, Sendable {
@@ -96,6 +98,17 @@ final class ContaSpotify: @unchecked Sendable {
     private let travaAviso = NSLock()
     private var _precisaChavePropria = false
     private var _registrar: @Sendable (String) -> Void = { _ in }
+    /// Até quando o Spotify mandou esperar (429 com Retry-After). Enquanto não passa, nenhum pedido sai.
+    private let travaLimite = NSLock()
+    private var _bloqueadoAte: Date?
+    private var recentesGuardados: (itens: RecentesSpotify, limite: Int, em: Date)?
+    private var pulosFeitos = 0
+    /// Quanto os recentes ficam guardados antes de pedir de novo (a aba pode abrir e fechar à vontade).
+    static let validadeDosRecentes: TimeInterval = 60
+    /// Espera quando o Spotify manda 429 sem dizer quanto.
+    static let esperaPadraoDoLimite: TimeInterval = 30
+    /// Roda o que sobra do pulo depois que o painel já foi respondido. Os testes trocam por execução na hora.
+    var emSegundoPlano: @Sendable (@escaping @Sendable () -> Void) -> Void = { trabalho in DispatchQueue.global(qos: .userInitiated).async(execute: trabalho) }
 
     /// Escreve no log do app (deck.log) o rastro do que a conta fez. Padrão: nada. Nunca recebe token, código nem cabeçalho.
     var registrar: @Sendable (String) -> Void {
@@ -299,6 +312,10 @@ final class ContaSpotify: @unchecked Sendable {
         var url = Self.api + caminho
         if !query.isEmpty { url += "?" + Self.formulario(query) }
         let corpo = json.flatMap { try? JSONSerialization.data(withJSONObject: $0) }
+        if let resta = limiteRestante() {
+            if let rastro { registrar("spotify: \(rastro) \(metodo) \(caminho) não enviado, o Spotify mandou esperar mais \(Int(resta.rounded(.up))) s") }
+            return .failure(.esperar)
+        }
         func uma(_ forcar: Bool) -> Result<RespostaWeb, ErroSpotify> {
             switch tokenDeAcesso(forcar: forcar) {
             case .failure(let e): return .failure(e)
@@ -321,10 +338,27 @@ final class ContaSpotify: @unchecked Sendable {
             registrar("spotify: \(rastro) \(metodo) \(caminho) corpo enviado=\(Self.resumoDoCorpo(json)) -> HTTP \(r.status)\(trecho)")
         }
         if (200..<300).contains(r.status) { return .success(r) }
+        if r.status == 429 { registrarLimite(r.esperar, metodo: metodo, caminho: caminho) }
         let e = conferirCadastro(Self.traduzir(r))
         // Meio logado não serve: com a chave do Deck e conta fora da lista, sai do login para a tela pedir a chave própria.
         if e == .semCadastro { desconectar() }
         return .failure(e)
+    }
+
+    /// Segundos que ainda faltam do pedido de espera do Spotify, ou nil se já pode chamar.
+    func limiteRestante() -> TimeInterval? {
+        travaLimite.lock(); defer { travaLimite.unlock() }
+        guard let ate = _bloqueadoAte else { return nil }
+        let resta = ate.timeIntervalSince(agora())
+        if resta <= 0 { _bloqueadoAte = nil; return nil }
+        return resta
+    }
+
+    /// O Spotify disse 429: respeita o Retry-After (sem ele, 30 s). Insistir durante a espera só a alonga.
+    private func registrarLimite(_ segundos: TimeInterval?, metodo: String, caminho: String) {
+        let s = min(max(segundos ?? Self.esperaPadraoDoLimite, 1), 86_400)
+        travaLimite.lock(); _bloqueadoAte = agora().addingTimeInterval(s); travaLimite.unlock()
+        registrar("spotify: limite de pedidos em \(metodo) \(caminho) (HTTP 429), esperando \(Int(s.rounded(.up))) s\(segundos == nil ? " (o Spotify não disse quanto)" : "")")
     }
 
     static func traduzir(_ r: RespostaWeb) -> ErroSpotify {
@@ -400,7 +434,9 @@ final class ContaSpotify: @unchecked Sendable {
             return FilaSpotify(atual: Self.itemDaFila(obj["currently_playing"]), proximas: Array(proximas))
         }
         guard case .success(var f) = r else { return r }
-        f.contexto = nomeDoContexto()
+        let c = nomeDoContexto()
+        f.contexto = c?.nome
+        f.contextoUri = c?.uri
         return .success(f)
     }
 
@@ -422,19 +458,19 @@ final class ContaSpotify: @unchecked Sendable {
 
     /// De onde vêm as próximas: a lista, o álbum ou o artista que toca. O nome é pedido uma vez por contexto e guardado.
     /// Lista privada não deixa ler o nome (falta permissão): fica nil e a tela diz só "Próximas".
-    private func nomeDoContexto() -> String? {
+    private func nomeDoContexto() -> (nome: String?, uri: String)? {
         guard case .success(let r) = chamar("GET", "/me/player"),
               let ctx = (json(r) as? [String: Any])?["context"] as? [String: Any],
               let uri = ctx["uri"] as? String else { return nil }
         let partes = uri.split(separator: ":").map(String.init)
         guard partes.count == 3, ["playlist", "album", "artist"].contains(partes[1]) else { return nil }
         trava.lock(); let guardado = nomesDeContexto[uri]; trava.unlock()
-        if let guardado { return guardado }
+        if let guardado { return (guardado, uri) }
         let caminho = ["playlist": "/playlists/", "album": "/albums/", "artist": "/artists/"][partes[1]]! + partes[2]
         let query = partes[1] == "playlist" ? [("fields", "name")] : []
-        guard case .success(let n) = chamar("GET", caminho, query), let nome = (json(n) as? [String: Any])?["name"] as? String else { return nil }
+        guard case .success(let n) = chamar("GET", caminho, query), let nome = (json(n) as? [String: Any])?["name"] as? String else { return (nil, uri) }
         trava.lock(); nomesDeContexto[uri] = nome; trava.unlock()
-        return nome
+        return (nome, uri)
     }
 
     /// Quanto esperar o Spotify assentar o que está tocando antes de conferir o pulo. Os testes zeram.
@@ -447,7 +483,69 @@ final class ContaSpotify: @unchecked Sendable {
     /// 2. música da fila manual (fora da lista), artista ou o Spotify recusou o salto: `play` com `uris`, a escolhida
     ///    seguida das que vinham depois dela na fila. A lista de origem deixa de ser o contexto, mas a ordem da tela se mantém.
     /// Sem `uri` não há como saltar: cai nos `next` de antes.
-    func pularFila(posicao: Int, uri: String?) -> ErroSpotify? {
+    ///
+    /// Com `contexto` (a lista ou o álbum que o painel viu na fila), o salto sai na hora: um `play` com context_uri e offset,
+    /// sem ler nada antes, e o painel é respondido assim que o Spotify aceita. A conferência (o Spotify trocou mesmo?) e o
+    /// plano B do play de uris correm depois, em segundo plano. Sem contexto, ou se o play recusar, vale o caminho lento.
+    func pularFila(posicao: Int, uri: String?, contexto: String? = nil) -> ErroSpotify? {
+        let meu = cancelarCorrecaoDoPulo()
+        if let uri, let contexto, Self.contextoDeSalto(contexto), (1...50).contains(posicao) {
+            let rt = "pular"
+            registrar("spotify: \(rt) pedido posicao=\(posicao) uri=\(uri) contexto do painel=\(contexto)")
+            let r = chamar("PUT", "/me/player/play", json: ["context_uri": contexto, "offset": ["uri": uri]], rastro: rt)
+            if case .success = r {
+                registrar("spotify: \(rt) play aceito na hora, conferência em segundo plano")
+                registrar("spotify: \(rt) resultado para o painel: ok")
+                emSegundoPlano { [self] in conferirPulo(uri: uri, vez: meu) }
+                return nil
+            }
+            if case .failure(let e) = r, e == .esperar { return e }
+            registrar("spotify: \(rt) play direto não passou, segue o caminho com conferência")
+        }
+        return pularFilaConferindo(posicao: posicao, uri: uri)
+    }
+
+    /// Qualquer outra ação que muda o que toca (próxima, anterior, pausa, outro pulo, trocar de aparelho) chama isto:
+    /// a conferência do pulo anterior, que ainda corre em segundo plano, deixa de valer e não refaz a fila por cima.
+    @discardableResult
+    func cancelarCorrecaoDoPulo() -> Int {
+        travaLimite.lock(); defer { travaLimite.unlock() }
+        pulosFeitos += 1
+        return pulosFeitos
+    }
+
+    /// Só lista e álbum entram no salto direto, e só no formato do Spotify (a uri vai para o corpo do pedido).
+    static func contextoDeSalto(_ c: String) -> Bool {
+        let p = c.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
+        return p.count == 3 && p[0] == "spotify" && ["playlist", "album"].contains(p[1])
+            && !p[2].isEmpty && p[2].allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber) }
+    }
+
+    /// Depois do play direto: confere se o Spotify trocou. Se não, o plano B (play de uris). Um toque novo cancela este.
+    private func conferirPulo(uri: String, vez: Int) {
+        let rt = "pular"
+        func atual() -> Bool { travaLimite.lock(); defer { travaLimite.unlock() }; return pulosFeitos == vez }
+        if esperaDoPulo > 0 { Thread.sleep(forTimeInterval: esperaDoPulo) }
+        let ok = tocaAgora(uri, rastro: rt, ate: atual)
+        registrar("spotify: \(rt) conferência em segundo plano, tocaAgora=\(ok)")
+        guard !ok, atual() else { return }
+        guard case .success(let f) = fila(limite: 50, rastro: rt), let i = f.proximas.firstIndex(where: { $0.uri == uri }) else {
+            registrar("spotify: \(rt) plano B sem a música na fila, não mexe")
+            return
+        }
+        let depois = f.proximas[i...].compactMap { $0.uri }
+        guard atual() else { return }
+        // O Spotify pode ter assentado nesse meio tempo: reiniciar a faixa que já começou seria pior que não corrigir.
+        if case .success(let j) = jogador(rastro: rt), j.uri == uri {
+            registrar("spotify: \(rt) plano B dispensado, o Spotify já toca a escolhida")
+            return
+        }
+        guard atual() else { return }
+        let r = chamar("PUT", "/me/player/play", json: ["uris": depois], rastro: rt)
+        registrar("spotify: \(rt) plano B em segundo plano (play de uris): \(erro(r)?.texto ?? "aceito")")
+    }
+
+    private func pularFilaConferindo(posicao: Int, uri: String?) -> ErroSpotify? {
         guard let uri else {
             guard (1...50).contains(posicao) else { return .recusou }
             for _ in 0..<posicao { if let e = erro(chamar("POST", "/me/player/next")) { return e } }
@@ -459,7 +557,10 @@ final class ContaSpotify: @unchecked Sendable {
             registrar("spotify: \(rt) resultado para o painel: \(e.map { "erro '\($0.texto)'" } ?? "ok")")
             return e
         }
-        guard case .success(let f) = fila(limite: 50, rastro: rt) else {
+        let lida = fila(limite: 50, rastro: rt)
+        guard case .success(let f) = lida else {
+            // Com o Spotify pedindo espera, a fila não mudou: o aviso certo é o de esperar.
+            if case .failure(let e) = lida, e == .esperar { return fim(e) }
             return fim(ErroSpotify(texto: "A fila mudou. Abra a fila de novo."))
         }
         // A mesma música pode aparecer mais de uma vez: fica com a cópia mais perto da vez que a tela mandou.
@@ -499,8 +600,9 @@ final class ContaSpotify: @unchecked Sendable {
     }
 
     /// O Spotify às vezes aceita o `play` com um offset que não é da lista e toca outra coisa. Confere o que tocou.
-    private func tocaAgora(_ uri: String, rastro: String? = nil) -> Bool {
+    private func tocaAgora(_ uri: String, rastro: String? = nil, ate continuar: () -> Bool = { true }) -> Bool {
         for tentativa in 0..<3 {
+            guard continuar() else { return true }
             if case .success(let j) = jogador(rastro: rastro) {
                 if j.uri == uri { return true }
                 registrar("spotify: \(rastro ?? "tocaAgora") tentativa \(tentativa + 1): toca \(j.uri ?? "-"), esperava \(uri)")
@@ -511,11 +613,21 @@ final class ContaSpotify: @unchecked Sendable {
     }
 
     /// O que tocou por último, mais recente primeiro. Pede a permissão de histórico, que logins antigos não têm.
+    /// Fica guardado por `validadeDosRecentes`, e com o Spotify pedindo espera devolve o que já tinha (mesmo velho).
     func recentes(limite: Int = 20) -> Result<RecentesSpotify, ErroSpotify> {
-        chamar("GET", "/me/player/recently-played", [("limit", String(limite))]).map { r in
+        travaLimite.lock(); let guardado = recentesGuardados; travaLimite.unlock()
+        if let g = guardado, g.limite == limite, agora().timeIntervalSince(g.em) < Self.validadeDosRecentes { return .success(g.itens) }
+        let r = chamar("GET", "/me/player/recently-played", [("limit", String(limite))], rastro: "recentes").map { r in
             let itens = ((json(r) as? [String: Any])?["items"] as? [[String: Any]]) ?? []
             return RecentesSpotify(itens: itens.compactMap { Self.itemDaFila($0["track"]) })
         }
+        switch r {
+        case .success(let novo):
+            travaLimite.lock(); recentesGuardados = (novo, limite, agora()); travaLimite.unlock()
+        case .failure(let e):
+            if e == .esperar, let g = guardado, g.limite == limite { return .success(g.itens) }
+        }
+        return r
     }
 
     /// "faixa" repete só a música, "nao" desliga, "contexto" repete o álbum ou a lista.
