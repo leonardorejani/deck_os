@@ -13,6 +13,8 @@ struct DadosSpotify: Codable, Equatable, Sendable {
     var expiraEm: Double?
     /// O nome da conta conectada (só para a tela mostrar quem entrou).
     var nome: String?
+    /// Até quando o Spotify mandou esperar (429 com Retry-After), em segundos desde 1970. Guardado para o app reiniciar sem insistir.
+    var bloqueadoAte: Double?
 
     var logado: Bool { !(renovacao ?? "").isEmpty }
 }
