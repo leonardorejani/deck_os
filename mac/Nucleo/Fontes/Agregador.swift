@@ -69,6 +69,9 @@ struct Fontes: Sendable {
     var capa: @Sendable () -> Data?
     var agenda: @Sendable (Date) -> Leitura<ResumoAgenda?>
     var acesas: @Sendable ([Tecla]) -> [String]
+    /// Muda quando uma tecla de comando começa ou termina de rodar. É parte da chave do cache das acesas: a tecla acende na hora
+    /// depois de ligar ou desligar, sem esperar o prazo. Fonte de fora (teste antigo) não precisa trazer.
+    var versaoTeclas: @Sendable () -> Int = { 0 }
     /// O monitor do Mac, só dos itens que a pessoa deixou ligados. Fonte de fora (teste antigo) não precisa trazer.
     var monitor: @Sendable (ConfigMonitor, Date) -> Leitura<EstadoMonitor?> = { _, _ in Leitura(valor: nil, aviso: nil) }
     /// O microfone e a câmera da reunião, por id das teclas que controlam isso. Só é chamada com tecla dessas no perfil.
@@ -110,6 +113,7 @@ struct Fontes: Sendable {
             capa: { spotify.capa() },
             agenda: { agenda.ler($0) },
             acesas: { TeclasAcesas.ler($0, executor: executor) },
+            versaoTeclas: { ComandosEmAndamento.compartilhado.versao },
             monitor: { c, agora in Leitura(valor: monitor.ler(c, agora: agora), aviso: nil) },
             reuniao: { LeitorDeReuniao(executor: executor).ler($0) },
             andamento: { ComandosEmAndamento.compartilhado.foto() }
@@ -128,6 +132,10 @@ final class Agregador: @unchecked Sendable {
     private let cacheMonitor = Cache<ConfigMonitor, Leitura<EstadoMonitor?>>(validade: 3)
     /// Curto: a tecla tem que acompanhar o toque. A leitura mexe com o navegador, então não vai a cada pedido de 1 s.
     private let cacheReuniao = Cache<[Tecla], Leitura<[String: EstadoDeReuniao]>>(validade: 1.5)
+
+    /// Conferir o estado das teclas custa um processo (e, nas de liga e desliga, um shell de perfil) por tecla: a cada pedido de 1 s seria o dia todo.
+    struct ChaveAcesas: Equatable, Sendable { var teclas: [Tecla]; var versao: Int }
+    private let cacheAcesas = Cache<ChaveAcesas, [String]>(validade: 2.5)
 
     /// Quanto o estado espera pelas fontes. Passou disso, a fonte que não respondeu entra com o
     /// último valor que deu certo (ou vazia), e o iPhone não fica sem painel por causa de uma só.
@@ -213,7 +221,7 @@ final class Agregador: @unchecked Sendable {
         if b.monitor, config.monitor.algum {
             em { c.guardar(monitor: self.cacheMonitor.obterAgil(chave: config.monitor, agora: agora, padrao: Leitura(valor: nil, aviso: nil), paciencia: p) { self.fontes.monitor(config.monitor, agora) }) }
         }
-        em { c.guardar(acesas: self.fontes.acesas(teclas)) }
+        em { c.guardar(acesas: self.cacheAcesas.obterAgil(chave: ChaveAcesas(teclas: teclas, versao: self.fontes.versaoTeclas()), agora: agora, padrao: [], paciencia: p) { self.fontes.acesas(teclas) }) }
         // Só lê quando o perfil tem tecla de microfone ou de câmera da reunião: sem ela o Mac nem encosta no navegador.
         let teclasDeReuniao = teclas.filter { LeitorDeReuniao.item(da: $0) != nil }
         if !teclasDeReuniao.isEmpty {
@@ -228,7 +236,7 @@ final class Agregador: @unchecked Sendable {
         let leituraWhats = fw ?? cacheWhatsApp.ultimo() ?? vazioWhats
         let leituraSpotify = fp ?? cacheSpotify.ultimo() ?? vazioSpotify
         let leituraAgenda = fa ?? cacheAgenda.ultimo() ?? vazioAgenda
-        let acesas = fz ?? []
+        let acesas = fz ?? cacheAcesas.ultimo() ?? []
 
         var avisos: [Aviso] = []
         func avisar(_ a: Aviso?) { if let a, !avisos.contains(a) { avisos.append(a) } }
