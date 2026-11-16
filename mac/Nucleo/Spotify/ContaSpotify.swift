@@ -102,9 +102,19 @@ final class ContaSpotify: @unchecked Sendable {
     private let travaLimite = NSLock()
     private var _bloqueadoAte: Date?
     private var recentesGuardados: (itens: RecentesSpotify, limite: Int, em: Date)?
+    private var filaGuardada: (fila: FilaSpotify, limite: Int, em: Date)?
+    /// Um pedido de fila por vez: quem chega junto espera e já pega o resultado guardado, sem pedir de novo.
+    private let travaDaFila = NSLock()
+    /// Quantas chamadas saíram para a API no minuto corrente, por rota. O resumo vai ao log a cada minuto (sem token nem query).
+    private let travaContagem = NSLock()
+    private var contagem: [String: Int] = [:]
+    private var bloqueadas = 0
+    private var janelaDaContagem: Date?
     private var pulosFeitos = 0
     /// Quanto os recentes ficam guardados antes de pedir de novo (a aba pode abrir e fechar à vontade).
     static let validadeDosRecentes: TimeInterval = 60
+    /// A fila anda a cada música, mas a tela só a pede ao abrir a folha: 10 s bastam para dois pedidos juntos não irem duas vezes.
+    static let validadeDaFila: TimeInterval = 10
     /// Espera quando o Spotify manda 429 sem dizer quanto.
     static let esperaPadraoDoLimite: TimeInterval = 30
     /// Roda o que sobra do pulo depois que o painel já foi respondido. Os testes trocam por execução na hora.
@@ -259,6 +269,7 @@ final class ContaSpotify: @unchecked Sendable {
         let corpo = Self.formulario(campos)
         let req = RequisicaoWeb(metodo: "POST", url: Self.contas + "/api/token",
                                 cabecalhos: ["Content-Type": "application/x-www-form-urlencoded"], corpo: Data(corpo.utf8))
+        contar("POST accounts/api/token")
         guard let r = transporte.enviar(req) else { return .failure(.semRede) }
         let obj = (try? JSONSerialization.jsonObject(with: r.corpo)) as? [String: Any]
         guard (200..<300).contains(r.status), let acesso = obj?["access_token"] as? String else {
@@ -312,7 +323,9 @@ final class ContaSpotify: @unchecked Sendable {
         var url = Self.api + caminho
         if !query.isEmpty { url += "?" + Self.formulario(query) }
         let corpo = json.flatMap { try? JSONSerialization.data(withJSONObject: $0) }
+        resumirChamadas()
         if let resta = limiteRestante() {
+            contar(nil)
             if let rastro { registrar("spotify: \(rastro) \(metodo) \(caminho) não enviado, o Spotify mandou esperar mais \(Int(resta.rounded(.up))) s") }
             return .failure(.esperar)
         }
@@ -322,6 +335,7 @@ final class ContaSpotify: @unchecked Sendable {
             case .success(let t):
                 var cab = ["Authorization": "Bearer \(t)"]
                 if corpo != nil { cab["Content-Type"] = "application/json" }
+                contar(Self.rotaParaContar(metodo, caminho))
                 guard let r = transporte.enviar(RequisicaoWeb(metodo: metodo, url: url, cabecalhos: cab, corpo: corpo)) else { return .failure(.semRede) }
                 return .success(r)
             }
@@ -343,6 +357,39 @@ final class ContaSpotify: @unchecked Sendable {
         // Meio logado não serve: com a chave do Deck e conta fora da lista, sai do login para a tela pedir a chave própria.
         if e == .semCadastro { desconectar() }
         return .failure(e)
+    }
+
+    private static func rotaParaContar(_ metodo: String, _ caminho: String) -> String {
+        let p = caminho.split(separator: "/", omittingEmptySubsequences: true)
+        if p.count == 2, ["playlists", "albums", "artists"].contains(String(p[0])) { return "\(metodo) /\(p[0])/:id" }
+        return "\(metodo) \(caminho)"
+    }
+
+    /// Soma uma chamada enviada (rota) ou, sem rota, uma que nem saiu porque o Spotify mandou esperar.
+    private func contar(_ rota: String?) {
+        travaContagem.lock(); defer { travaContagem.unlock() }
+        if janelaDaContagem == nil { janelaDaContagem = agora() }
+        if let rota { contagem[rota, default: 0] += 1 } else { bloqueadas += 1 }
+    }
+
+    /// A cada minuto, uma linha no log com quantas chamadas saíram por rota, para ver o gasto da cota. Minuto sem chamada não escreve.
+    func resumirChamadas() {
+        let agoraMesmo = agora()
+        travaContagem.lock()
+        guard let inicio = janelaDaContagem else { travaContagem.unlock(); return }
+        guard agoraMesmo.timeIntervalSince(inicio) >= 60 else { travaContagem.unlock(); return }
+        let c = contagem, b = bloqueadas
+        contagem = [:]; bloqueadas = 0; janelaDaContagem = nil
+        travaContagem.unlock()
+        let total = c.values.reduce(0, +)
+        let rotas = c.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: ", ")
+        registrar("spotify: chamadas à API no último minuto: \(total)\(rotas.isEmpty ? "" : " (" + rotas + ")"), seguradas pelo limite: \(b)")
+    }
+
+    /// Até quando o Spotify mandou esperar, ou nil se já pode chamar.
+    var bloqueadoAte: Date? {
+        guard let resta = limiteRestante() else { return nil }
+        return agora().addingTimeInterval(resta)
     }
 
     /// Segundos que ainda faltam do pedido de espera do Spotify, ou nil se já pode chamar.
@@ -427,7 +474,21 @@ final class ContaSpotify: @unchecked Sendable {
 
     // MARK: Fila e repetição
 
-    func fila(limite: Int = 20, rastro: String? = nil) -> Result<FilaSpotify, ErroSpotify> {
+    /// Guarda a fila por `validadeDaFila` e serializa os pedidos. `fresca` pula o guardado (o pulo confere a fila de agora).
+    /// Com o Spotify pedindo espera, devolve a que já tinha, mesmo velha.
+    func fila(limite: Int = 20, rastro: String? = nil, fresca: Bool = false) -> Result<FilaSpotify, ErroSpotify> {
+        travaDaFila.lock(); defer { travaDaFila.unlock() }
+        travaLimite.lock(); let guardada = filaGuardada; travaLimite.unlock()
+        if !fresca, let g = guardada, g.limite == limite, agora().timeIntervalSince(g.em) < Self.validadeDaFila { return .success(g.fila) }
+        let nova = lerFila(limite: limite, rastro: rastro)
+        switch nova {
+        case .success(let f): travaLimite.lock(); filaGuardada = (f, limite, agora()); travaLimite.unlock()
+        case .failure(let e): if e == .esperar, let g = guardada, g.limite == limite { return .success(g.fila) }
+        }
+        return nova
+    }
+
+    private func lerFila(limite: Int, rastro: String?) -> Result<FilaSpotify, ErroSpotify> {
         let r = chamar("GET", "/me/player/queue", rastro: rastro).map { r in
             let obj = (json(r) as? [String: Any]) ?? [:]
             let proximas = ((obj["queue"] as? [Any]) ?? []).compactMap(Self.itemDaFila).prefix(limite)
@@ -510,6 +571,7 @@ final class ContaSpotify: @unchecked Sendable {
     @discardableResult
     func cancelarCorrecaoDoPulo() -> Int {
         travaLimite.lock(); defer { travaLimite.unlock() }
+        filaGuardada = nil
         pulosFeitos += 1
         return pulosFeitos
     }
@@ -529,7 +591,7 @@ final class ContaSpotify: @unchecked Sendable {
         let ok = tocaAgora(uri, rastro: rt, ate: atual)
         registrar("spotify: \(rt) conferência em segundo plano, tocaAgora=\(ok)")
         guard !ok, atual() else { return }
-        guard case .success(let f) = fila(limite: 50, rastro: rt), let i = f.proximas.firstIndex(where: { $0.uri == uri }) else {
+        guard case .success(let f) = fila(limite: 50, rastro: rt, fresca: true), let i = f.proximas.firstIndex(where: { $0.uri == uri }) else {
             registrar("spotify: \(rt) plano B sem a música na fila, não mexe")
             return
         }
@@ -557,7 +619,7 @@ final class ContaSpotify: @unchecked Sendable {
             registrar("spotify: \(rt) resultado para o painel: \(e.map { "erro '\($0.texto)'" } ?? "ok")")
             return e
         }
-        let lida = fila(limite: 50, rastro: rt)
+        let lida = fila(limite: 50, rastro: rt, fresca: true)
         guard case .success(let f) = lida else {
             // Com o Spotify pedindo espera, a fila não mudou: o aviso certo é o de esperar.
             if case .failure(let e) = lida, e == .esperar { return fim(e) }
