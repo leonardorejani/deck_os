@@ -71,7 +71,7 @@
     curtir: curtir => pedir('POST', '/api/spotify/curtir', { v: curtir ? '1' : '0' }),
     fila: () => pedir('GET', '/api/spotify/fila'),
     recentes: () => pedir('GET', '/api/spotify/recentes'),
-    pularFila: (n, uri) => pedir('POST', '/api/spotify/pular', uri ? { n: String(n), uri: String(uri) } : { n: String(n) }),
+    pularFila: (n, uri, ctx) => pedir('POST', '/api/spotify/pular', uri ? { n: String(n), uri: String(uri), ...(ctx ? { ctx: String(ctx) } : {}) } : { n: String(n) }),
     repetirModo: modo => pedir('POST', '/api/spotify/repetir', { modo: String(modo) }),
     config: () => pedir('GET', '/api/config'),
     gravarConfig: config => pedir('PUT', '/api/config', undefined, config),

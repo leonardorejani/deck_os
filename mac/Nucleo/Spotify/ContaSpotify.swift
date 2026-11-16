@@ -488,6 +488,7 @@ final class ContaSpotify: @unchecked Sendable {
     /// sem ler nada antes, e o painel é respondido assim que o Spotify aceita. A conferência (o Spotify trocou mesmo?) e o
     /// plano B do play de uris correm depois, em segundo plano. Sem contexto, ou se o play recusar, vale o caminho lento.
     func pularFila(posicao: Int, uri: String?, contexto: String? = nil) -> ErroSpotify? {
+        let meu = cancelarCorrecaoDoPulo()
         if let uri, let contexto, Self.contextoDeSalto(contexto), (1...50).contains(posicao) {
             let rt = "pular"
             registrar("spotify: \(rt) pedido posicao=\(posicao) uri=\(uri) contexto do painel=\(contexto)")
@@ -495,13 +496,22 @@ final class ContaSpotify: @unchecked Sendable {
             if case .success = r {
                 registrar("spotify: \(rt) play aceito na hora, conferência em segundo plano")
                 registrar("spotify: \(rt) resultado para o painel: ok")
-                travaLimite.lock(); pulosFeitos += 1; let meu = pulosFeitos; travaLimite.unlock()
                 emSegundoPlano { [self] in conferirPulo(uri: uri, vez: meu) }
                 return nil
             }
+            if case .failure(let e) = r, e == .esperar { return e }
             registrar("spotify: \(rt) play direto não passou, segue o caminho com conferência")
         }
         return pularFilaConferindo(posicao: posicao, uri: uri)
+    }
+
+    /// Qualquer outra ação que muda o que toca (próxima, anterior, pausa, outro pulo, trocar de aparelho) chama isto:
+    /// a conferência do pulo anterior, que ainda corre em segundo plano, deixa de valer e não refaz a fila por cima.
+    @discardableResult
+    func cancelarCorrecaoDoPulo() -> Int {
+        travaLimite.lock(); defer { travaLimite.unlock() }
+        pulosFeitos += 1
+        return pulosFeitos
     }
 
     /// Só lista e álbum entram no salto direto, e só no formato do Spotify (a uri vai para o corpo do pedido).
@@ -525,6 +535,12 @@ final class ContaSpotify: @unchecked Sendable {
         }
         let depois = f.proximas[i...].compactMap { $0.uri }
         guard atual() else { return }
+        // O Spotify pode ter assentado nesse meio tempo: reiniciar a faixa que já começou seria pior que não corrigir.
+        if case .success(let j) = jogador(rastro: rt), j.uri == uri {
+            registrar("spotify: \(rt) plano B dispensado, o Spotify já toca a escolhida")
+            return
+        }
+        guard atual() else { return }
         let r = chamar("PUT", "/me/player/play", json: ["uris": depois], rastro: rt)
         registrar("spotify: \(rt) plano B em segundo plano (play de uris): \(erro(r)?.texto ?? "aceito")")
     }
@@ -541,7 +557,10 @@ final class ContaSpotify: @unchecked Sendable {
             registrar("spotify: \(rt) resultado para o painel: \(e.map { "erro '\($0.texto)'" } ?? "ok")")
             return e
         }
-        guard case .success(let f) = fila(limite: 50, rastro: rt) else {
+        let lida = fila(limite: 50, rastro: rt)
+        guard case .success(let f) = lida else {
+            // Com o Spotify pedindo espera, a fila não mudou: o aviso certo é o de esperar.
+            if case .failure(let e) = lida, e == .esperar { return fim(e) }
             return fim(ErroSpotify(texto: "A fila mudou. Abra a fila de novo."))
         }
         // A mesma música pode aparecer mais de uma vez: fica com a cópia mais perto da vez que a tela mandou.
@@ -598,7 +617,7 @@ final class ContaSpotify: @unchecked Sendable {
     func recentes(limite: Int = 20) -> Result<RecentesSpotify, ErroSpotify> {
         travaLimite.lock(); let guardado = recentesGuardados; travaLimite.unlock()
         if let g = guardado, g.limite == limite, agora().timeIntervalSince(g.em) < Self.validadeDosRecentes { return .success(g.itens) }
-        let r = chamar("GET", "/me/player/recently-played", [("limit", String(limite))]).map { r in
+        let r = chamar("GET", "/me/player/recently-played", [("limit", String(limite))], rastro: "recentes").map { r in
             let itens = ((json(r) as? [String: Any])?["items"] as? [[String: Any]]) ?? []
             return RecentesSpotify(itens: itens.compactMap { Self.itemDaFila($0["track"]) })
         }

@@ -696,6 +696,59 @@ final class SpotifyApiTestes: XCTestCase {
         XCTAssertEqual(t.pedidos.count, 2)
     }
 
+    func testOutraAcaoDoUsuarioCancelaACorrecaoDoPuloQueAindaCorreEmSegundoPlano() {
+        let t = filaDeLista(tocaAposPlay: "u:z")
+        let (c, _) = logada(t); c.esperaDoPulo = 0
+        let sp = SegundoPlano(); c.emSegundoPlano = { sp.guardar($0) }
+        XCTAssertNil(c.pularFila(posicao: 2, uri: "u:b", contexto: "spotify:playlist:p"))
+        let real = SpotifyReal(executor: ExecutorFalso([("osascript", SaidaShell(status: 0, saida: "ok\n"))]), conta: c)
+        XCTAssertNil(real.acao("proxima"), "o usuário apertou próxima antes da conferência terminar")
+        sp.rodarTudo()
+        XCTAssertTrue(t.pedidos.filter { $0.metodo == "PUT" && corpoJson($0)["uris"] != nil }.isEmpty, "a correção não desfaz o que o usuário fez")
+    }
+
+    func testPlanoBNaoReiniciaAFaixaQueOSpotifyJaAssentou() {
+        let viuFila = NSLock(); nonisolated(unsafe) var leuFila = false
+        let t = TransporteFalso { r in
+            if r.url.hasSuffix("/me/player/queue") {
+                viuFila.lock(); leuFila = true; viuFila.unlock()
+                return respostaJson(200, ["queue": ["a", "b", "c"].map { ["name": $0, "artists": [["name": "X"]], "uri": "u:\($0)"] }])
+            }
+            if r.metodo == "GET" && r.url.hasSuffix("/me/player") {
+                viuFila.lock(); let l = leuFila; viuFila.unlock()
+                return respostaJson(200, ["item": ["uri": l ? "u:b" : "u:agora"], "context": ["uri": "spotify:playlist:p"]])
+            }
+            if r.metodo == "GET" { return respostaJson(200, ["name": "Lista"]) }
+            return respostaJson(204)
+        }
+        let (c, _) = logada(t); c.esperaDoPulo = 0
+        let sp = SegundoPlano(); c.emSegundoPlano = { sp.guardar($0) }
+        XCTAssertNil(c.pularFila(posicao: 2, uri: "u:b", contexto: "spotify:playlist:p"))
+        sp.rodarTudo()
+        XCTAssertTrue(t.pedidos.filter { $0.metodo == "PUT" && corpoJson($0)["uris"] != nil }.isEmpty, "já toca a escolhida: o play de uris reiniciaria a faixa")
+    }
+
+    private func transporteEmLimite() -> TransporteFalso {
+        TransporteFalso { _ in RespostaWeb(status: 429, corpo: Data(), esperar: 60) }
+    }
+
+    func testPularComLimiteDoSpotifyAvisaParaEsperarEmVezDeDizerQueAFilaMudou() {
+        for contexto in [nil, "spotify:playlist:p"] as [String?] {
+            let (c, _) = logada(transporteEmLimite()); c.esperaDoPulo = 0
+            XCTAssertEqual(c.pularFila(posicao: 2, uri: "u:b", contexto: contexto), .esperar, "contexto \(contexto ?? "nenhum")")
+            XCTAssertEqual(c.pularFila(posicao: 2, uri: "u:b", contexto: contexto), .esperar, "durante a espera, sem chamar a API")
+        }
+    }
+
+    func testRecentesGeraRastroNoLogDaChamada() {
+        let t = TransporteFalso { _ in respostaJson(200, ["items": []]) }
+        let (c, _) = logada(t)
+        let linhas = NSLock(); nonisolated(unsafe) var log: [String] = []
+        c.registrar = { linhas.lock(); log.append($0); linhas.unlock() }
+        _ = c.recentes()
+        XCTAssertTrue(log.joined().contains("recentes GET /me/player/recently-played"), log.joined(separator: "\n"))
+    }
+
     func testPularNaFilaQueMudouNaoPulaNada() {
         let t = TransporteFalso { r in r.metodo == "GET" ? respostaJson(200, ["queue": [["name": "a", "uri": "u:a"]]]) : respostaJson(204) }
         let (c, _) = logada(t)
