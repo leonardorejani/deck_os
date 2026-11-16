@@ -102,6 +102,7 @@ export default async function (h) {
   await p.click('#wa-lista [data-wa="r2@lid"]');
   await p.click('#wa-lista [data-wa-mac]');
   h.ok(await h.espera(p, () => document.querySelector('#aviso-txt')?.textContent.includes('Abrindo a conversa'), undefined, 4000), `Responder no Mac que demora espera a resposta em vez de mostrar erro (${await texto(p, '#aviso-txt')})`);
+  await p.context().close(); // a página de antes seguiria lendo a lista e contaminaria os contadores dos próximos arquivos
   /* ---------- Só arquivadas com não lidas: Todas vazia diz isso e leva até elas (16/11/2026: "já consta a conexão e nao aparece nada") ---------- */
   await h.reset();
   await h.cenario({ whatsappOrigem: 'qr', whatsappRico: true, whatsappSoArquivadas: true });
