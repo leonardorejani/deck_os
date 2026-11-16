@@ -181,6 +181,7 @@ const (
 	validadeFoto     = 24 * time.Hour
 	limiteMidia      = 8 << 20
 	maxArquivosMidia = 100
+	maxBytesMidia    = 100 << 20
 	// maxCompletar é quantas conversas lidas por rodada procuram nome, número e foto.
 	maxCompletar = 80
 )
@@ -356,6 +357,12 @@ func (a *ajudante) tratar(ctx context.Context, ev any) {
 			a.estado.Silenciar(e.JID.String(), fimDoSilencio(e.Action.GetMuted(), e.Action.GetMuteEndTimestamp()))
 			a.marcarSujo()
 		}
+	case *events.ClientOutdated:
+		fase("erro", "O WhatsApp não aceita mais esta versão do Deck. Atualize o Deck para voltar a ler as conversas.")
+	case *events.TemporaryBan:
+		fase("erro", "O WhatsApp bloqueou esta conta por um tempo. Espere e gere um QR novo depois.")
+	case *events.ConnectFailure:
+		fase("erro", "Não consegui conectar ao WhatsApp. Confira a internet e tente de novo nos Ajustes.")
 	case *events.StreamReplaced:
 		fase("erro", "Outro programa tomou o lugar do Deck nesta conexão.")
 	case *events.Message:

@@ -83,6 +83,8 @@ type Estado struct {
 	fixadas map[string]bool
 	// recentesAntes é o último recentes.json gravado (não regrava igual).
 	recentesAntes []byte
+	// conversasAntes é o último conversas.json gravado (não regrava igual: leva mídia dentro e é publicado várias vezes por segundo).
+	conversasAntes []byte
 }
 
 // arqFormato é o que vai em conversas.json.arquivadas. Antes era só a lista de ids (ainda se lê).
@@ -319,7 +321,7 @@ func (e *Estado) Limpar() {
 	e.desarquivaComMensagem = false
 	e.silenciadas = map[string]int64{}
 	e.fixadas = map[string]bool{}
-	e.gravadasAntes, e.recentesAntes = nil, nil
+	e.gravadasAntes, e.recentesAntes, e.conversasAntes = nil, nil, nil
 	e.mu.Unlock()
 	if e.arquivo != "" {
 		_ = os.Remove(e.arquivo)
@@ -448,7 +450,7 @@ func (e *Estado) Salvar() error {
 	lidas := make([]*Conversa, 0, len(e.conversas))
 	for _, c := range e.conversas {
 		if c.NaoLidas <= 0 && c.previa() != nil {
-			lidas = append(lidas, &Conversa{ID: c.ID, Nome: c.Nome, Grupo: c.Grupo, Ultima: c.Ultima, Numero: c.Numero, Foto: c.Foto, Previa: previaDe(*c.previa())})
+			lidas = append(lidas, &Conversa{ID: c.ID, Nome: c.Nome, Grupo: c.Grupo, Ultima: c.Ultima, Numero: c.Numero, Foto: c.Foto, Previa: previaDe(*c.previa()), UltimaMinha: c.UltimaMinha})
 		}
 	}
 	sort.Slice(lidas, func(i, j int) bool { return lidas[i].Ultima > lidas[j].Ultima })
@@ -457,6 +459,7 @@ func (e *Estado) Salvar() error {
 	}
 	rec, errRec := json.Marshal(lidas)
 	recIgual := bytes.Equal(rec, e.recentesAntes)
+	conIgual := err == nil && bytes.Equal(b, e.conversasAntes)
 	e.mu.Unlock()
 	if err != nil {
 		return err
@@ -475,11 +478,20 @@ func (e *Estado) Salvar() error {
 			e.mu.Unlock()
 		}
 	}
+	if conIgual {
+		return nil
+	}
 	tmp := e.arquivo + ".tmp"
 	if err := os.WriteFile(tmp, b, 0o600); err != nil {
 		return err
 	}
-	return os.Rename(tmp, e.arquivo)
+	if err := os.Rename(tmp, e.arquivo); err != nil {
+		return err
+	}
+	e.mu.Lock()
+	e.conversasAntes = b
+	e.mu.Unlock()
+	return nil
 }
 
 // Arquivar marca ou desmarca a conversa como arquivada, no instante do aviso do WhatsApp (zero = agora).
