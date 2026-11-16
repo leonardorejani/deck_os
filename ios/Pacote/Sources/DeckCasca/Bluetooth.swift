@@ -237,6 +237,8 @@ public final class GerenteBluetooth: @unchecked Sendable {
             conexao = nova
             antigoParadoAte = nil
             cifragemDesde = nil
+            rodadasSemMac = 0
+            retomadas += 1
             return true
         }
         guard ok else { return false }
@@ -295,6 +297,8 @@ public final class GerenteBluetooth: @unchecked Sendable {
         while !Task.isCancelled, trava.withLock({ geracao == g }) {
             guard let pareado = cofre.ler() else { break }
             if trava.withLock({ conexao != nil }) {
+                // Conexão de pé (por qualquer sentido): o recuo de quando o Mac sumia não vale para a próxima queda.
+                espera = Self.esperaMinima
                 try? await Task.sleep(nanoseconds: 500_000_000)
                 continue
             }

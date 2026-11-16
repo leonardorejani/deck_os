@@ -830,6 +830,32 @@ final class EnlaceInvertidoTestes: XCTestCase {
         XCTAssertEqual(cofre.ler()?.codigoAcesso, "ABCDEFGHIJKLMNOPQRST")
     }
 
+    /// 16/11/2026, verificação do recuo: depois de 10 rodadas sem Mac o descanso sobe para 45 s. Se o Mac volta pelo sentido
+    /// invertido (não passa por manter) e a conexão cai, a primeira falha dormia 45 s, 3x mais que o teto de 15 s de antes.
+    func testMacQueVoltaPeloInvertidoZeraORecuoDoIphone() async throws {
+        let mac = MacDeTeste()
+        let periferico = PerifericoFalso(mac: mac)
+        let esperas = Linhas()
+        let g = GerenteBluetooth(radio: RadioSemMac(), periferico: periferico, cofre: CofreEmMemoria(pareado()), nomeDoIphone: "iPhone Exemplo",
+                                 esperaEntreTentativas: { esperas.anotar("\($0)"); return 0.02 },
+                                 prazoDaConexaoDireta: 0.1, prazoDaProcura: 0.05, pausaDoSentidoAntigo: 60, avisoDeCifragemApos: 60,
+                                 esperaDoMacNoPareamento: 3)
+        addTeardownBlock { g.parar(); periferico.desligarMac() }
+        g.iniciar()
+        await esperar({ esperas.todas.contains("\(GerenteBluetooth.esperaMaximaSemMac)") }, segundos: 15)
+        XCTAssertTrue(esperas.todas.contains("\(GerenteBluetooth.esperaMaximaSemMac)"), "não recuou: \(esperas.todas)")
+        periferico.ligarMac()
+        await esperar({ g.mac != nil }, segundos: 10)
+        XCTAssertNotNil(g.mac, "o Mac não conectou pelo invertido")
+        let antes = esperas.todas.count
+        periferico.desligarMac()
+        mac.sairDoAlcance()
+        await esperar({ esperas.todas.count > antes }, segundos: 10)
+        let depois = esperas.todas.dropFirst(antes).compactMap { Double($0) }
+        XCTAssertFalse(depois.isEmpty, "o iPhone não voltou a tentar")
+        XCTAssertLessThanOrEqual(depois.first ?? 99, 4, "a primeira espera depois da queda herdou o recuo: \(depois)")
+    }
+
     /// Os dois sentidos conectam ao mesmo tempo no mesmo Mac: o primeiro aperto de mão vale e o outro é fechado.
     func testCorridaEntreOsDoisSentidosNaoAbreDuasSessoes() async throws {
         for rodada in 0..<5 {
