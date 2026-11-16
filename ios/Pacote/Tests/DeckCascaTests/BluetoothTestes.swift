@@ -548,6 +548,38 @@ final class BluetoothTestes: XCTestCase {
         XCTAssertNotNil(cofre.ler())
     }
 
+    // MARK: Mac ausente por muito tempo (16/11/2026)
+
+    /// Com o Mac desligado ou fora de alcance, o rádio ficava ativo cerca de metade do tempo (descanso de no máximo 15 s). Depois
+    /// de 10 rodadas seguidas sem Mac, o descanso sobe para 45 s. O app voltar ao primeiro plano acorda o descanso e o Mac que
+    /// reaparece conecta de imediato (a reconexão continua rápida).
+    func testMacAusenteRecuaDepoisDeDezRodadasEVoltaRapidoQuandoOAppRetoma() async throws {
+        let mac = MacDeTeste()
+        let radio = RadioFalso(mac, anuncios: [])
+        radio.recusaConectar = true
+        let cofre = CofreEmMemoria(pareado("mac-1"))
+        let esperas = Linhas()
+        let g = GerenteBluetooth(radio: radio, cofre: cofre, nomeDoIphone: "iPhone Exemplo",
+                                 esperaEntreTentativas: { s in
+                                     esperas.anotar("\(s)")
+                                     return s >= GerenteBluetooth.esperaMaximaSemMac ? 30 : 0.02
+                                 },
+                                 prazoDaConexaoDireta: 0.1, prazoDaProcura: 0.05)
+        addTeardownBlock { g.parar() }
+        g.iniciar()
+        await esperar({ esperas.todas.contains("\(GerenteBluetooth.esperaMaximaSemMac)") }, segundos: 15)
+        XCTAssertTrue(esperas.todas.contains("\(GerenteBluetooth.esperaMaximaSemMac)"), "não recuou: \(esperas.todas)")
+        let primeiras = esperas.todas.prefix(GerenteBluetooth.rodadasParaRecuar - 1).compactMap { Double($0) }
+        XCTAssertTrue(primeiras.allSatisfy { $0 <= GerenteBluetooth.esperaMaxima }, "recuou cedo demais: \(primeiras)")
+        // O Mac reaparece durante o descanso longo: o app volta ao primeiro plano e conecta em poucos segundos, não em 30 s.
+        radio.recusaConectar = false
+        let t0 = Date()
+        g.retomar()
+        await esperar({ g.mac != nil }, segundos: 5)
+        XCTAssertEqual(g.mac?.id, "mac-1")
+        XCTAssertLessThan(Date().timeIntervalSince(t0), 5)
+    }
+
     // MARK: Cifragem do enlace falhando (CBError 15, 12/11/2026)
 
     /// Diário do iPhone de 12/11/2026: o Mac anuncia a um palmo, o iPhone vê, conecta e o iOS falha em cifrar o enlace
@@ -796,6 +828,32 @@ final class EnlaceInvertidoTestes: XCTestCase {
         let r2 = try await g.enviar(PedidoCanal(metodo: "GET", caminho: "/api/estado"))
         XCTAssertEqual(r2.status, 200)
         XCTAssertEqual(cofre.ler()?.codigoAcesso, "ABCDEFGHIJKLMNOPQRST")
+    }
+
+    /// 16/11/2026, verificação do recuo: depois de 10 rodadas sem Mac o descanso sobe para 45 s. Se o Mac volta pelo sentido
+    /// invertido (não passa por manter) e a conexão cai, a primeira falha dormia 45 s, 3x mais que o teto de 15 s de antes.
+    func testMacQueVoltaPeloInvertidoZeraORecuoDoIphone() async throws {
+        let mac = MacDeTeste()
+        let periferico = PerifericoFalso(mac: mac)
+        let esperas = Linhas()
+        let g = GerenteBluetooth(radio: RadioSemMac(), periferico: periferico, cofre: CofreEmMemoria(pareado()), nomeDoIphone: "iPhone Exemplo",
+                                 esperaEntreTentativas: { esperas.anotar("\($0)"); return 0.02 },
+                                 prazoDaConexaoDireta: 0.1, prazoDaProcura: 0.05, pausaDoSentidoAntigo: 60, avisoDeCifragemApos: 60,
+                                 esperaDoMacNoPareamento: 3)
+        addTeardownBlock { g.parar(); periferico.desligarMac() }
+        g.iniciar()
+        await esperar({ esperas.todas.contains("\(GerenteBluetooth.esperaMaximaSemMac)") }, segundos: 15)
+        XCTAssertTrue(esperas.todas.contains("\(GerenteBluetooth.esperaMaximaSemMac)"), "não recuou: \(esperas.todas)")
+        periferico.ligarMac()
+        await esperar({ g.mac != nil }, segundos: 10)
+        XCTAssertNotNil(g.mac, "o Mac não conectou pelo invertido")
+        let antes = esperas.todas.count
+        periferico.desligarMac()
+        mac.sairDoAlcance()
+        await esperar({ esperas.todas.count > antes }, segundos: 10)
+        let depois = esperas.todas.dropFirst(antes).compactMap { Double($0) }
+        XCTAssertFalse(depois.isEmpty, "o iPhone não voltou a tentar")
+        XCTAssertLessThanOrEqual(depois.first ?? 99, 4, "a primeira espera depois da queda herdou o recuo: \(depois)")
     }
 
     /// Os dois sentidos conectam ao mesmo tempo no mesmo Mac: o primeiro aperto de mão vale e o outro é fechado.

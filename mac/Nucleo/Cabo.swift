@@ -85,7 +85,13 @@ final class SessaoCabo: @unchecked Sendable {
         let inicio = Date()
         var resposta = responder(pedido)
         if let ajustar { resposta = ajustar(pedido, resposta) }
-        _ = enviar(MensagemCabo(tipo: "resposta", id: id, resposta: Self.resposta(resposta)))
+        // Quadro acima do máximo não sai: sem aviso o iPhone esperaria o prazo inteiro e a falha pareceria queda de canal.
+        var quadro = Quadros.codificar(MensagemCabo(tipo: "resposta", id: id, resposta: Self.resposta(resposta)))
+        if quadro == nil {
+            resposta = .erro(413, "Essa mídia é grande demais para este canal.")
+            quadro = Quadros.codificar(MensagemCabo(tipo: "resposta", id: id, resposta: Self.resposta(resposta)))
+        }
+        if let quadro { escrita.lock(); _ = fluxo.escrever(quadro); escrita.unlock() }
         // Só o caminho vai para o log: a query pode levar o código de acesso (a capa).
         log("cabo \(rotulo) \(pedido.metodo) \(pedido.caminho) \(resposta.status) \(Int(Date().timeIntervalSince(inicio) * 1000)) ms")
         aoAtender?(rotulo, pedido.caminho, resposta.status)

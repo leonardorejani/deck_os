@@ -786,16 +786,32 @@ final class AgendaDoMacTestes: XCTestCase {
     }
 
     /// 13/11/2026: o Mac já estava a 30 s de espera (iPhone sem o app aberto, sem o serviço) quando o app abriu e o pareamento,
-    /// que espera 15 s, acabava antes de o Mac voltar. Iphone sem o serviço não é aperto de mão falhando: espera curta e fixa.
-    func testIphoneSemOServicoNaoCresceAEsperaEVoltaEmPoucosSegundos() {
+    /// que espera 15 s, acabava antes de o Mac voltar. Iphone sem o serviço não é aperto de mão falhando: começa curto.
+    /// 16/11/2026: mas com o app fechado por horas, 5 s fixos davam 810 conexões no log de produção. Cresce em degraus até 30 s
+    /// (antes fixo em 5 s, teste antigo trocado a pedido da varredura de 16/11) e volta a 5 s quando o iPhone reaparece.
+    func testIphoneSemOServicoCrescePorDegrausEVoltaRapidoQuandoOAppAbre() {
         var a = AgendaDoMac()
-        for _ in 0..<8 {
-            a.conectando("i")
-            a.terminou("i", duracao: nil, semServico: true, agora: t0)
-            XCTAssertFalse(a.podeConectar("i", agora: t0.addingTimeInterval(AgendaDoMac.esperaSemServico - 1)))
-            XCTAssertTrue(a.podeConectar("i", agora: t0.addingTimeInterval(AgendaDoMac.esperaSemServico)))
-        }
+        XCTAssertEqual(AgendaDoMac.esperaSemServico, 5)
         XCTAssertLessThan(AgendaDoMac.esperaSemServico, 15, "o pareamento do iPhone espera 15 s pelo Mac")
+        var t = t0
+        var vistas: [TimeInterval] = []
+        for _ in 0..<20 {
+            a.conectando("i")
+            a.terminou("i", duracao: nil, semServico: true, agora: t)
+            let falta = a.faltam("i", agora: t)
+            vistas.append(falta)
+            XCTAssertFalse(a.podeConectar("i", agora: t.addingTimeInterval(falta - 1)))
+            XCTAssertTrue(a.podeConectar("i", agora: t.addingTimeInterval(falta)))
+            t = t.addingTimeInterval(falta)
+        }
+        XCTAssertEqual(Array(vistas.prefix(5)), [5, 10, 20, 30, 30])
+        XCTAssertEqual(vistas.last, 30, "nunca passa de 30 s")
+        // O app abre: o iPhone volta a anunciar depois do silêncio e o Mac conecta na hora, com a espera zerada.
+        a.anunciou("i", agora: t.addingTimeInterval(AgendaDoMac.silencioQueZera))
+        XCTAssertTrue(a.podeConectar("i", agora: t.addingTimeInterval(AgendaDoMac.silencioQueZera)))
+        a.conectando("i")
+        a.terminou("i", duracao: nil, semServico: true, agora: t.addingTimeInterval(AgendaDoMac.silencioQueZera))
+        XCTAssertEqual(a.faltam("i", agora: t.addingTimeInterval(AgendaDoMac.silencioQueZera)), 5, "recomeça do primeiro degrau")
         // O aperto de mão que falha de verdade continua dobrando.
         a.conectando("i")
         a.terminou("i", duracao: 1, agora: t0)

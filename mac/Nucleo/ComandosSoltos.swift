@@ -20,6 +20,9 @@ final class ComandosEmAndamento: @unchecked Sendable {
     private let trava = NSLock()
     private var itens: [String: AndamentoDeTecla] = [:]
     private var falhouEm: [String: Date] = [:]
+    private var _versao = 0
+    /// Sobe a cada começo e fim de comando: quem guarda o estado das teclas em cache usa para saber que ele mudou.
+    var versao: Int { trava.lock(); defer { trava.unlock() }; return _versao }
 
     func fase(de id: String) -> String? {
         trava.lock(); defer { trava.unlock() }
@@ -32,6 +35,7 @@ final class ComandosEmAndamento: @unchecked Sendable {
         trava.lock(); defer { trava.unlock() }
         if let f = itens[id]?.fase, f != "falhou" { return false }
         itens[id] = AndamentoDeTecla(fase: fase)
+        _versao += 1
         falhouEm[id] = nil
         return true
     }
@@ -39,6 +43,7 @@ final class ComandosEmAndamento: @unchecked Sendable {
     /// Terminou. `lembrarFalha`: o pedido já respondeu sem esperar, então o erro só chega ao iPhone pelo estado.
     func terminar(_ id: String, erro: String?, lembrarFalha: Bool, agora: Date = Date()) {
         trava.lock(); defer { trava.unlock() }
+        _versao += 1
         if let erro, lembrarFalha {
             itens[id] = AndamentoDeTecla(fase: "falhou", erro: erro, fim: Datas.iso(agora))
             falhouEm[id] = agora
