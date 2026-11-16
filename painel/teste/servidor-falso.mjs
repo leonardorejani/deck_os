@@ -29,9 +29,8 @@ const padrao = () => ({
   fotoAtraso: 0,             // espera, em ms, antes de responder cada foto de perfil
   whatsappRico: false,       // lista do aparelho conectado com foto, áudio, visualização única, arquivada e conversa sem nome (precisa de whatsappOrigem 'qr')
   whatsappVersao: null,      // número: o Mac por QR dá versão à lista (?v=<versão> igual responde só {igual}). null: Mac sem versão, a lista vai sempre inteira
-  whatsappSoArquivadas: false, // só conversas arquivadas com não lidas (Todas, Contatos e Grupos ficam sem linhas; precisa de whatsappRico)
-  whatsappSemGrupoAtivo: false, // tira os grupos não arquivados (Grupos fica sem linhas, mas há contatos e um grupo arquivado; precisa de whatsappRico)
   whatsappExtra: false,      // chega uma conversa nova na lista (mede a velocidade com que a folha aberta a mostra)
+  whatsappTudo: false,       // lista do aparelho conectado com conversas lidas e não lidas, fixada, silenciada e arquivadas lidas e não lidas (precisa de whatsappOrigem 'qr')
   whatsappOrigem: 'app',     // app | web (só o total, pelo título da aba) | web-fechado (sem aba aberta) | qr (aparelho conectado, com lista) | qr-caido | qr-reconectando (subindo ou queda curta, sem lista) | qr-reconectando-lista (queda curta com a lista de antes)
   uso: 'normal',             // normal | sem-medicao
   usoDetalhe: 'normal',      // normal | calculando (a primeira varredura ainda roda) | vazio (sem contas) | erro (500) | antigo (Mac sem a rota: 404) | xss (nomes com HTML)
@@ -164,6 +163,21 @@ const SESSOES_BASE = () => [
 // Imagem e áudio de mentira (1 pixel e 0,1 s de silêncio) para a folha do WhatsApp por QR
 const PNG_B64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
 const WAV_B64 = (() => { const n = 800, b = Buffer.alloc(44 + n); b.write('RIFF', 0); b.writeUInt32LE(36 + n, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22); b.writeUInt32LE(8000, 24); b.writeUInt32LE(8000, 28); b.writeUInt16LE(1, 32); b.writeUInt16LE(8, 34); b.write('data', 36); b.writeUInt32LE(n, 40); b.fill(128, 44); return b.toString('base64') })();
+/* Conversas lidas e não lidas como a lista do aparelho conectado entrega: a lida leva só a prévia em mensagens, a fixada vem primeiro
+   mesmo sendo a mais velha, e as arquivadas (lida e não lida) só aparecem no filtro delas. Nomes inventados. */
+const WHATSAPP_TUDO = () => {
+  const ha = min => new Date(T0 - min * 60000).toISOString(), M = (texto, min, de = '') => ({ de, texto, hora: ha(min) });
+  return [
+    { id: 't1@s.whatsapp.net', nome: 'Ana Souza', grupo: false, naoLidas: 2, ultima: ha(1), mensagens: [M('Bom dia', 3), M('Consegue ver isso?', 1)] },
+    { id: 't2@lid', nome: 'Beto Lima', grupo: false, naoLidas: 0, ultima: ha(5), mensagens: [M('Valeu, até mais', 5)] },
+    { id: 't3@g.us', nome: 'Equipe do Palco', grupo: true, naoLidas: 0, ultima: ha(9), mensagens: [M('Passo no ensaio', 9, 'Você')] },
+    { id: 't4@g.us', nome: 'Louvor', grupo: true, naoLidas: 4, ultima: ha(12), mensagens: [M('Setlist nova', 14, 'Carla'), M('Quem leva o cabo?', 12, 'Pedro')] },
+    { id: 't5@s.whatsapp.net', nome: 'Carla Dias', grupo: false, naoLidas: 0, ultima: ha(3000), fixada: true, silenciada: true, mensagens: [M('Foto', 3000)] },
+    { id: 'ta1@s.whatsapp.net', nome: 'Bia Arquivada', grupo: false, naoLidas: 3, ultima: ha(20), arquivada: true, mensagens: [M('Mensagem de arquivada', 20)] },
+    { id: 'ta2@g.us', nome: 'Promo Arquivada', grupo: true, naoLidas: 0, ultima: ha(40), arquivada: true, mensagens: [M('Oferta do dia', 40, 'Loja')] },
+    { id: 'ta3@g.us', nome: 'Sorteio Arquivado', grupo: true, naoLidas: 6, ultima: ha(60), arquivada: true, mensagens: [M('Resultado saiu', 60, 'Admin')] },
+  ];
+};
 const WHATSAPP_RICO = () => {
   const ha = min => new Date(T0 - min * 60000).toISOString(), M = (texto, min, extra = {}) => ({ de: '', texto, hora: ha(min), ...extra });
   return [
@@ -180,7 +194,8 @@ const WHATSAPP_RICO = () => {
 // WhatsApp: as 5 conversas do protótipo (o tempo é relativo a agora, para "hoje" e "ontem" não envelhecerem)
 const WHATSAPP = () => {
   if (c.whatsapp === 'vazio') return [];
-  if (c.whatsappRico) return c.whatsappSoArquivadas ? WHATSAPP_RICO().filter(x => x.arquivada) : c.whatsappSemGrupoAtivo ? WHATSAPP_RICO().filter(x => x.arquivada || !x.grupo) : WHATSAPP_RICO();
+  if (c.whatsappTudo) return WHATSAPP_TUDO();
+  if (c.whatsappRico) return WHATSAPP_RICO();
   const ha = min => new Date(T0 - min * 60000).toISOString(), M = (de, texto, hora = '10:00') => ({ de: X(de), texto: X(texto), hora });
   const base = [
     { id: 'w1', nome: X('Ministério de Louvor'), grupo: true, naoLidas: 12, ultima: ha(3), mensagens: [M('Carla', c.textoLongo ? 'Olha o PR: https://github.com/leonardorejani/deck_os/pull/30/files#diff-8f3b2c1d9e7a6b5c4d3e2f1a0b9c8d7e6f5a4b3c2d1e' : 'Ensaio confirmado quinta 20h?'), M('Pedro', 'Mandei a setlist no drive'), M('Carla', 'Quem leva o cabo P10?')] },
@@ -268,6 +283,7 @@ function estado() {
     ],
     sessoes: SESSOES().slice(0, c.sessoes).map(({ contexto, ...leve }) => leve), // o Mac de verdade só manda o contexto em /api/sessoes
     whatsapp: c.whatsappOrigem === 'web' ? { total: 23, conversas: 0, origem: 'web', navegador: 'Google Chrome', aberto: true }
+      : c.whatsappOrigem === 'qr' && c.whatsappTudo ? { total: 6, conversas: 2, origem: 'qr', aberto: true }
       : c.whatsappOrigem === 'qr' ? { total: 23, conversas: 5, origem: 'qr', aberto: true }
       : c.whatsappOrigem === 'qr-reconectando' ? { total: 0, conversas: 0, origem: 'qr', aberto: false, reconectando: true }
       : c.whatsappOrigem === 'qr-reconectando-lista' ? { total: 23, conversas: 5, origem: 'qr', aberto: false, reconectando: true }

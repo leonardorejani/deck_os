@@ -38,6 +38,13 @@ func Analisar(m *waE2E.Message, unica bool) (Conteudo, bool) {
 			return Analisar(v.GetMessage(), true)
 		}
 	}
+	// Os embrulhos que a whatsmeow já tira nas mensagens ao vivo mas o histórico traz inteiros: conversa com mensagens
+	// temporárias e documento com legenda. Sem isto a mensagem não era reconhecida e não contava.
+	for _, v := range []*waE2E.FutureProofMessage{m.GetEphemeralMessage(), m.GetDocumentWithCaptionMessage()} {
+		if v != nil && v.GetMessage() != nil {
+			return Analisar(v.GetMessage(), unica)
+		}
+	}
 	if s := strings.TrimSpace(m.GetConversation()); s != "" {
 		return Conteudo{Texto: s}, true
 	}

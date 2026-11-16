@@ -357,6 +357,19 @@ final class FontesWhatsAppQRTestes: XCTestCase {
         XCTAssertEqual(l.valor?.conversas.count, 2, "mas a arquivada tem de chegar ao painel, que a mostra no filtro Arquivadas")
     }
 
+    func testListaComLidasLeFixadaESilenciadaENaoMudaOTotal() throws {
+        let linha = #"{"t":"conversas","lista":[{"id":"a","nome":"Ana","grupo":false,"naoLidas":2,"ultima":"2026-11-12T13:00:00Z","fixada":true,"mensagens":[{"de":"","texto":"oi","hora":"2026-11-12T13:00:00Z"}]},{"id":"b","nome":"Bia","grupo":false,"naoLidas":0,"ultima":"2026-11-12T12:00:00Z","silenciada":true,"mensagens":[{"de":"","texto":"valeu","hora":"2026-11-12T12:00:00Z"}]},{"id":"c","nome":"Equipe","grupo":true,"naoLidas":0,"ultima":"2026-11-12T11:00:00Z","arquivada":true,"mensagens":[{"de":"Você","texto":"ok","hora":"2026-11-12T11:00:00Z"}]}]}"#
+        let p = try ponte("echo '{\"t\":\"fase\",\"fase\":\"conectado\",\"detalhe\":\"\"}'; echo '\(linha)'; cat >/dev/null")
+        defer { p.desligar() }
+        p.garantirLigada()
+        esperar("conversas") { p.atual.conversas.count == 3 }
+        let l = p.ler()
+        XCTAssertEqual(l.valor?.conversas.map(\.fixada), [true, nil, nil])
+        XCTAssertEqual(l.valor?.conversas.map(\.silenciada), [nil, true, nil])
+        XCTAssertEqual(l.valor?.resumo.total, 2, "o selo conta só as não lidas das não arquivadas")
+        XCTAssertEqual(l.valor?.resumo.conversas, 1, "conversas lidas não entram em 'N não lidas em M conversas'")
+    }
+
     func testConversaSemNomeNuncaVaiEmBranco() throws {
         let linha = #"{"t":"conversas","lista":[{"id":"1@lid","nome":"","grupo":false,"naoLidas":1,"ultima":"2026-11-12T13:00:00Z","mensagens":[]},{"id":"g","nome":" ","grupo":true,"naoLidas":1,"ultima":"2026-11-12T13:00:00Z","mensagens":[]}]}"#
         let p = try ponte("echo '{\"t\":\"fase\",\"fase\":\"conectado\",\"detalhe\":\"\"}'; echo '\(linha)'; cat >/dev/null")

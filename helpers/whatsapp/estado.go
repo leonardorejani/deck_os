@@ -42,7 +42,19 @@ type Conversa struct {
 	Numero string `json:"numero,omitempty"`
 	// Foto: nome do arquivo da foto de perfil guardada na pasta fotos (vazio = sem foto ainda).
 	Foto string `json:"foto,omitempty"`
+	// Fixada e Silenciada só saem na lista (vêm dos mapas do Estado, nunca do disco da conversa).
+	Fixada     bool `json:"fixada,omitempty"`
+	Silenciada bool `json:"silenciada,omitempty"`
+	// Previa é a última mensagem da conversa, de quem for (a do dono inclusive), sem a mídia: é o que a linha de uma
+	// conversa lida mostra. Só texto curto, para o disco ficar enxuto.
+	Previa *Msg `json:"previa,omitempty"`
 }
+
+// maxRecentes é quantas conversas (as mais recentes) a lista leva. As com não lidas entram sempre.
+const maxRecentes = 200
+
+// maxPrevia é o tamanho do texto da prévia, em letras.
+const maxPrevia = 140
 
 // Estado guarda as conversas em memória e no disco (0600, na pasta da sessão). Só entra aqui o que o
 // WhatsApp mandou para este aparelho: o ajudante nunca envia nem marca nada como lido.
@@ -62,6 +74,10 @@ type Estado struct {
 	// silenciadas guarda até quando (unix ms) cada conversa está silenciada. Arquivada e silenciada continua
 	// arquivada com mensagem nova, mesmo com "manter arquivadas" desligado.
 	silenciadas map[string]int64
+	// fixadas são as conversas fixadas no topo do WhatsApp.
+	fixadas map[string]bool
+	// recentesAntes é o último recentes.json gravado (não regrava igual).
+	recentesAntes []byte
 }
 
 // arqFormato é o que vai em conversas.json.arquivadas. Antes era só a lista de ids (ainda se lê).
@@ -69,10 +85,11 @@ type arqFormato struct {
 	Ids                   map[string]int64 `json:"ids"`
 	DesarquivaComMensagem bool             `json:"desarquivaComMensagem,omitempty"`
 	Silenciadas           map[string]int64 `json:"silenciadas,omitempty"`
+	Fixadas               map[string]bool  `json:"fixadas,omitempty"`
 }
 
 func NovoEstado(arquivo string) *Estado {
-	e := &Estado{conversas: map[string]*Conversa{}, arquivo: arquivo, arquivadas: map[string]int64{}, silenciadas: map[string]int64{}}
+	e := &Estado{conversas: map[string]*Conversa{}, arquivo: arquivo, arquivadas: map[string]int64{}, silenciadas: map[string]int64{}, fixadas: map[string]bool{}}
 	if arquivo == "" {
 		return e
 	}
@@ -92,6 +109,11 @@ func NovoEstado(arquivo string) *Estado {
 			for id, ate := range f.Silenciadas {
 				e.silenciadas[id] = ate
 			}
+			for id, sim := range f.Fixadas {
+				if sim {
+					e.fixadas[id] = true
+				}
+			}
 			e.gravadasAntes = b
 		}
 	}
@@ -104,6 +126,19 @@ func NovoEstado(arquivo string) *Estado {
 					e.arquivadas[c.ID] = 0
 				}
 			}
+		}
+	}
+	// As conversas lidas (só a prévia). Não pisam numa conversa que já veio do conversas.json.
+	if b, err := os.ReadFile(arquivo + ".recentes"); err == nil {
+		var lista []*Conversa
+		if json.Unmarshal(b, &lista) == nil {
+			for _, c := range lista {
+				if _, ok := e.conversas[c.ID]; !ok && c.ID != "" {
+					c.NaoLidas, c.Mensagens = 0, nil
+					e.conversas[c.ID] = c
+				}
+			}
+			e.recentesAntes = b
 		}
 	}
 	return e
@@ -125,13 +160,63 @@ func (e *Estado) Historico(id, nome string, grupo bool, naoLidas int, ultima tim
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	c := e.obter(id, nome, grupo)
-	c.NaoLidas = naoLidas
+	// Histórico mais velho que o que já chegou ao vivo é retrato velho: não zera nem troca a não lida mais nova.
+	if !c.maisNovaQue(ultima) {
+		c.NaoLidas = naoLidas
+		if len(msgs) > 0 {
+			c.Mensagens = aparar(msgs)
+		}
+	}
 	if !ultima.IsZero() {
 		c.Ultima = maisNova(c.Ultima, ultima)
 	}
-	if len(msgs) > 0 {
-		c.Mensagens = aparar(msgs)
+}
+
+// maisNovaQue diz se a conversa já tem uma mensagem mais nova que o instante dado (com o segundo como régua).
+func (c *Conversa) maisNovaQue(t time.Time) bool {
+	if t.IsZero() || t.Unix() <= 0 {
+		return false
 	}
+	u, err := time.Parse(time.RFC3339, c.Ultima)
+	return err == nil && u.Unix() > t.Unix()
+}
+
+// previaDe corta o texto da mensagem e tira a mídia: é o que fica no disco e na lista de uma conversa lida.
+func previaDe(m Msg) *Msg {
+	r := []rune(m.Texto)
+	if len(r) > maxPrevia {
+		m.Texto = string(r[:maxPrevia])
+	}
+	return &Msg{De: m.De, Texto: m.Texto, Hora: m.Hora, ID: m.ID, Tipo: m.Tipo, Unica: m.Unica}
+}
+
+// previa é a última mensagem conhecida: a guardada ou, num estado velho (sem prévia), a última das mensagens.
+func (c *Conversa) previa() *Msg {
+	if c.Previa != nil {
+		return c.Previa
+	}
+	if n := len(c.Mensagens); n > 0 {
+		return previaDe(c.Mensagens[n-1])
+	}
+	return nil
+}
+
+// Previa guarda a última mensagem da conversa (a do histórico). Só vale se não for mais velha que a que já se tem.
+func (e *Estado) Previa(id string, m Msg) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	c, ok := e.conversas[id]
+	if !ok {
+		return
+	}
+	e.guardarPrevia(c, m)
+}
+
+func (e *Estado) guardarPrevia(c *Conversa, m Msg) {
+	if c.Previa != nil && c.Previa.Hora > m.Hora && c.Previa.ID != m.ID {
+		return
+	}
+	c.Previa = previaDe(m)
 }
 
 // Recebida soma uma mensagem nova de outra pessoa.
@@ -139,9 +224,20 @@ func (e *Estado) Recebida(id, nome string, grupo bool, m Msg, quando time.Time) 
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	c := e.obter(id, nome, grupo)
+	// A mesma mensagem de novo (o histórico já a contou, ou a que não abriu chegou aberta depois): troca, não soma.
+	if m.ID != "" {
+		for i := range c.Mensagens {
+			if c.Mensagens[i].ID == m.ID {
+				c.Mensagens[i] = m
+				e.guardarPrevia(c, m)
+				return
+			}
+		}
+	}
 	c.NaoLidas++
 	c.Ultima = maisNova(c.Ultima, quando)
 	c.Mensagens = aparar(append(c.Mensagens, m))
+	e.guardarPrevia(c, m)
 }
 
 // Enviada é uma mensagem do próprio dono (do celular): quem responde leu a conversa.
@@ -154,11 +250,32 @@ func (e *Estado) Enviada(id string, quando time.Time) {
 	}
 }
 
+// EnviadaMsg é a mensagem do próprio dono (escrita no celular): zera as não lidas e vira a prévia da conversa,
+// que passa a existir aqui mesmo se nunca tinha aparecido.
+func (e *Estado) EnviadaMsg(id, nome string, grupo bool, m Msg, quando time.Time) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	c := e.obter(id, nome, grupo)
+	c.NaoLidas = 0
+	c.Ultima = maisNova(c.Ultima, quando)
+	e.guardarPrevia(c, m)
+}
+
 // Lida zera as não lidas (leitura feita em outro aparelho).
 func (e *Estado) Lida(id string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if c, ok := e.conversas[id]; ok {
+		c.NaoLidas = 0
+	}
+}
+
+// LidaEm zera só se a leitura aconteceu depois da última mensagem. Recibo ou marcação atrasada (a fila que chega quando o
+// ajudante volta a conectar) é de uma leitura antiga e não pode apagar a mensagem que veio depois dela.
+func (e *Estado) LidaEm(id string, quando time.Time) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if c, ok := e.conversas[id]; ok && !c.maisNovaQue(quando) {
 		c.NaoLidas = 0
 	}
 }
@@ -191,11 +308,13 @@ func (e *Estado) Limpar() {
 	e.arquivadas = map[string]int64{}
 	e.desarquivaComMensagem = false
 	e.silenciadas = map[string]int64{}
-	e.gravadasAntes = nil
+	e.fixadas = map[string]bool{}
+	e.gravadasAntes, e.recentesAntes = nil, nil
 	e.mu.Unlock()
 	if e.arquivo != "" {
 		_ = os.Remove(e.arquivo)
 		_ = os.Remove(e.arquivo + ".arquivadas")
+		_ = os.Remove(e.arquivo + ".recentes")
 	}
 }
 
@@ -238,21 +357,41 @@ func soNaoLidas(c *Conversa) Conversa {
 	return cp
 }
 
-// Lista é o que o Deck mostra: só as conversas com não lidas, da mais nova para a mais velha, cada uma
+// Lista é o que o Deck mostra de não lidas: só as conversas com não lidas, da mais nova para a mais velha, cada uma
 // com as mensagens não lidas (as últimas, da mais antiga para a mais nova). Conversa sem nome mostra o número
 // (nunca uma linha em branco), e a referência da mídia fica aqui dentro.
-func (e *Estado) Lista() []Conversa {
+func (e *Estado) Lista() []Conversa { return e.montar(true) }
+
+// Recentes é o que sai para o Deck: as conversas mais recentes (até maxRecentes, mais as que têm não lidas), lidas ou
+// não, da última mensagem mais nova para a mais velha. A com não lidas leva as mensagens não lidas, a lida leva só a
+// prévia da última mensagem (em mensagens, com um item).
+func (e *Estado) Recentes() []Conversa { return e.montar(false) }
+
+func (e *Estado) montar(soComNaoLidas bool) []Conversa {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	saida := []Conversa{}
+	agora := time.Now().UnixMilli()
 	for _, c := range e.conversas {
-		if c.NaoLidas <= 0 {
+		var cp Conversa
+		switch {
+		case c.NaoLidas > 0:
+			cp = soNaoLidas(c)
+		case soComNaoLidas || c.previa() == nil:
 			continue
+		default:
+			cp = *c
+			cp.Mensagens = []Msg{*c.previa()}
 		}
-		cp := soNaoLidas(c)
+		cp.Previa = nil
 		cp.Arquivada = e.arquivadaAgora(c)
+		cp.Fixada = e.fixadas[c.ID]
+		cp.Silenciada = e.silenciadas[c.ID] > agora
 		if strings.TrimSpace(cp.Nome) == "" {
 			cp.Nome = formatarNumero(cp.Numero)
+		}
+		if cp.Ultima == "" && c.previa() != nil {
+			cp.Ultima = c.previa().Hora
 		}
 		for i := range cp.Mensagens {
 			cp.Mensagens[i].Ref = nil
@@ -260,7 +399,17 @@ func (e *Estado) Lista() []Conversa {
 		saida = append(saida, cp)
 	}
 	sort.Slice(saida, func(i, j int) bool { return saida[i].Ultima > saida[j].Ultima })
-	return saida
+	if soComNaoLidas || len(saida) <= maxRecentes {
+		return saida
+	}
+	// Só as maxRecentes mais novas, e as com não lidas ficam sempre.
+	corte := saida[:0:0]
+	for i, c := range saida {
+		if i < maxRecentes || c.NaoLidas > 0 {
+			corte = append(corte, c)
+		}
+	}
+	return corte
 }
 
 // Salvar grava o estado no disco com permissão restrita (só o dono lê).
@@ -283,8 +432,21 @@ func (e *Estado) Salvar() error {
 	for id, ts := range e.arquivadas {
 		ids[id] = ts
 	}
-	arq, errArq := json.Marshal(arqFormato{Ids: ids, DesarquivaComMensagem: e.desarquivaComMensagem, Silenciadas: e.silenciadas})
+	arq, errArq := json.Marshal(arqFormato{Ids: ids, DesarquivaComMensagem: e.desarquivaComMensagem, Silenciadas: e.silenciadas, Fixadas: e.fixadas})
 	igual := bytes.Equal(arq, e.gravadasAntes)
+	// As lidas vão só com a prévia (sem mensagens nem mídia): as maxRecentes mais novas. Nome, número e foto seguem.
+	lidas := make([]*Conversa, 0, len(e.conversas))
+	for _, c := range e.conversas {
+		if c.NaoLidas <= 0 && c.previa() != nil {
+			lidas = append(lidas, &Conversa{ID: c.ID, Nome: c.Nome, Grupo: c.Grupo, Ultima: c.Ultima, Numero: c.Numero, Foto: c.Foto, Previa: previaDe(*c.previa())})
+		}
+	}
+	sort.Slice(lidas, func(i, j int) bool { return lidas[i].Ultima > lidas[j].Ultima })
+	if len(lidas) > maxRecentes {
+		lidas = lidas[:maxRecentes]
+	}
+	rec, errRec := json.Marshal(lidas)
+	recIgual := bytes.Equal(rec, e.recentesAntes)
 	e.mu.Unlock()
 	if err != nil {
 		return err
@@ -293,6 +455,13 @@ func (e *Estado) Salvar() error {
 		if os.WriteFile(e.arquivo+".arquivadas", arq, 0o600) == nil {
 			e.mu.Lock()
 			e.gravadasAntes = arq
+			e.mu.Unlock()
+		}
+	}
+	if errRec == nil && !recIgual {
+		if os.WriteFile(e.arquivo+".recentes", rec, 0o600) == nil {
+			e.mu.Lock()
+			e.recentesAntes = rec
 			e.mu.Unlock()
 		}
 	}
@@ -318,6 +487,17 @@ func (e *Estado) ArquivarEm(id string, sim bool, quando time.Time) {
 	}
 	// Desarquivar conversa que nunca vimos não cria linha vazia (o app state manda isso para todas as conversas comuns).
 	delete(e.arquivadas, id)
+}
+
+// Fixar marca ou desmarca a conversa como fixada no topo.
+func (e *Estado) Fixar(id string, sim bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if sim {
+		e.fixadas[id] = true
+		return
+	}
+	delete(e.fixadas, id)
 }
 
 // DesarquivaComMensagem guarda o ajuste do WhatsApp (o evento UnarchiveChatsSetting): true quer dizer que
@@ -400,9 +580,16 @@ func (e *Estado) Pendentes() []Conversa {
 	defer e.mu.Unlock()
 	var r []Conversa
 	for _, c := range e.conversas {
-		if c.NaoLidas > 0 {
-			r = append(r, Conversa{ID: c.ID, Nome: c.Nome, Grupo: c.Grupo, Numero: c.Numero, Foto: c.Foto})
+		if c.NaoLidas > 0 || c.previa() != nil {
+			r = append(r, Conversa{ID: c.ID, Nome: c.Nome, Grupo: c.Grupo, Numero: c.Numero, Foto: c.Foto, Ultima: c.Ultima, NaoLidas: c.NaoLidas})
 		}
 	}
+	// As não lidas primeiro, depois as mais novas: quem decide o que buscar na rede começa pelo que está à vista.
+	sort.Slice(r, func(i, j int) bool {
+		if (r[i].NaoLidas > 0) != (r[j].NaoLidas > 0) {
+			return r[i].NaoLidas > 0
+		}
+		return r[i].Ultima > r[j].Ultima
+	})
 	return r
 }

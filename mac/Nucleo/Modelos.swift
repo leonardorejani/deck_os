@@ -337,12 +337,16 @@ struct ConversaWhatsApp: Codable, Equatable, Sendable {
     /// Hora da última mensagem, ISO 8601.
     var ultima: String
     var mensagens: [MensagemWhatsApp]
-    /// Só na origem "qr". Arquivada aparece só no filtro Arquivadas e não entra na conta das não lidas.
+    /// Na origem "qr" a lista traz também as conversas lidas (naoLidas 0, com a última mensagem em `mensagens`).
+    /// Arquivada aparece só no filtro Arquivadas e não entra na conta das não lidas.
     var arquivada: Bool? = nil
     /// Só na origem "qr". Os dígitos do telefone (conversa direta), para abrir a conversa no WhatsApp Web.
     var numero: String? = nil
     /// Só na origem "qr". O arquivo da foto de perfil (pedida em /api/whatsapp/foto/<arquivo>). Ausente = sem foto.
     var foto: String? = nil
+    /// Só na origem "qr". Fixada no topo do WhatsApp e silenciada. Ausentes = não.
+    var fixada: Bool? = nil
+    var silenciada: Bool? = nil
 }
 
 // MARK: - Rotas (todas exigem o código de acesso, menos os arquivos da página e /api/parear)
