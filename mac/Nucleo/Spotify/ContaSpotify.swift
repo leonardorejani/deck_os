@@ -182,7 +182,7 @@ final class ContaSpotify: @unchecked Sendable {
         guard Self.chaveValida(c) else { return "A chave do app tem 32 letras e números. Copie de novo no site do Spotify." }
         precisaChavePropria = false
         var d = armazem.ler()
-        if clientId != c { d.acesso = nil; d.renovacao = nil; d.expiraEm = nil; d.nome = nil }
+        if clientId != c { d.acesso = nil; d.renovacao = nil; d.expiraEm = nil; d.nome = nil; d.bloqueadoAte = nil; esquecerLimite() }
         d.clientId = c == embutida ? nil : c
         return armazem.gravar(d) ? nil : "Não consegui guardar a chave no Chaveiro do Mac."
     }
@@ -196,7 +196,8 @@ final class ContaSpotify: @unchecked Sendable {
         precisaChavePropria = false
         var d = armazem.ler()
         guard d.clientId != nil else { return }
-        d.clientId = nil; d.acesso = nil; d.renovacao = nil; d.expiraEm = nil; d.nome = nil
+        d.clientId = nil; d.acesso = nil; d.renovacao = nil; d.expiraEm = nil; d.nome = nil; d.bloqueadoAte = nil
+        esquecerLimite()
         armazem.gravar(d)
     }
 
@@ -393,6 +394,9 @@ final class ContaSpotify: @unchecked Sendable {
         guard let resta = limiteRestante() else { return nil }
         return agora().addingTimeInterval(resta)
     }
+
+    /// O limite do Spotify é do app (da chave): trocando a chave, a espera da anterior não vale.
+    private func esquecerLimite() { travaLimite.lock(); _bloqueadoAte = nil; travaLimite.unlock() }
 
     /// Segundos que ainda faltam do pedido de espera do Spotify, ou nil se já pode chamar.
     func limiteRestante() -> TimeInterval? {
