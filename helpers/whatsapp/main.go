@@ -134,7 +134,7 @@ func (a *ajudante) publicar(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-a.sujo:
-			emitir(map[string]any{"t": "conversas", "lista": a.estado.Lista()})
+			emitir(map[string]any{"t": "conversas", "lista": a.estado.Recentes()})
 			_ = a.estado.Salvar()
 			// Nome, número e foto das conversas da lista: depois de entregar, e fora do laço, para uma consulta
 			// de rede lenta não segurar a próxima mensagem.
@@ -181,6 +181,8 @@ const (
 	validadeFoto     = 24 * time.Hour
 	limiteMidia      = 8 << 20
 	maxArquivosMidia = 100
+	// maxCompletar é quantas conversas lidas por rodada procuram nome, número e foto.
+	maxCompletar = 80
 )
 
 func primeiro(nomes ...string) string {
@@ -234,6 +236,17 @@ func (a *ajudante) nomeDeQuem(ctx context.Context, j types.JID, dica types.JID, 
 func (a *ajudante) completar(ctx context.Context) bool {
 	mudou := false
 	pendentes := a.estado.Pendentes()
+	// Só as mais recentes (as não lidas vêm antes) vão atrás de foto e nome na rede: o resto da lista espera ficar à vista.
+	lidas := 0
+	for i, c := range pendentes {
+		if c.NaoLidas > 0 {
+			continue
+		}
+		if lidas++; lidas > maxCompletar {
+			pendentes = pendentes[:i]
+			break
+		}
+	}
 	// As fotos entram na fila antes de qualquer consulta de nome: descobrir o nome de um grupo é pedido de rede em série
 	// e não pode atrasar as miniaturas da lista.
 	for _, c := range pendentes {
@@ -347,6 +360,16 @@ func (a *ajudante) tratar(ctx context.Context, ev any) {
 		fase("erro", "Outro programa tomou o lugar do Deck nesta conexão.")
 	case *events.Message:
 		a.mensagem(ctx, e)
+	case *events.UndecryptableMessage:
+		a.indecifravel(ctx, e)
+	case *events.Pin:
+		if e.Action != nil {
+			a.estado.Fixar(e.JID.String(), e.Action.GetPinned())
+			a.marcarSujo()
+		}
+	case *events.DeleteChat:
+		a.estado.Remover(e.JID.String())
+		a.marcarSujo()
 	case *events.HistorySync:
 		a.historico(ctx, e)
 	case *events.Archive:
@@ -362,7 +385,7 @@ func (a *ajudante) tratar(ctx context.Context, ev any) {
 			break // o retrato inteiro do app state pode ser mais velho que as mensagens que chegaram desde então
 		}
 		if e.Action != nil && e.Action.GetRead() {
-			a.estado.Lida(e.JID.String())
+			a.estado.LidaEm(e.JID.String(), e.Timestamp)
 		} else {
 			a.estado.MarcadaNaoLida(e.JID.String())
 		}
@@ -370,7 +393,7 @@ func (a *ajudante) tratar(ctx context.Context, ev any) {
 	case *events.Receipt:
 		// Leitura feita em outro aparelho do próprio dono (ele leu no celular).
 		if (e.Type == types.ReceiptTypeReadSelf || (e.Type == types.ReceiptTypeRead && e.IsFromMe)) && eChat(e.Chat) {
-			a.estado.Lida(e.Chat.String())
+			a.estado.LidaEm(e.Chat.String(), e.Timestamp)
 			a.marcarSujo()
 		}
 	}
@@ -381,12 +404,23 @@ func (a *ajudante) mensagem(ctx context.Context, e *events.Message) {
 	if !eChat(chat) {
 		return
 	}
+	c, ok := Analisar(e.Message, e.IsViewOnce)
 	if e.Info.IsFromMe {
-		a.estado.Enviada(chat.String(), e.Info.Timestamp)
+		// Escrita no celular: quem responde leu a conversa, e a mensagem vira a prévia dela.
+		if !ok {
+			a.estado.Enviada(chat.String(), e.Info.Timestamp)
+		} else {
+			de, nome, grupo := "", "", e.Info.IsGroup
+			if grupo {
+				de, nome = "Você", a.nomeDoGrupo(ctx, chat, false)
+			} else {
+				nome, _ = a.identificar(ctx, chat, types.EmptyJID, "")
+			}
+			a.estado.EnviadaMsg(chat.String(), nome, grupo, a.mensagemDe(c, de, e.Info.ID, e.Info.Timestamp), e.Info.Timestamp)
+		}
 		a.marcarSujo()
 		return
 	}
-	c, ok := Analisar(e.Message, e.IsViewOnce)
 	if !ok {
 		return
 	}
@@ -401,6 +435,28 @@ func (a *ajudante) mensagem(ctx context.Context, e *events.Message) {
 		nome, numero = a.identificar(ctx, chat, e.Info.SenderAlt, e.Info.PushName)
 	}
 	a.estado.Recebida(chat.String(), nome, grupo, a.mensagemDe(c, de, e.Info.ID, e.Info.Timestamp), e.Info.Timestamp)
+	a.estado.Numero(chat.String(), numero)
+	a.marcarSujo()
+}
+
+// indecifravel conta como não lida a mensagem que chegou mas não abriu (sem a chave ainda): o celular a mostra como
+// "Aguardando mensagem" e conta. Se ela abrir depois (mesmo id), a Recebida troca o texto sem contar de novo.
+func (a *ajudante) indecifravel(ctx context.Context, e *events.UndecryptableMessage) {
+	chat := e.Info.Chat
+	if !eChat(chat) || e.Info.IsFromMe {
+		return
+	}
+	de := ""
+	if e.Info.IsGroup {
+		de = a.nomeDeQuem(ctx, e.Info.Sender, e.Info.SenderAlt, e.Info.PushName)
+	}
+	nome, numero, grupo := "", "", e.Info.IsGroup
+	if grupo {
+		nome = a.nomeDoGrupo(ctx, chat, false)
+	} else {
+		nome, numero = a.identificar(ctx, chat, e.Info.SenderAlt, e.Info.PushName)
+	}
+	a.estado.Recebida(chat.String(), nome, grupo, Msg{De: de, Texto: "Mensagem", Hora: hora(e.Info.Timestamp), ID: e.Info.ID}, e.Info.Timestamp)
 	a.estado.Numero(chat.String(), numero)
 	a.marcarSujo()
 }
@@ -488,17 +544,65 @@ func (a *ajudante) historico(ctx context.Context, e *events.HistorySync) {
 		if nao > 0 {
 			msgs = a.mensagensDoHistorico(ctx, j, c.GetMessages())
 		}
-		a.estado.Historico(j.String(), nome, grupo, nao, time.Unix(int64(c.GetConversationTimestamp()), 0), msgs)
+		previa, quandoPrevia := a.previaDoHistorico(ctx, j, c.GetMessages())
+		ts := int64(c.GetConversationTimestamp())
+		if ts == 0 {
+			ts = quandoPrevia
+		}
+		var ultima time.Time
+		if ts > 0 {
+			ultima = time.Unix(ts, 0)
+		}
+		a.estado.Historico(j.String(), nome, grupo, nao, ultima, msgs)
+		if previa != nil {
+			a.estado.Previa(j.String(), *previa)
+		}
 		a.estado.Numero(j.String(), numero)
 		// Arquivada: fica fora de Todas, Contatos e Grupos e só aparece no filtro Arquivadas. Histórico sem o campo
 		// não diz nada (não desarquiva).
 		a.estado.Silenciar(j.String(), fimDoSilencio(c.GetMuteEndTime() > 0, int64(c.GetMuteEndTime())))
 		if c.Archived != nil {
-			ultima := time.Unix(int64(c.GetConversationTimestamp()), 0)
-			a.estado.ArquivarEm(j.String(), c.GetArchived(), ultima)
+			a.estado.ArquivarEm(j.String(), c.GetArchived(), time.Unix(int64(c.GetConversationTimestamp()), 0))
+		}
+		if c.Pinned != nil {
+			a.estado.Fixar(j.String(), c.GetPinned() > 0)
 		}
 	}
 	a.marcarSujo()
+}
+
+// previaDoHistorico acha a mensagem mais nova do histórico da conversa (a do dono também) para a prévia da linha.
+// Devolve também o instante dela (unix s), 0 sem mensagem.
+func (a *ajudante) previaDoHistorico(ctx context.Context, chat types.JID, lista []*waHistorySync.HistorySyncMsg) (*Msg, int64) {
+	var melhor *waHistorySync.HistorySyncMsg
+	var tmax int64
+	for _, h := range lista {
+		w := h.GetMessage()
+		if w == nil {
+			continue
+		}
+		if _, ok := Analisar(w.GetMessage(), false); !ok {
+			continue
+		}
+		if t := int64(w.GetMessageTimestamp()); melhor == nil || t >= tmax {
+			melhor, tmax = h, t
+		}
+	}
+	if melhor == nil {
+		return nil, 0
+	}
+	w := melhor.GetMessage()
+	c, _ := Analisar(w.GetMessage(), false)
+	de := ""
+	if chat.Server == types.GroupServer {
+		if w.GetKey().GetFromMe() {
+			de = "Você"
+		} else if p, err := types.ParseJID(w.GetParticipant()); err == nil {
+			de = a.nomeDeQuem(ctx, p, types.EmptyJID, w.GetPushName())
+		}
+	}
+	m := a.mensagemDe(c, de, w.GetKey().GetID(), time.Unix(tmax, 0))
+	return &m, tmax
 }
 
 // mensagensDoHistorico pega as mensagens de outras pessoas, da mais antiga para a mais nova.
