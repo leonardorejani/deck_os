@@ -14,7 +14,7 @@ const marcador = () => { // anota quando o esqueleto e o painel real aparecem
 };
 
 export default async function (h) {
-  /* carregando: nada nos primeiros 200 ms, depois o esqueleto com a forma do bloco, no mínimo 400 ms */
+  /* carregando: nada nos primeiros 200 ms, depois o esqueleto com a forma do bloco, que some na hora em que o dado chega */
   await h.cenario({ atraso: 1200 });
   let p = await h.pagina({ antes: marcador });
   h.ok(await h.espera(p, () => window.__t?.esq != null, null, 3000), 'resposta lenta: o esqueleto aparece');
@@ -41,7 +41,7 @@ export default async function (h) {
   h.ok(await p.evaluate(() => document.querySelectorAll('.carregando .sessao').length) === 5, 'o esqueleto lembra a quantidade de sessões da última visita (5)');
   await p.context().close();
 
-  /* resposta rápida: o esqueleto nem aparece. Resposta logo depois dele: fica 400 ms */
+  /* resposta rápida: o esqueleto nem aparece. Resposta logo depois dele: some na hora (16/11/2026, antes ficava 400 ms) */
   await h.cenario({ atraso: 0 });
   p = await h.pagina({ antes: marcador });
   await h.espera(p, () => !!document.querySelector('.comp-a .faixa')); await h.dormir(700);
@@ -51,7 +51,7 @@ export default async function (h) {
   p = await h.pagina({ antes: marcador });
   await h.espera(p, () => window.__t?.fim != null, null, 4000);
   t = await p.evaluate(() => window.__t);
-  h.ok(t.fim - t.esq >= 380, `o esqueleto, depois de aparecer, fica pelo menos 400 ms (ficou ${Math.round(t.fim - t.esq)} ms)`);
+  h.ok(t.fim - t.esq < 300, `o esqueleto some quando o dado chega, sem segurar 400 ms (ficou ${Math.round(t.fim - t.esq)} ms)`);
   await p.context().close();
   await h.cenario({ atraso: 0 });
 

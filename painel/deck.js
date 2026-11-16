@@ -878,16 +878,19 @@ function pintarGlobal() {
 }
 const precisaConfig = e => !pendentes && !gesto?.arrastando && (!config || config.perfilAtivo !== e.perfilAtivo || config.comp !== e.comp || config.nomeMac !== e.nomeMac
   || JSON.stringify(config.blocos) !== JSON.stringify(e.blocos) || ++tiquesConfig % 5 === 0); // e de vez em quando: teclas editadas no Mac. Nunca por cima de uma gravação a caminho
-let esqueletoDesde = 0, esqueletoTimer = 0, configFalhou = false;
+let configFalhou = false;
 let ultimoOk = performance.now(); // a última resposta boa do Mac
 async function passo() {
   try {
+    // Primeira abertura: sem config não há teclas, e ela não depende do estado. Pede as duas juntas, não uma atrás da outra.
+    const configJunto = !config ? canal.config() : null;
+    configJunto?.catch(() => {}); // o erro é tratado abaixo, quando alguém espera por ela
     const e = await canal.estado();
     estado = e; falhas = 0; ultimoOk = performance.now(); offline = false; semAcesso = false;
     if (e.nomeMac) guardar('deck-nome-mac', e.nomeMac);
     if (precisaConfig(e)) {
       const gen = geracaoConfig;
-      try { const nova = await canal.config(); if (gen === geracaoConfig && !pendentes) config = nova; configFalhou = false }
+      try { const nova = await (configJunto ?? canal.config()); if (gen === geracaoConfig && !pendentes) config = nova; configFalhou = false }
       catch (er) {
         if (er.status === 401) throw er;
         // sem config não há teclas: avisa uma vez e continua tentando a cada passo
@@ -906,11 +909,9 @@ async function passo() {
   }
 }
 function mostrarVista() {
-  // o esqueleto, depois de aparecer, fica pelo menos 400 ms (resposta que chega logo depois não pisca a tela)
-  const resta = esqueletoDesde ? esqueletoDesde + 400 - performance.now() : 0;
-  if (resta > 0) { clearTimeout(esqueletoTimer); esqueletoTimer = setTimeout(mostrarVista, resta); return }
+  // o esqueleto sai na hora em que o dado chega: quem pediu a tela real não espera mais nada
   const eraEsqueleto = !!V?.carregando;
-  V = vistaReal(); guardarForma(); esqueletoDesde = 0;
+  V = vistaReal(); guardarForma();
   atualizar();
   if (eraEsqueleto) $('#conteudo').animate([{ opacity: 0 }, { opacity: 1 }], { duration: parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--mov-rapido')) || 180 });
 }
@@ -937,7 +938,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && !s
 posicionar();
 setTimeout(() => {
   if (V || offline || semAcesso) return;
-  V = vistaEsqueleto(); esqueletoDesde = performance.now(); atualizar();
+  V = vistaEsqueleto(); atualizar();
 }, 200);
 pintarGlobal();
 laco();
