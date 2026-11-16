@@ -54,6 +54,7 @@ const padrao = () => ({
   config500: false,          // GET /api/config responde erro 500
   rejeitar: '',              // PUT /api/config recusa com esse motivo (422), como a validação do Mac
   rodizio: '',               // trocar (o primeiro pedido troca o código) | botao (só um pedido de tecla troca)
+  atrasoConfig: 0,           // ms de espera antes de responder o GET /api/config
   atrasoGravar: 0,           // ms de espera antes de o Mac aceitar o PUT /api/config
   atrasoAcao: 0,             // ms de espera antes de o Mac fazer uma tecla (POST /api/botao) ou um comando do Spotify
   spotifyRecusa: '',         // todo comando do Spotify é recusado (422) com esse motivo
@@ -220,7 +221,7 @@ const aparelhos = () => [
 ];
 const CAPA_FILA = i => `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48"><rect width="48" height="48" fill="hsl(${i * 40} 50% 40%)"/></svg>`)}`;
 const proximasDaFila = () => c.filaVazia ? [] : Array.from({ length: 9 }, (_, i) => ({ faixa: X('Próxima música ' + (i + 1)), artista: i % 3 === 0 ? 'Artista Exemplo, Convidado' : 'Banda ' + (i + 1), uri: 'spotify:track:p' + (i + 1), capa: CAPA_FILA(i + 1) })).slice(c.filaPulou || 0);
-const FILA = () => ({ atual: { faixa: X('Faixa de Exemplo'), artista: X('Artista Exemplo') }, proximas: proximasDaFila(), ...(c.filaContexto ? { contexto: X(c.filaContexto) } : {}) });
+const FILA = () => ({ atual: { faixa: X('Faixa de Exemplo'), artista: X('Artista Exemplo') }, proximas: proximasDaFila(), ...(c.filaContexto ? { contexto: X(c.filaContexto), contextoUri: 'spotify:playlist:37i9dQZF1EIXU3Q6t3bSoG' } : {}) });
 // os apps do Mac de quem usa (GET /api/apps) e o que cada um oferece (GET /api/apps/<id>/acoes), como o Apps.swift e o AcoesDeApp.swift
 const APPS_MAC = () => [
   ...[['Calculadora', 'Calculator', 'com.apple.calculator'], ['Calendário', 'Calendar', 'com.apple.iCal'], ['Finder', 'Finder', 'com.apple.finder'], ['Mail', 'Mail', 'com.apple.mail'], ['Notas', 'Notes', 'com.apple.Notes'], ['Terminal', 'Terminal', 'com.apple.Terminal'], ['WhatsApp', 'WhatsApp', 'net.whatsapp.WhatsApp'], ['Spotify', 'Spotify', 'com.spotify.client']]
@@ -333,6 +334,7 @@ async function api(req, res, url) {
     if (!res.writableEnded && !res.destroyed) json(res, 200, estado());
     return;
   }
+  if (rota === '/api/config' && m === 'GET' && c.atrasoConfig) await new Promise(r => setTimeout(r, c.atrasoConfig));
   if (rota === '/api/config' && m === 'GET') return c.config500 ? json(res, 500, { erro: 'config quebrada' }) : json(res, 200, configCompleta());
   if (rota === '/api/config' && m === 'PUT') {
     const nova = await lerCorpo(req); cont.configsGravadas.push(nova);
@@ -380,6 +382,7 @@ async function api(req, res, url) {
     if (c.filaRecusa) return json(res, 422, { erro: c.filaRecusa });
     const n = +url.searchParams.get('n'), alvo = proximasDaFila()[n - 1];
     cont.spotify.push(`pular:${n}:${url.searchParams.get('uri')}`);
+    cont.pularCtx = [...(cont.pularCtx || []), url.searchParams.get('ctx')]; // o contexto que o painel mandou junto (o Mac toca sem ler a fila de novo)
     if (!alvo || alvo.uri !== url.searchParams.get('uri')) return json(res, 422, { erro: 'A fila mudou. Abra a fila de novo.' });
     c.filaPulou = (c.filaPulou || 0) + n; c.faixa = alvo.faixa;
     return json(res, 200, { ok: true });

@@ -15,7 +15,7 @@
      curtir(curtir)            -> {ok: true}     true curte, false tira a curtida (só conectado)
      fila()                    -> {atual, proximas}  só conectado
      recentes()                -> {itens}            o que tocou por último (só conectado)
-     pularFila(n, uri)         -> {ok: true}         toca a música na vez n da fila (1 é a próxima), pulando as de antes (só conectado)
+     pularFila(n, uri, ctx)   -> {ok: true}         toca a música na vez n da fila (1 é a próxima), pulando as de antes (só conectado)
      repetirModo(modo)         -> {ok: true}     faixa (só a música), contexto (a lista) ou nao (só conectado)
      config()                  -> Config sem o codigoAcesso
      gravarConfig(config)      -> Config
@@ -99,7 +99,7 @@ function criarCanalHttps() {
     curtir: curtir => pedir('POST', '/api/spotify/curtir?v=' + (curtir ? '1' : '0')),
     fila: () => pedir('GET', '/api/spotify/fila'),
     recentes: () => pedir('GET', '/api/spotify/recentes'),
-    pularFila: (n, uri) => pedir('POST', `/api/spotify/pular?n=${encodeURIComponent(n)}` + (uri ? '&uri=' + encodeURIComponent(uri) : '')),
+    pularFila: (n, uri, ctx) => pedir('POST', `/api/spotify/pular?n=${encodeURIComponent(n)}` + (uri ? '&uri=' + encodeURIComponent(uri) : '') + (uri && ctx ? '&ctx=' + encodeURIComponent(ctx) : '')),
     repetirModo: modo => pedir('POST', '/api/spotify/repetir?modo=' + encodeURIComponent(modo)),
     config: () => pedir('GET', '/api/config'),
     gravarConfig: config => pedir('PUT', '/api/config', config),

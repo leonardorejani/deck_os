@@ -198,7 +198,7 @@ async function pularPara(i) {
   otimistaSpotify({ tocando: true }, 0, { faixa: item.faixa, artista: item.artista || '', album: '', capaUrl: item.capa || '', capaId: undefined, duracao: 0, aguardando: true });
   // a lista encolheu: a rolagem volta ao alto, onde a escolhida toma o lugar (as que ficam sobem do lugar em que estavam)
   V = vistaReal(); atualizar(); pintarListaPlayer(0); animar?.(); avisar(`Tocando ${item.faixa}`);
-  try { await enfileirarSpotify(async () => { await canal.pularFila(i + 1, item.uri); await atualizarJa() }); setTimeout(() => { if (lp.qual === 'fila' && lp.aba === 'fila') lerListaPlayer() }, 800) }
+  try { await enfileirarSpotify(async () => { await canal.pularFila(i + 1, item.uri, f.contextoUri); await atualizarJa() }); setTimeout(() => { if (lp.qual === 'fila' && lp.aba === 'fila') lerListaPlayer() }, 800) }
   catch (e) {
     lp.faixa = faixaAntes; desfazerSpotify();
     if (lp.qual === 'fila' && lp.aba === 'fila') { lp.dados = f; pintarListaPlayer(yAntes); if (!reduzMov()) $('#pc-lista-corpo').animate([{ opacity: 0 }, { opacity: 1 }], { duration: msCss('--mov-padrao') }) }
