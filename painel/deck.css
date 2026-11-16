@@ -632,11 +632,15 @@ button.cartao.sessoes:active { scale: .98 }
 
 /* ---------- Carregando: a forma do bloco, sem o texto (nada some em branco, nada pula) ---------- */
 .carregando { pointer-events: none }
-.carregando :is(.faixa, .artista, .sessao > *, .uso-nome > span, .medidor b, .renova, .renova-tit, .uso-tira .nome-u, .uso-tira b, .tecla:not(.menu) .nome, .progresso > span:not(.trilho), .conta, .vazio-rico strong, .vazio-rico span) { color: transparent; background: var(--superficie-2); border-radius: var(--raio-mini); animation: pulso 1200ms linear infinite alternate }
+.carregando :is(.faixa, .artista, .sessao > *, .uso-nome > span, .medidor b, .renova, .renova-tit, .uso-tira .nome-u, .uso-tira b, .progresso > span:not(.trilho), .conta, .vazio-rico strong, .vazio-rico span) { color: transparent; background: var(--superficie-2); border-radius: var(--raio-mini); animation: pulso 1200ms linear infinite alternate }
 .carregando .uso-nome small { color: transparent }
 .carregando .capa { outline-color: transparent }
-.carregando :is(.capa, .tecla:not(.menu) img, .tecla:not(.menu) .svg) { background: var(--superficie-2); animation: pulso 1200ms linear infinite alternate }
-.carregando :is(.ic-mini, .vazio-rico img, .tecla:not(.menu) .svg svg, .midia, .modo, .selo, .hora-tecla) { visibility: hidden }
+.carregando .capa { background: var(--superficie-2); animation: pulso 1200ms linear infinite alternate }
+.carregando :is(.ic-mini, .vazio-rico img, .midia, .modo, .selo, .hora-tecla) { visibility: hidden }
+/* Parcial: as teclas já são de verdade (a config chega antes do estado), só o resto segue em esqueleto */
+.carregando:not(.parcial) .tecla:not(.menu) .nome { color: transparent; background: var(--superficie-2); border-radius: var(--raio-mini); animation: pulso 1200ms linear infinite alternate }
+.carregando:not(.parcial) :is(.tecla:not(.menu) img, .tecla:not(.menu) .svg) { background: var(--superficie-2); animation: pulso 1200ms linear infinite alternate }
+.carregando:not(.parcial) .tecla:not(.menu) .svg svg { visibility: hidden }
 @keyframes pulso { from { opacity: .55 } to { opacity: 1 } }
 @media (prefers-reduced-motion: reduce) { .carregando * { animation: none !important } }
 
