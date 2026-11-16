@@ -133,9 +133,11 @@ struct SpotifyReal: ControleSpotify {
 
     func recentes() -> Result<RecentesSpotify, ErroSpotify> { conta?.recentes() ?? .failure(.naoConectado) }
 
-    func pularFila(posicao: Int, uri: String?) -> ErroSpotify? {
+    func pularFila(posicao: Int, uri: String?) -> ErroSpotify? { pularFila(posicao: posicao, uri: uri, contexto: nil) }
+
+    func pularFila(posicao: Int, uri: String?, contexto: String?) -> ErroSpotify? {
         guard let conta else { return .naoConectado }
-        if let erro = conta.pularFila(posicao: posicao, uri: uri) { return erro }
+        if let erro = conta.pularFila(posicao: posicao, uri: uri, contexto: contexto) { return erro }
         return nil
     }
 

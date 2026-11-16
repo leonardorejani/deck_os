@@ -17,6 +17,9 @@ final class ComplementoSpotify: @unchecked Sendable {
     private var tentouEm: Date?
     private var curtidaDe: String?
     private var curtida: Bool?
+    private var curtidaEm: Date?
+    /// A curtida da mesma música só é lida de novo depois disto (curtir pelo Deck já atualiza na hora). Antes era a cada 5 s.
+    static let validadeDaCurtida: TimeInterval = 30
     private var atualizando = false
 
     init(conta: ContaSpotify, validade: TimeInterval = 5, espera: TimeInterval = 30,
@@ -32,7 +35,7 @@ final class ComplementoSpotify: @unchecked Sendable {
         var e = estado
         guard conta.conectado else {
             e.conectado = false
-            trava.lock(); jogador = nil; jogadorEm = nil; tentouEm = nil; curtidaDe = nil; curtida = nil; trava.unlock()
+            trava.lock(); jogador = nil; jogadorEm = nil; tentouEm = nil; curtidaDe = nil; curtida = nil; curtidaEm = nil; trava.unlock()
             return e
         }
         e.conectado = true
@@ -59,9 +62,12 @@ final class ComplementoSpotify: @unchecked Sendable {
             trava.lock(); jogador = j; jogadorEm = agora; trava.unlock()
         case .failure: falhou = true
         }
-        if let uri {
+        trava.lock()
+        let curtidaFresca = curtidaDe == uri && (curtidaEm.map { agora.timeIntervalSince($0) < Self.validadeDaCurtida } ?? false)
+        trava.unlock()
+        if let uri, !curtidaFresca {
             switch conta.curtida(uri) {
-            case .success(let c): trava.lock(); curtidaDe = uri; curtida = c; trava.unlock()
+            case .success(let c): trava.lock(); curtidaDe = uri; curtida = c; curtidaEm = agora; trava.unlock()
             case .failure: falhou = true
             }
         }
@@ -70,7 +76,7 @@ final class ComplementoSpotify: @unchecked Sendable {
 
     /// Depois de curtir ou mudar a repetição, o estado já mostra o novo valor sem esperar a API.
     func marcarCurtida(_ uri: String, _ valor: Bool) {
-        trava.lock(); curtidaDe = uri; curtida = valor; trava.unlock()
+        trava.lock(); curtidaDe = uri; curtida = valor; curtidaEm = Date(); trava.unlock()
     }
 
     func marcarRepetir(_ modo: String) {
