@@ -277,6 +277,23 @@ final class CaboTestes: XCTestCase {
         XCTAssertEqual(ok.status, 200)
     }
 
+    /// 16/11/2026: resposta acima dos 4 MB do quadro (mídia do WhatsApp de 3 a 8 MB, em base64) era descartada sem aviso e o
+    /// iPhone esperava o prazo inteiro. Agora volta 413 na hora, e a sessão continua de pé.
+    func testRespostaMaiorQueOQuadroVolta413ENaoDeixaOIphoneEsperando() throws {
+        let c = try Cenario()
+        let (mac, iphone) = parDeSoquetes()
+        let s = SessaoCabo(fluxo: mac, roteador: c.roteador, nomeMac: "Mac do Leo", rotulo: "teste", intervaloDoPing: 60, log: { _ in },
+                           ajustar: { p, r in p.caminho == "/api/estado" ? RespostaRota(status: 200, tipo: "application/json", corpo: Data(count: Quadros.maximo + 1)) : r })
+        Thread { s.rodar() }.start()
+        defer { s.encerrar() }
+        let ip = IPhoneFalso(iphone)
+        let grande = try XCTUnwrap(ip.resposta(ip.pedir("GET", "/api/estado", cabecalhos: ["x-deck-codigo": Cenario.codigo])), "o iPhone recebe alguma resposta")
+        XCTAssertEqual(grande.status, 413)
+        XCTAssertTrue(grande.texto.contains("grande demais"))
+        let ok = try XCTUnwrap(ip.resposta(ip.pedir("GET", "/api/controles", cabecalhos: ["x-deck-codigo": Cenario.codigo])))
+        XCTAssertNotEqual(ok.status, 413)
+    }
+
     func testLogNaoGuardaOCodigoDaQuery() throws {
         let c = try Cenario()
         let (ip, s, _, log) = sessao(c)
