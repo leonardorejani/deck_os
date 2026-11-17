@@ -753,7 +753,7 @@ let folhaAberta = null;
 tela.addEventListener('scroll', () => { tela.scrollTop = 0; tela.scrollLeft = 0 });
 function abrirFolha(id) { folhaAberta = $(id); folhaAberta.classList.add('aberta'); tela.classList.add('com-folha') }
 function fecharFolha() { if (folhaAberta?.contains(document.activeElement)) document.activeElement.blur(); folhaAberta?.classList.remove('aberta'); folhaAberta = null; tela.classList.remove('com-folha') }
-$$('[data-fechar]').forEach(b => { if (!b.textContent.trim()) b.innerHTML = SVG.x });
+$$('[data-fechar]').forEach(b => { if (!b.textContent.trim()) b.innerHTML = 'Fechar' });
 
 /* Puxar de cima para baixo fecha a tela aberta (folhas e relógio). A tela acompanha o dedo e, se soltar cedo, volta.
    Não rouba o gesto de lista que ainda rola para cima, de barra arrastável nem de campo de texto */
