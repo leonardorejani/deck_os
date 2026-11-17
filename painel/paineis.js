@@ -663,7 +663,7 @@ async function carregarDestinos(pedirAcesso) {
   }
 }
 function abrirFormNovo() {
-  fo.aberto = true; fo.pediuAte = 0; fo.destinos = null; fo.antigo = false; fo.enviando = false; fo.todo = false; fo.querLista = false;
+  fo.aberto = true; fo.pediuAte = 0; fo.destinos = null; fo.antigo = false; fo.enviando = false; fo.todo = false; fo.querLista = false; fo.dur = 60;
   const hoje = mesmoDia(ag.dia, new Date(V.ref)), h = hoje ? Math.min(new Date(V.ref).getHours() + 1, 23) : 9;
   $('#nc-titulo').value = ''; $('#nc-dia').value = dataIso(ag.dia);
   $('#nc-inicio').value = pad2(h) + ':00'; $('#nc-fim').value = h < 23 ? pad2(h + 1) + ':00' : '23:59';
@@ -726,16 +726,20 @@ $('#nc-destino').addEventListener('change', e => {
 /* ---------- Seletores próprios do Novo compromisso: Dia, Início e Fim abrem dentro da folha (nada de calendário nem lista nativos do iPhone) ----------
    Os inputs do formulário continuam sendo o valor guardado (escondidos): o seletor só escreve neles e o salvar segue igual. */
 const sl = { qual: '', mes: new Date(), voltar: null };
-const DURACOES = [15, 30, 45, 60, 90, 120, 180];
+const DURACOES = [15, 30, 45, 60, 90, 120, 180, 240, 360, 480];
 const minDe = v => { const m = /^(\d{2}):(\d{2})$/.exec(v || ''); return m ? Number(m[1]) * 60 + Number(m[2]) : null };
 const horaDe = n => pad2(Math.floor(n / 60)) + ':' + pad2(n % 60);
 const textoDuracao = n => n < 60 ? n + ' min' : Math.floor(n / 60) + ' h' + (n % 60 ? ' ' + (n % 60) + ' min' : '');
 const diaDoCampo = () => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec($('#nc-dia').value); return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : diaDe(ag.dia) };
 function gravarCampo(id, valor) { const el = $('#' + id); el.value = valor; el.dispatchEvent(new Event('input', { bubbles: true })) }
-/* mexer no início leva o fim junto, mantendo a duração (como o Calendário do Mac). O fim nunca passa das 23:59 */
+/* mexer no início leva o fim junto, mantendo a duração (como o Calendário do Mac). O fim nunca passa das 23:59.
+   A duração é a que a pessoa escolheu (fo.dur), não a do fim já cortado em 23:59: senão voltar para um horário cedo perderia a duração */
 function gravarInicio(min) {
-  const ini = minDe($('#nc-inicio').value), fim = minDe($('#nc-fim').value), dur = ini != null && fim != null && fim > ini ? fim - ini : 60;
-  gravarCampo('nc-inicio', horaDe(min)); gravarCampo('nc-fim', horaDe(Math.min(1439, min + dur)));
+  gravarCampo('nc-inicio', horaDe(min)); gravarCampo('nc-fim', horaDe(Math.min(1439, min + (fo.dur || 60))));
+}
+function gravarFim(min) {
+  const ini = minDe($('#nc-inicio').value) ?? 540, v = Math.min(1439, Math.max(ini + 5, min));
+  gravarCampo('nc-fim', horaDe(v)); if (v === min) fo.dur = v - ini; // pedido cortado no teto ou no piso não vira a duração desejada
 }
 const passoCinco = (min, sinal) => sinal > 0 ? (Math.floor(min / 5) + 1) * 5 : (Math.ceil(min / 5) - 1) * 5;
 function abrirSeletor(qual) {
@@ -789,7 +793,7 @@ function pintarSeletor(rolar) {
   }
   const v = fim ?? (ini ?? 540) + 60, dur = ini != null ? v - ini : null;
   $('#sel-valor').innerHTML = `${horaDe(v)}${dur > 0 ? `<small>${textoDuracao(dur)} depois do início</small>` : ''}`; $('#sel-valor').className = 'sel-valor hora';
-  $('#sel-extra').innerHTML = passo;
+  $('#sel-extra').innerHTML = passo + '<div class="sel-passo"><button type="button" class="btn secundario" data-sel-passo="-60" aria-label="1 hora antes">- 1 h</button><button type="button" class="btn secundario" data-sel-passo="60" aria-label="1 hora depois">+ 1 h</button></div>';
   el.className = 'sel-meio sel-duracoes';
   el.innerHTML = DURACOES.map(n => { const t = (ini ?? 540) + n, cabe = t <= 1439; return `<button type="button" class="sel-chip dur" data-sel-dur="${n}" aria-pressed="${n === dur}" ${cabe ? '' : 'disabled'}><b>${textoDuracao(n)}</b><small>${cabe ? 'até ' + horaDe(t) : 'passa da meia-noite'}</small></button>` }).join('');
 }
@@ -802,12 +806,12 @@ $('#ca-sel').addEventListener('click', e => {
   const hora = e.target.closest('[data-sel-hora]');
   if (hora) { gravarInicio(minDe(hora.dataset.selHora)); return pintarSeletor() }
   const dur = e.target.closest('[data-sel-dur]');
-  if (dur && !dur.disabled) { gravarCampo('nc-fim', horaDe((minDe($('#nc-inicio').value) ?? 540) + Number(dur.dataset.selDur))); return pintarSeletor() }
+  if (dur && !dur.disabled) { gravarFim((minDe($('#nc-inicio').value) ?? 540) + Number(dur.dataset.selDur)); return pintarSeletor() }
   const p = e.target.closest('[data-sel-passo]');
   if (p) {
-    const sinal = Number(p.dataset.selPasso) > 0 ? 1 : -1, ini = minDe($('#nc-inicio').value) ?? 540;
+    const q = Number(p.dataset.selPasso), sinal = q > 0 ? 1 : -1, ini = minDe($('#nc-inicio').value) ?? 540;
     if (sl.qual === 'inicio') gravarInicio(Math.max(0, Math.min(1435, passoCinco(ini, sinal))));
-    else gravarCampo('nc-fim', horaDe(Math.max(ini + 5, Math.min(1439, passoCinco(minDe($('#nc-fim').value) ?? ini + 60, sinal)))));
+    else { const fim = minDe($('#nc-fim').value) ?? ini + 60; gravarFim(Math.abs(q) === 60 ? fim + q : passoCinco(fim, sinal)) }
     pintarSeletor();
   }
 });

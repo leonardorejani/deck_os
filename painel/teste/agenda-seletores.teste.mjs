@@ -181,4 +181,43 @@ export default async function (h) {
     await foto(p, `${nome}-lembrete`);
     await ctx.close(); await h.cenario({ agendaLembretes: false });
   }
+
+  /* ---------- 4. verificação: teto de 23:59, durações longas e duração mantida perto da meia-noite ---------- */
+  for (const [nome, w, al] of VISTAS) {
+    await h.reset();
+    const ctx = await h.novoContexto({ viewport: { width: w, height: al } });
+    const p = await h.pagina({ ctx }); await abrirAgenda(h, p); await abrirForm(h, p);
+    const horaChip = async t => { await p.click('[data-sel="inicio"]'); await h.dormir(300); const c = p.locator(`#sel-meio [data-sel-hora="${t}"]`); await c.scrollIntoViewIfNeeded(); await c.click(); await p.click('[data-sel-ok]'); await h.dormir(150) };
+    // teto: Início 23:55, Fim 23:59, mexer no Fim não invalida o campo
+    await horaChip('23:30');
+    await p.click('[data-sel="inicio"]'); await h.dormir(300);
+    for (let i = 0; i < 5; i++) { await p.click('[data-sel-passo="5"]'); await h.dormir(40) }
+    await p.click('[data-sel-ok]'); await h.dormir(150);
+    h.ok(await valor(p, 'nc-inicio') === '23:55' && await valor(p, 'nc-fim') === '23:59', `${nome}: Início 23:55 deixa o Fim em 23:59 (${await valor(p, 'nc-inicio')} até ${await valor(p, 'nc-fim')})`);
+    await p.click('[data-sel="fim"]'); await h.dormir(300);
+    for (const s of ['-5', '5', '-60', '60']) {
+      await p.click(`[data-sel-passo="${s}"]`); await h.dormir(60);
+      const v = await valor(p, 'nc-fim');
+      h.ok(v === '23:59' && /23:59/.test(await p.textContent('#nc-fim-val')) && /23:59/.test(await p.textContent('#sel-valor')), `${nome}: no teto, o passo ${s} no Fim mantém 23:59 (campo "${v}", seletor "${await p.textContent('#sel-valor')}")`);
+    }
+    await p.click('[data-sel-ok]'); await h.dormir(150);
+    // duração mantida: voltar para um horário cedo devolve 1 h, não a duração comprimida
+    await horaChip('10:00');
+    h.ok(await valor(p, 'nc-inicio') === '10:00' && await valor(p, 'nc-fim') === '11:00', `${nome}: depois de 23:30, voltar para 10:00 devolve a duração de 1 h (${await valor(p, 'nc-inicio')} até ${await valor(p, 'nc-fim')})`);
+    // durações longas
+    await horaChip('09:00');
+    await p.click('[data-sel="fim"]'); await h.dormir(300);
+    const durs = await p.evaluate(() => [...document.querySelectorAll('#sel-meio [data-sel-dur]')].map(b => b.querySelector('b').textContent));
+    h.ok(['4 h', '6 h', '8 h'].every(t => durs.includes(t)), `${nome}: o Fim oferece 4 h, 6 h e 8 h (${durs.join(' | ')})`);
+    await p.click('[data-sel-dur="480"]'); await h.dormir(100);
+    h.ok(await valor(p, 'nc-fim') === '17:00', `${nome}: 9:00 com 8 h termina às 17:00 (${await valor(p, 'nc-fim')})`);
+    await p.click('[data-sel-passo="60"]'); await h.dormir(80);
+    h.ok(await valor(p, 'nc-fim') === '18:00', `${nome}: +1 h leva o Fim para 18:00 (${await valor(p, 'nc-fim')})`);
+    await p.click('[data-sel-passo="-60"]'); await p.click('[data-sel-passo="-60"]'); await h.dormir(80);
+    h.ok(await valor(p, 'nc-fim') === '16:00', `${nome}: -1 h duas vezes leva o Fim para 16:00 (${await valor(p, 'nc-fim')})`);
+    await p.click('[data-sel-ok]'); await h.dormir(150);
+    await horaChip('10:00');
+    h.ok(await valor(p, 'nc-fim') === '17:00', `${nome}: mover o Início mantém a duração escolhida de 7 h (${await valor(p, 'nc-fim')})`);
+    await ctx.close();
+  }
 }
