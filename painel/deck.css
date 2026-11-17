@@ -642,10 +642,15 @@ button.cartao { font: inherit; color: inherit; text-align: left; border: 0; curs
 .folha.cheia > header { padding: var(--pad) 0 var(--item) }
 .folha.cheia .corpo { padding: 0 0 var(--seguro-baixo) }
 .vertical .folha.cheia > header { padding-top: var(--item) }
-.vertical .folha.cheia > header:has(#wa-filtro) { flex-wrap: wrap; row-gap: var(--item) } /* em pé o filtro não cabe ao lado do título: desce para a linha de baixo */
 .vertical .folha.cheia > header h2 small { display: block; margin-left: 0 } /* em pé o resumo vai para baixo do título, sem cortar */
-.vertical #wa-filtro { order: 3; flex: 1 0 100% }
-.vertical #wa-filtro button { flex: 1 }
+/* cabeçalho do WhatsApp: só o filtro à esquerda e o X à direita. O título fica só para leitor de tela */
+.so-leitor { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap }
+#f-whats > header { min-width: 0 }
+#f-whats > header .fechar { margin-left: auto }
+#wa-filtro { grid-auto-columns: max-content; min-width: 0; max-width: 100% }
+.vertical #wa-filtro { flex: 1 1 0; grid-auto-columns: minmax(max-content, 1fr); overflow-x: auto; scrollbar-width: none } /* a rolagem só existe em pé, deitado o toque de 44 pt (::after das abas) não pode ser cortado */
+.vertical #wa-filtro::-webkit-scrollbar { display: none }
+.vertical #wa-filtro button { padding: 0 var(--item); min-height: var(--alvo) } /* a rolagem corta o ::after que estendia o toque: o botão ganha os 44 pt por inteiro */
 .folha.cheia .mensagens p { background: var(--superficie) }
 
 /* sessões: o cartão inteiro é o botão, com retorno ao apertar */

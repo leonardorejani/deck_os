@@ -8,8 +8,8 @@ const selos = p => p.evaluate(() => Object.fromEntries([...document.querySelecto
 const aba = async (p, f) => { await p.click(`#wa-filtro [data-f="${f}"]`); await p.waitForTimeout(80); return (await nomes(p)).join('|') };
 // o selo cabe dentro do botão e as 4 abas cabem no segmento, sem rolagem lateral
 const cabe = p => p.evaluate(() => {
-  const seg = document.querySelector('#wa-filtro'), r = seg.getBoundingClientRect();
-  return [...seg.querySelectorAll('button')].every(b => { const q = b.getBoundingClientRect(), s = b.querySelector('.selo-aba'), t = s.getBoundingClientRect(); return b.scrollWidth <= b.clientWidth + 1 && q.left >= r.left - 1 && q.right <= r.right + 1 && (s.hidden || (t.left >= q.left - 1 && t.right <= q.right + 1)) }) && seg.scrollWidth <= seg.clientWidth + 1;
+  const seg = document.querySelector('#wa-filtro'), r = seg.getBoundingClientRect(), rola = seg.scrollWidth > seg.clientWidth + 1; // em pé o filtro rola por dentro (cabeçalho só com filtro e X): lá só vale não quebrar o botão
+  return [...seg.querySelectorAll('button')].every(b => { const q = b.getBoundingClientRect(), s = b.querySelector('.selo-aba'), t = s.getBoundingClientRect(); return b.scrollWidth <= b.clientWidth + 1 && (rola || (q.left >= r.left - 1 && q.right <= r.right + 1)) && (s.hidden || (t.left >= q.left - 1 && t.right <= q.right + 1)) }) && (rola ? getComputedStyle(seg).overflowX === 'auto' : true);
 });
 
 export default async function (h) {

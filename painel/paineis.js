@@ -97,7 +97,7 @@ function pintarWhats() {
   const espera = c => c.naoLidas > 0 || !c.ultimaMinha;
   const lista = ordenar(todas.filter(c => categoria[wa.filtro](c) && espera(c)));
   /* selo de cada aba: o total de não lidas da categoria */
-  $$('#wa-filtro button').forEach(b => { const n = todas.filter(categoria[b.dataset.f]).reduce((q, c) => q + (c.naoLidas || 0), 0), el = b.querySelector('.selo-aba'); el.textContent = n; el.hidden = !(n > 0) });
+  $$('#wa-filtro button').forEach(b => { const n = todas.filter(categoria[b.dataset.f]).reduce((q, c) => q + (c.naoLidas || 0), 0), el = b.querySelector('.selo-aba'); el.textContent = n > 999 ? '999+' : n; el.hidden = !(n > 0) });
   $('#wa-titulo').innerHTML = wa.lista ? `WhatsApp <small><span class="n-total">${total}</span> não lidas em ${contam.length} ${contam.length === 1 ? 'conversa' : 'conversas'}</small>` : 'WhatsApp';
   if (wa.lista) animarTotal(total);
   $$('#wa-filtro button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.f === wa.filtro)));
@@ -252,14 +252,13 @@ async function responderNoMac(id) {
   catch (e) { if (e.status === 404) abrirNoMac('whatsapp', 'Abrindo o WhatsApp no Mac'); else if (e.status === 401) tratarErro(e); else avisar(msgErro(e), { erro: true }) }
   finally { wa.abrindo = false }
 }
-$('#wa-filtro').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { wa.filtro = b.dataset.f; wa.aberta = null; pintarWhats() } });
+$('#wa-filtro').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { wa.filtro = b.dataset.f; wa.aberta = null; pintarWhats(); b.scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: reduzido() ? 'auto' : 'smooth' }) } }); // em pé as 4 abas passam da largura: a tocada vem para a vista
 $('#wa-lista').addEventListener('click', e => {
   if (e.target.closest('[data-tentar]')) { wa.erro = ''; pintarWhats(); return lerWhats() }
   const resp = e.target.closest('[data-wa-mac]'); if (resp) return responderNoMac(resp.dataset.waMac);
   const ou = e.target.closest('[data-ouvir]'); if (ou) return ouvirAudioWa(ou);
   const c = e.target.closest('[data-wa]'); if (c) alternarConversa(c.dataset.wa);
 });
-$('#wa-abrir').onclick = () => abrirNoMac('whatsapp', 'Abrindo o WhatsApp no Mac');
 /* abrir e fechar a conversa com movimento: a que estava aberta recolhe, a nova se expande e os balões entram em
    cascata. Tempos e curvas vêm dos tokens (com movimento reduzido eles viram 0) */
 async function alternarConversa(id) {

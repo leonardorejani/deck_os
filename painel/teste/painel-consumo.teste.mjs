@@ -48,7 +48,7 @@ export default async function (h) {
   await h.espera(p, () => !!document.querySelector('.tecla[data-id="apagar"]'));
   await p.evaluate(() => document.querySelector('#f-whats').classList.add('aberta'));
   await h.dormir(900);
-  for (const [sel, nome] of [['#f-whats .fechar', 'fechar'], ['#wa-filtro button[data-f="contatos"]', 'aba do WhatsApp'], ['#wa-abrir', 'Abrir no Mac']]) {
+  for (const [sel, nome] of [['#f-whats .fechar', 'fechar'], ['#wa-filtro button[data-f="contatos"]', 'aba do WhatsApp']]) {
     const r = await p.evaluate(s => {
       const el = document.querySelector(s), b = el.getBoundingClientRect(), esc = parseFloat(document.querySelector('#moldura').style.getPropertyValue('--escala'));
       const topo = document.elementFromPoint(b.x + b.width / 2, b.y - 4.5), base = document.elementFromPoint(b.x + b.width / 2, b.y + b.height + 4.5);

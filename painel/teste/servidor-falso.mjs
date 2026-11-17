@@ -32,6 +32,7 @@ const padrao = () => ({
   whatsappVersao: null,      // número: o Mac por QR dá versão à lista (?v=<versão> igual responde só {igual}). null: Mac sem versão, a lista vai sempre inteira
   whatsappExtra: false,      // chega uma conversa nova na lista (mede a velocidade com que a folha aberta a mostra)
   whatsappTudo: false,       // lista do aparelho conectado com conversas lidas e não lidas, fixada, silenciada e arquivadas lidas e não lidas (precisa de whatsappOrigem 'qr')
+  whatsappArqNaoLidas: null, // com whatsappTudo: não lidas da arquivada Sorteio (padrão 6), para o selo de número grande
   whatsappVolta: false,      // com whatsappTudo: o contato que o dono tinha respondido manda mensagem nova (3 não lidas)
   whatsappOrigem: 'app',     // app | web (só o total, pelo título da aba) | web-fechado (sem aba aberta) | qr (aparelho conectado, com lista) | qr-caido | qr-reconectando (subindo ou queda curta, sem lista) | qr-reconectando-lista (queda curta com a lista de antes)
   uso: 'normal',             // normal | sem-medicao
@@ -185,7 +186,7 @@ const WHATSAPP_TUDO = () => {
     { id: 't7@g.us', nome: 'Banda', grupo: true, naoLidas: 0, ultima: ha(11), mensagens: [M('Chego às 19h', 11, 'Rui')] },
     { id: 'ta1@s.whatsapp.net', nome: 'Bia Arquivada', grupo: false, naoLidas: 3, ultima: ha(20), arquivada: true, mensagens: [M('Mensagem de arquivada', 20)] },
     { id: 'ta2@g.us', nome: 'Promo Arquivada', grupo: true, naoLidas: 0, ultima: ha(40), arquivada: true, mensagens: [M('Oferta do dia', 40, 'Loja')] },
-    { id: 'ta3@g.us', nome: 'Sorteio Arquivado', grupo: true, naoLidas: 6, ultima: ha(60), arquivada: true, mensagens: [M('Resultado saiu', 60, 'Admin')] },
+    { id: 'ta3@g.us', nome: 'Sorteio Arquivado', grupo: true, naoLidas: c.whatsappArqNaoLidas ?? 6, ultima: ha(60), arquivada: true, mensagens: [M('Resultado saiu', 60, 'Admin')] },
   ];
 };
 const WHATSAPP_RICO = () => {
