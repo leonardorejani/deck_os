@@ -1,22 +1,20 @@
 import SwiftUI
 import AppKit
 
-/// O grupo "Spotify" de Este Mac. Com a chave do app embutida no Deck, é só "Conectar" (login), e a chave própria fica
-/// recolhida em "Avançado". Sem chave embutida (fork que não configurou), a tela pede a chave, o endereço de retorno e
-/// o passo a passo para criar uma de graça. Sem login o player do iPhone segue como sempre. Com login ganha aparelhos,
+/// O grupo "Spotify" de Este Mac. Com a chave do app embutida no Deck, é só "Conectar" (login). Abaixo, o bloco "Usar a sua
+/// própria chave" explica o porquê e o passo a passo para quem quiser a própria chave. Sem chave embutida (fork que não
+/// configurou), o bloco fica sempre aberto. Sem login o player do iPhone segue como sempre. Com login ganha aparelhos,
 /// curtir, fila e repetir.
 struct GrupoSpotify: View {
     @ObservedObject var spotify: ModeloSpotify
-    private var avancadoAberto: Bool { spotify.avancadoAberto }
+    @State private var verMais = false
+    private var blocoAberto: Bool { !spotify.temChaveEmbutida || spotify.avancadoAberto }
 
     var body: some View {
         let situacao = spotify.situacao
-        GrupoDeAjuste(titulo: "Spotify", nota: spotify.temChaveEmbutida ? nil : SpotifyLogica.passos) {
+        GrupoDeAjuste(titulo: "Spotify", nota: nil) {
             LinhasDeAjuste {
-                if !spotify.temChaveEmbutida {
-                    linhaDaChave
-                }
-                LinhaDeAjuste(titulo: "Login no Spotify", apoio: SpotifyLogica.apoioDoLogin(situacao, erro: spotify.erro, confirmando: spotify.confirmando), divisoria: !spotify.temChaveEmbutida) {
+                LinhaDeAjuste(titulo: "Login no Spotify", apoio: SpotifyLogica.apoioDoLogin(situacao, erro: spotify.contaNaoLiberada ? nil : spotify.erro, confirmando: spotify.confirmando), divisoria: false) {
                     HStack(spacing: Tema.Espaco.item) {
                         switch situacao {
                         case .conectado:
@@ -30,27 +28,38 @@ struct GrupoSpotify: View {
                     }
                 }
                 if spotify.temChaveEmbutida {
-                    LinhaDeAjuste(titulo: SpotifyLogica.avancado, apoio: SpotifyLogica.apoioDoAvancado, divisoria: true) {
-                        BotaoDeAjuste(texto: avancadoAberto ? "Esconder" : "Mostrar", estilo: .secundario) { spotify.avancadoAberto.toggle() }
-                    }
-                    if avancadoAberto {
-                        linhaDaChave
-                        if spotify.usaChavePropria {
-                            LinhaDeAjuste(titulo: "Chave do Deck", apoio: "Esquece a sua chave e volta para a que vem no Deck. Pede para conectar de novo", divisoria: true) {
-                                BotaoDeAjuste(texto: "Voltar", estilo: .secundario) { spotify.usarChaveDoDeck() }
+                    LinhaDeAjuste(titulo: "Chave em uso", apoio: nil, divisoria: true) {
+                        HStack(spacing: Tema.Espaco.item) {
+                            ValorDeAjuste(spotify.nomeDaChaveEmUso)
+                            if spotify.usaChavePropria {
+                                BotaoDeAjuste(texto: "Voltar para a chave do Deck", estilo: .secundario) { spotify.usarChaveDoDeck() }
                             }
                         }
                     }
                 }
-                if !spotify.temChaveEmbutida || avancadoAberto {
-                    linhaDoEndereco
-                    LinhaDeAjuste(titulo: "Criar a chave", apoio: "Abre o site de desenvolvedor do Spotify (grátis)", divisoria: true) {
-                        BotaoDeAjuste(texto: "Abrir site", estilo: .secundario) { NSWorkspace.shared.open(SpotifyLogica.siteDoSpotify) }
+                if spotify.contaNaoLiberada {
+                    LinhaDeAjuste(titulo: SpotifyLogica.avisoDeCadastro, apoio: nil, divisoria: true) {
+                        BotaoDeAjuste(texto: "Ver o passo a passo", estilo: .primario) { spotify.avancadoAberto = true }
                     }
                 }
-            }
-            if spotify.temChaveEmbutida && avancadoAberto {
-                NotaDeAjuste(SpotifyLogica.passos)
+                if spotify.avisoDeLimite {
+                    LinhaDeAjuste(titulo: SpotifyLogica.tituloDoLimite, apoio: SpotifyLogica.apoioDoLimite, divisoria: true) {
+                        BotaoDeAjuste(texto: "Usar a minha chave", estilo: .secundario) { spotify.avancadoAberto = true }
+                    }
+                }
+                LinhaDeAjuste(titulo: SpotifyLogica.tituloDoBloco, apoio: SpotifyLogica.resumoDoBloco, divisoria: true) {
+                    if spotify.temChaveEmbutida {
+                        BotaoDeAjuste(texto: blocoAberto ? "Esconder" : "Mostrar", estilo: .secundario) { spotify.avancadoAberto.toggle() }
+                    }
+                }
+                if blocoAberto {
+                    LinhaDeAjuste(titulo: "Mais detalhes", apoio: verMais ? SpotifyLogica.detalheDoBloco : nil, divisoria: true) {
+                        BotaoDeAjuste(texto: verMais ? "Ver menos" : "Ver mais", estilo: .link) { verMais.toggle() }
+                    }
+                    ForEach(Array(SpotifyLogica.passos.enumerated()), id: \.offset) { n, passo in
+                        LinhaDeAjuste(titulo: passo.titulo, apoio: passo.apoio, divisoria: true) { ladoDoPasso(n + 1, situacao) }
+                    }
+                }
             }
         }
         .onChange(of: spotify.chave) { _ in spotify.guardarChave() }
@@ -59,14 +68,12 @@ struct GrupoSpotify: View {
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in spotify.atualizar() }
     }
 
-    private var linhaDaChave: some View {
-        LinhaDeAjuste(titulo: "Chave do app (Client ID)", apoio: SpotifyLogica.apoioDoCampo, divisoria: spotify.temChaveEmbutida) {
-            CampoDeAjuste(rotulo: "Chave do app do Spotify", texto: $spotify.chave, largura: Tema.Medida.campoChave)
-        }
-    }
-
-    private var linhaDoEndereco: some View {
-        LinhaDeAjuste(titulo: "Endereço de retorno", apoio: SpotifyLogica.apoioDoEndereco, divisoria: true) {
+    @ViewBuilder
+    private func ladoDoPasso(_ n: Int, _ situacao: SituacaoSpotify) -> some View {
+        switch n {
+        case 1:
+            BotaoDeAjuste(texto: "Abrir o painel", estilo: .secundario) { NSWorkspace.shared.open(SpotifyLogica.siteDoSpotify) }
+        case 4:
             HStack(spacing: Tema.Espaco.item) {
                 Text(SpotifyLogica.enderecoDoRetorno)
                     .font(.system(size: Tema.Texto.xs, design: .monospaced))
@@ -75,6 +82,16 @@ struct GrupoSpotify: View {
                     .textSelection(.enabled)
                 BotaoDeAjuste(texto: "Copiar", estilo: .secundario) { copiar(SpotifyLogica.enderecoDoRetorno) }
             }
+        case 6:
+            CampoDeAjuste(rotulo: "Chave do app do Spotify (Client ID)", texto: $spotify.chave, largura: Tema.Medida.campoChave)
+        case 7:
+            if situacao == .conectando {
+                BotaoDeAjuste(texto: "Cancelar", estilo: .secundario) { spotify.cancelar() }
+            } else if situacao != .conectado {
+                BotaoDeAjuste(texto: "Conectar", estilo: .primario, desligado: situacao == .semChave) { Task { await spotify.conectar() } }
+            }
+        default:
+            EmptyView()
         }
     }
 

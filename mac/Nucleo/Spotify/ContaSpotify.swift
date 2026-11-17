@@ -19,7 +19,7 @@ struct ErroSpotify: Error, Equatable, Sendable {
     static let esperar = ErroSpotify(texto: "O Spotify pediu para esperar um pouco. Tente de novo em instantes.")
     static let faltaPermissao = ErroSpotify(texto: "Falta uma permissão. Desconecte e conecte o Spotify de novo nos Ajustes do Mac.")
     static let recusou = ErroSpotify(texto: "O Spotify recusou o pedido.")
-    static let semCadastro = ErroSpotify(texto: "Os extras do Spotify (aparelhos, curtir, fila, repetir a música) pedem uma chave sua. Leva 2 minutos.",
+    static let semCadastro = ErroSpotify(texto: "Sua conta não está liberada na chave do Deck. Use a sua própria chave.",
                                          semLogin: true, pedeChavePropria: true)
 }
 
