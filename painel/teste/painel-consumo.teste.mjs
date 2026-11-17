@@ -95,4 +95,32 @@ export default async function (h) {
   await h.dormir(6500);
   h.ok(pedidos === 0, `Mac fora: ${pedidos} pedidos de agenda do mês da C em 6,5 s`);
   await p.context().close();
+
+  /* Correções da verificação (16/11/2026): falha não vira rajada */
+  // a) config que falha com o carimbo mudado: não repete a cada laço de 1 s
+  await h.reset();
+  p = await h.pagina();
+  await h.espera(p, () => !!document.querySelector('.tecla[data-id="apagar"]'));
+  await h.dormir(1500);
+  await h.cenario({ config500: true, nomeApagar: 'Mudou' });
+  await h.dormir(1500);
+  const b3 = (await h.contadores()).configs;
+  await h.dormir(8000);
+  c = await h.contadores();
+  h.ok(c.configs - b3 <= 1, `config falhando: ${c.configs - b3} GET /api/config em 8 s (era um por segundo)`);
+  await h.cenario({ config500: false });
+  h.ok(await h.espera(p, () => document.querySelector('.tecla[data-id="apagar"]')?.textContent.includes('Mudou'), null, 20000), 'passada a espera, a config volta e a tecla aparece');
+  await p.context().close();
+
+  // b) agenda do mês da C pendurada até o tempo limite: espaçada, não a cada tique de 5 s
+  await h.reset(); await h.cenario({ comp: 'c' });
+  p = await h.pagina({ ajustes: { tempoLimite: 1000 } });
+  await h.espera(p, () => !!document.querySelector('.comp-c .mes-c'));
+  await h.dormir(800);
+  await p.route('**/api/agenda*', async r => { await h.dormir(2500); r.abort().catch(() => {}) });
+  await p.click('.comp-c [data-mes-c="1"]');
+  let n4 = 0; p.on('request', r => { if (r.url().includes('/api/agenda')) n4++ });
+  await h.dormir(16000);
+  h.ok(n4 <= 1, `agenda pendurada: ${n4} pedidos em 16 s (antes um a cada tique de 5 s)`);
+  await p.context().close();
 }

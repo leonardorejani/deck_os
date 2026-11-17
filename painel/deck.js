@@ -5,7 +5,7 @@ const tela = $('#tela');
 let estado = null, config = null;     // o que o Mac mandou
 let V = null;                         // a vista: o que a tela mostra agora (real ou o esqueleto)
 let posicao = 'horizontal';
-let offline = false, semAcesso = false, falhas = 0, tiquesConfig = 0, versaoConfig = null;
+let offline = false, semAcesso = false, falhas = 0, tiquesConfig = 0, versaoConfig = null, configTentadaEm = -Infinity;
 let ultima = {};                      // o que já está desenhado, para só refazer o que mudou
 let organizando = false;              // modo organizar (segurar uma tecla)
 let sobrepor = {};                    // mudança local ainda a caminho do Mac (bloco escondido, perfil), por cima do estado
@@ -887,8 +887,9 @@ function pintarGlobal() {
 }
 // O Mac manda o carimbo da config no estado (configVersao): só relê quando ele muda, em vez de baixar tudo a cada 5 s. Mac antigo, sem carimbo,
 // segue como antes (compara os blocos e relê de vez em quando, agora a cada 30). Nunca por cima de uma gravação a caminho
+const ESPERA_CONFIG = 15000; // depois de uma releitura que falhou, o mesmo carimbo só é tentado de novo passado esse tempo
 const precisaConfig = e => !pendentes && !gesto?.arrastando && (!config || config.perfilAtivo !== e.perfilAtivo || config.comp !== e.comp || config.nomeMac !== e.nomeMac
-  || (e.configVersao ? e.configVersao !== versaoConfig : JSON.stringify(config.blocos) !== JSON.stringify(e.blocos) || ++tiquesConfig % 30 === 0));
+  || (e.configVersao ? e.configVersao !== versaoConfig && performance.now() - configTentadaEm > ESPERA_CONFIG : JSON.stringify(config.blocos) !== JSON.stringify(e.blocos) || ++tiquesConfig % 30 === 0));
 let configFalhou = false, esqueletoDesde = 0, esqueletoTimer = 0, esqueletoPronto = false, configEmVoo = null;
 const pedirConfig = () => configEmVoo ??= canal.config().finally(() => { configEmVoo = null }); // nunca dois GET /api/config ao mesmo tempo
 let ultimoOk = performance.now(); // a última resposta boa do Mac
@@ -906,9 +907,10 @@ async function passo() {
     if (config && versaoConfig === null && e.configVersao) versaoConfig = e.configVersao; // config que chegou antes do primeiro estado (mostrarParcial): é desta versão, não há o que reler
     if (precisaConfig(e)) {
       const gen = geracaoConfig;
-      try { const nova = await pedirConfig(); if (gen === geracaoConfig && !pendentes) { config = nova; versaoConfig = e.configVersao ?? null } configFalhou = false }
+      try { const nova = await pedirConfig(); if (gen === geracaoConfig && !pendentes) { config = nova; versaoConfig = e.configVersao ?? null } configFalhou = false; configTentadaEm = -Infinity }
       catch (er) {
         if (er.status === 401) throw er;
+        configTentadaEm = performance.now();
         // sem config não há teclas: avisa uma vez e continua tentando a cada passo
         if (!config && !configFalhou) { configFalhou = true; avisar('Não consegui ler as teclas do Mac. Tentando de novo.', { erro: true }) }
       }
