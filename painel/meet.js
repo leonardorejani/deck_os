@@ -39,16 +39,18 @@ async function lerMeet() {
 }
 
 const ICONES_MEET = { microfone: 'microfone', camera: 'camera' };
-/* o texto e a classe de cada botão, pelo estado que o Mac leu */
+/* o cartão de microfone ou câmera, pelo estado que o Mac leu: rótulo pequeno em cima, estado em letra grande, como os Controles do Mac */
 function blocoMeet(item, nome, ligadoTxt, desligadoTxt, estado) {
   const classe = { ligado: 'ligado', desligado: 'desligado', desconhecido: 'incerto', 'sem-reuniao': 'sem' }[estado];
-  const sub = { ligado: ligadoTxt, desligado: desligadoTxt, desconhecido: 'Não consegui ler', 'sem-reuniao': 'Sem reunião' }[estado];
+  const valor = { ligado: ligadoTxt, desligado: desligadoTxt, desconhecido: 'Não consegui ler', 'sem-reuniao': 'Sem reunião' }[estado];
   const icone = SVG[item === 'microfone' ? (estado === 'desligado' ? 'microfoneCortado' : 'microfone') : (estado === 'desligado' ? 'cameraCortada' : 'camera')];
   const sem = estado === 'sem-reuniao', pressionado = estado === 'ligado' || estado === 'desligado' ? ` aria-pressed="${estado === 'ligado'}"` : '';
   const dica = estado === 'ligado' ? (item === 'microfone' ? 'Toque para mutar' : 'Toque para desligar') : estado === 'desligado' ? (item === 'microfone' ? 'Toque para desmutar' : 'Toque para ligar') : '';
-  return `<button class="mt-bloco ${classe}" data-mt="${item}"${pressionado}${sem || mt.ocupado ? ' disabled' : ''} aria-label="${esc(`${nome}: ${sub}.${dica ? ' ' + dica : ''}`)}">
-    <span class="mt-ic" aria-hidden="true">${icone}</span><span class="mt-nome">${nome}</span><span class="mt-sub">${esc(sub)}</span></button>`;
+  return cartaoMeet(item, classe, icone, nome, valor, dica, { pressionado, off: sem || !!mt.ocupado, rotulo: `${nome}: ${valor}.${dica ? ' ' + dica : ''}` });
 }
+const cartaoMeet = (id, classe, icone, nome, valor, sub, { pressionado = '', off = false, rotulo = '' } = {}) =>
+  `<button class="mt-bloco ${classe}" data-mt="${id}"${pressionado}${off ? ' disabled' : ''}${rotulo ? ` aria-label="${esc(rotulo)}"` : ''}>
+    <span class="mt-topo"><span class="mt-ic" aria-hidden="true">${icone}</span><span class="mt-nome">${nome}</span></span><b class="mt-valor">${esc(valor)}</b><span class="mt-sub">${esc(sub)}</span></button>`;
 
 function pintarMeet() {
   const corpo = $('#mt-corpo'); if (!corpo) return;
@@ -67,10 +69,10 @@ function pintarMeet() {
     h = `<div class="mt-estado ${aberta ? 'aberta' : ''}"><i aria-hidden="true"></i><span>${estado}</span></div>
       <div class="mt-aviso">${aberta && d.aviso ? esc(d.aviso) : ''}</div>
       <div class="mt-grade">
-        <button class="mt-bloco entrar" data-mt="entrar"${mt.ocupado ? ' disabled' : ''}><span class="mt-ic" aria-hidden="true">${SVG.video}</span><span class="mt-nome">Entrar no Meet</span><span class="mt-sub">${aberta ? 'Trazer a reunião para a frente' : 'Abrir meet.google.com'}</span></button>
+        ${cartaoMeet('entrar', 'entrar', SVG.video, 'Entrar no Meet', 'Entrar', aberta ? 'Trazer a reunião para a frente' : 'Abrir meet.google.com', { off: !!mt.ocupado })}
         ${blocoMeet('microfone', 'Microfone', 'Ligado', 'Mutado', mic)}
         ${blocoMeet('camera', 'Câmera', 'Ligada', 'Desligada', cam)}
-        <button class="mt-bloco sair ${sai ? '' : 'sem'}" data-mt="sair"${sai && !mt.ocupado ? '' : ' disabled'}><span class="mt-ic" aria-hidden="true">${SVG.desligar}</span><span class="mt-nome">Sair da chamada</span><span class="mt-sub">${!aberta ? 'Sem reunião' : naChamada === false ? 'Você ainda não entrou' : 'Encerrar a chamada'}</span></button>
+        ${cartaoMeet('sair', `sair ${sai ? '' : 'sem'}`, SVG.desligar, 'Sair da chamada', 'Sair', !aberta ? 'Sem reunião' : naChamada === false ? 'Você ainda não entrou' : 'Encerrar a chamada', { off: !sai || !!mt.ocupado })}
       </div>`;
   }
   if (h === mt.html) return; // nada mudou: não refaz (o laço de 2 s não pode apagar o toque em andamento)
