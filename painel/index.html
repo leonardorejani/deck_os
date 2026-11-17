@@ -122,9 +122,9 @@
             <header><h3>Novo compromisso</h3></header>
             <div class="nc-corpo">
               <div class="campo nc-titulo"><label for="nc-titulo">Título</label><input id="nc-titulo" maxlength="200" autocomplete="off" enterkeyhint="done"></div>
-              <div class="campo nc-dia"><label for="nc-dia">Dia</label><span class="nc-data"><span class="nc-vis" data-de="nc-dia" aria-hidden="true"></span><input id="nc-dia" type="date"></span></div>
-              <div class="campo nc-ini"><label for="nc-inicio">Início</label><span class="nc-data"><span class="nc-vis" data-de="nc-inicio" aria-hidden="true"></span><input id="nc-inicio" type="time"></span></div>
-              <div class="campo nc-fim"><label for="nc-fim">Fim</label><span class="nc-data"><span class="nc-vis" data-de="nc-fim" aria-hidden="true"></span><input id="nc-fim" type="time"></span></div>
+              <div class="campo nc-dia"><span class="rotulo" id="nc-dia-rot">Dia</span><span class="nc-data"><button type="button" class="nc-vis" data-de="nc-dia" data-sel="dia" aria-labelledby="nc-dia-rot nc-dia-val"><span id="nc-dia-val" class="nc-val"></span></button><input id="nc-dia" type="date" tabindex="-1" aria-hidden="true"></span></div>
+              <div class="campo nc-ini"><span class="rotulo" id="nc-inicio-rot">Início</span><span class="nc-data"><button type="button" class="nc-vis" data-de="nc-inicio" data-sel="inicio" aria-labelledby="nc-inicio-rot nc-inicio-val"><span id="nc-inicio-val" class="nc-val"></span></button><input id="nc-inicio" type="time" tabindex="-1" aria-hidden="true"></span></div>
+              <div class="campo nc-fim"><span class="rotulo" id="nc-fim-rot">Fim</span><span class="nc-data"><button type="button" class="nc-vis" data-de="nc-fim" data-sel="fim" aria-labelledby="nc-fim-rot nc-fim-val"><span id="nc-fim-val" class="nc-val"></span></button><input id="nc-fim" type="time" tabindex="-1" aria-hidden="true"></span></div>
               <div class="campo nc-onde"><label for="nc-destino">Onde salvar</label><select id="nc-destino"></select></div>
               <div class="campo nc-alerta"><label for="nc-alerta">Alerta</label><select id="nc-alerta"></select></div>
               <label class="nc-check nc-todo"><input type="checkbox" id="nc-todo"><span>Dia todo</span></label>
@@ -132,6 +132,14 @@
             </div>
             <footer><p class="nc-msg" id="nc-msg" role="status" aria-live="polite"></p><button type="button" class="btn secundario" data-nc-cancelar>Cancelar</button><button type="submit" class="btn primario" id="nc-salvar">Salvar</button></footer>
           </form>
+        </div>
+        <div class="seletor" id="ca-sel" hidden role="dialog" aria-modal="true" aria-labelledby="sel-titulo">
+          <div class="sel-lado">
+            <header><h3 id="sel-titulo"></h3><button type="button" class="btn primario" data-sel-ok>Pronto</button></header>
+            <p class="sel-valor" id="sel-valor" aria-live="polite"></p>
+            <div class="sel-extra" id="sel-extra"></div>
+          </div>
+          <div class="sel-meio" id="sel-meio"></div>
         </div>
       </section>
     </div>

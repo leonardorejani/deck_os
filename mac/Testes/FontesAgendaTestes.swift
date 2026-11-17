@@ -45,6 +45,9 @@ final class FontesAgendaTestes: XCTestCase {
         var cal = Calendar(identifier: .gregorian); cal.timeZone = utc
         let comHora = Agenda.lembrete(titulo: "Pagar boleto", prazo: DateComponents(year: 2026, month: 11, day: 12, hour: 15, minute: 30),
                                       lista: "Lembretes", cor: (r: 0, g: 0, b: 1), calendario: cal)
+        XCTAssertEqual(comHora?.lembrete, true)
+        XCTAssertEqual(Agenda.converter(comHora!, fuso: utc).lembrete, true)
+        XCTAssertNil(Agenda.converter(evento("Ensaio", inicio: 0), fuso: utc).lembrete)
         XCTAssertEqual(comHora?.inicio, Date(timeIntervalSince1970: 1_794_497_400))
         XCTAssertEqual(comHora?.diaTodo, false)
         let diaTodo = Agenda.lembrete(titulo: "Ligar", prazo: DateComponents(year: 2026, month: 11, day: 12), lista: "Casa", cor: (r: 0, g: 0, b: 1), calendario: cal)

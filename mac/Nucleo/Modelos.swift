@@ -248,6 +248,8 @@ struct Evento: Codable, Equatable, Sendable {
     /// ISO 8601 do fim. Ausente em Mac antigo: o painel trata como evento de um dia só. Vem para o evento de vários dias
     /// (viagem, feriado prolongado) aparecer em todos os dias e meses que cobre.
     var fim: String? = nil
+    /// true quando o item é um lembrete do app Lembretes (a cor é a da lista). Ausente em evento do Calendário e em Mac antigo.
+    var lembrete: Bool? = nil
 }
 
 struct ResumoAgenda: Codable, Equatable, Sendable {
