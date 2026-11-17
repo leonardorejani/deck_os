@@ -62,6 +62,7 @@ const padrao = () => ({
   atrasoAcao: 0,             // ms de espera antes de o Mac fazer uma tecla (POST /api/botao) ou um comando do Spotify
   spotifyRecusa: '',         // todo comando do Spotify é recusado (422) com esse motivo
   album: 'Artista Exemplo (Deluxe)', repetir: false, aleatorio: false,
+  agendaLembretes: false,    // true: o dia 20 ganha um lembrete e um feriado, os dois na mesma cor roxa (a cor da lista e a do calendário podem ser iguais)
   agendaCriar: 'normal',     // normal | antigo (Mac sem as rotas de criar: 404) | lembretes-pedir (Lembretes ainda sem acesso: o pedido abre no Mac) | recusa (o Mac recusa o compromisso, 409)
   reunioes: false,           // os eventos de Meet, Zoom e Teams chegam com o link da sala (Evento.link)
   reuniaoRecusa: '',         // POST /api/reuniao/entrar falha (422) com esse motivo
@@ -218,10 +219,10 @@ const WHATSAPP = () => {
 };
 
 // Agenda: eventos semanais e avulsos por dia do mês (como o protótipo), devolvidos para o intervalo pedido
-const AZUL = '#60A5FA', VERDE = '#5FD49B', AMARELO = '#E8B95B', ROSA = '#F09090';
+const ROXO = '#B44BD6', AZUL = '#60A5FA', VERDE = '#5FD49B', AMARELO = '#E8B95B', ROSA = '#F09090';
 const mesmoDiaF = (a, b) => a.toDateString() === b.toDateString();
 function eventosDoDia(d) {
-  const dow = d.getDay(), dia = d.getDate(), ev = [], E = (h, m, titulo, cor, calendario, local, diaTodo = false, link = '') => { const q = new Date(d); q.setHours(h, m, 0, 0); ev.push({ titulo: X(titulo), inicio: q.toISOString(), diaTodo, calendario: X(calendario), cor, ...(local ? { local: X(local) } : {}), ...(link && c.reunioes ? { link } : {}) }) };
+  const dow = d.getDay(), dia = d.getDate(), ev = [], E = (h, m, titulo, cor, calendario, local, diaTodo = false, link = '', lembrete = false) => { const q = new Date(d); q.setHours(h, m, 0, 0); ev.push({ titulo: X(titulo), inicio: q.toISOString(), diaTodo, calendario: X(calendario), cor, ...(local ? { local: X(local) } : {}), ...(link && c.reunioes ? { link } : {}), ...(lembrete ? { lembrete: true } : {}) }) };
   if (dow === 2) E(10, 30, 'Reunião de produto', AZUL, 'Trabalho', 'Google Meet', false, 'https://meet.google.com/abc-defg-hij');
   if (dow === 4) E(20, 0, 'Ensaio do louvor', VERDE, 'Louvor', 'Templo');
   if (dow === 0) { E(9, 0, 'Escola dominical', AMARELO, 'Igreja', 'Sala 2'); E(19, 0, 'Culto', AMARELO, 'Igreja', 'Templo') }
@@ -229,6 +230,7 @@ function eventosDoDia(d) {
   if (avulsos[dia]) E(...avulsos[dia]);
   const chaveDia = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   for (const n of criadosAgenda) if (n.dia === chaveDia) { const [h, mi] = (n.inicio || '00:00').split(':').map(Number); E(h, mi, n.titulo, VERDE, n.calendario, '', !!n.diaTodo) }
+  if (c.agendaLembretes && dia === 20) { E(11, 0, 'Pagar boleto', ROXO, 'Trabalho', '', false, '', true); E(0, 0, 'Dia da Consciência Negra', ROXO, 'Feriados', '', true) }
   if (c.agenda === 'muitas' && mesmoDiaF(d, new Date(Date.now() + 86400000))) for (let i = 0; i < 14; i++) E(7 + i, 0, 'Compromisso ' + (i + 1), AZUL, 'Trabalho', 'Sala ' + (i + 1));
   return ev;
 }

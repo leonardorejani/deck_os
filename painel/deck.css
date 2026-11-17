@@ -12,6 +12,7 @@
   --ilha: #000;
   --cal-fundo: #000;
   --cal-vermelho: #EB5545; /* vermelho do calendário do StandBy */
+  --lembrete: #FF9F0A;      /* laranja do app Lembretes: lembrete nunca se confunde com evento de calendário da mesma cor */
   --dia-cal: 44px;
   --folga-ponto: 3px;
   --raio-icone: 10px;       /* forma do ícone de app (22% de 44) */
@@ -531,7 +532,8 @@ button.cartao { font: inherit; color: inherit; text-align: left; border: 0; curs
 .sb-semana { font-size: var(--texto-lg); font-weight: 600; color: var(--texto) }
 .sb-grade { grid-auto-rows: minmax(0, 1fr); align-items: center }
 .sb-semana .fds, .sb-dia.fds { color: var(--texto-2) }
-.sb-dia { position: relative; width: var(--dia-cal); height: var(--dia-cal); border: 0; border-radius: 50%; background: none; color: var(--texto); font: inherit; font-size: var(--texto-xl); font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1; cursor: pointer; display: grid; place-items: center }
+.sb-dia { position: relative; width: var(--dia-cal); height: var(--dia-cal); border: 0; border-radius: 50%; background: none; color: var(--texto); font: inherit; font-size: var(--texto-xl); font-weight: 600; line-height: 1; padding: 0 0 1px; cursor: pointer; display: grid; place-items: center }
+/* o número fica no centro do círculo: algarismo proporcional (o "1" tabular deixava o número 1,5 px para a direita) e 1 px para cima (a linha de texto desce o número) */
 .sb-dia.hoje { background: var(--cal-vermelho); color: var(--destaque-bloco-texto) }
 .sb-dia.sel { background: var(--superficie-2) }
 .sb-dia.tem::after { content: ""; position: absolute; bottom: calc(-1 * var(--item)); left: 50%; width: 4px; height: 4px; translate: -50% 0; border-radius: 50%; background: var(--texto-3) }
@@ -562,10 +564,11 @@ button.cartao { font: inherit; color: inherit; text-align: left; border: 0; curs
 .nc-onde, .nc-alerta, .nc-todo, .nc-padrao { grid-column: span 6 }
 .novo-comp .campo { min-width: 0 }
 .novo-comp .campo select { font: inherit; font-size: var(--texto-campo); min-height: var(--alvo); border-radius: var(--raio-sm); border: 1px solid var(--borda); background: var(--fundo); color: var(--texto); padding: 0 var(--icone); min-width: 0; width: 100% }
-.nc-data { position: relative; display: block; min-width: 0; overflow: hidden; min-height: var(--alvo); border-radius: var(--raio-sm); border: 1px solid var(--borda); background: var(--fundo) } /* o valor desenhado é nosso (curto e que cabe), o campo nativo fica por cima, transparente, só para receber o toque e abrir o seletor do iPhone */
-.nc-vis { display: flex; align-items: center; min-height: var(--alvo); padding: 0 var(--icone); font-size: var(--texto-campo); color: var(--texto); white-space: nowrap; overflow: hidden; text-overflow: clip }
+.nc-data { position: relative; display: block; min-width: 0; overflow: hidden; min-height: var(--alvo); border-radius: var(--raio-sm); border: 1px solid var(--borda); background: var(--fundo) } /* o botão desenha o valor (curto, que cabe) e abre o seletor próprio. O input nativo fica escondido só para guardar o valor (sem toque, sem foco, para o iPhone nunca abrir o calendário dele) */
+.nc-vis { display: flex; align-items: center; width: 100%; min-height: var(--alvo); padding: 0 var(--icone); border: 0; background: none; font: inherit; font-size: var(--texto-campo); color: var(--texto); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: clip; cursor: pointer; touch-action: manipulation }
+.nc-vis:disabled { cursor: default }
 .nc-data:has(input:disabled) { opacity: .5 }
-.nc-data input { position: absolute; inset: 0; width: 100%; height: 100%; min-width: 0; max-width: 100%; margin: 0; padding: 0; opacity: 0; -webkit-appearance: none; appearance: none; font-size: 16px; border: 0; background: transparent }
+.nc-data input { position: absolute; inset: 0; width: 100%; height: 100%; min-width: 0; max-width: 100%; margin: 0; padding: 0; opacity: 0; pointer-events: none; -webkit-appearance: none; appearance: none; font-size: 16px; border: 0; background: transparent }
 .novo-comp input[type="time"]::-webkit-calendar-picker-indicator, .novo-comp input[type="date"]::-webkit-calendar-picker-indicator { display: none } /* o iPhone não desenha esse ícone, e no Chrome ele roubava espaço do valor */
 .novo-comp .campo input:disabled { opacity: .5 }
 .nc-check { display: flex; align-items: center; gap: var(--item); min-height: var(--alvo); font-size: var(--texto-sm); color: var(--texto); cursor: pointer }
@@ -578,6 +581,40 @@ button.cartao { font: inherit; color: inherit; text-align: left; border: 0; curs
 .novo-comp footer .btn:disabled { opacity: .5 }
 .vertical .novo-comp { grid-column: 1; grid-row: 2; border-left: 0; border-top: 1px solid var(--borda); padding: var(--pad) 0 0; margin: 0 }
 .vertical .nc-corpo { gap: var(--pad) var(--icone) }
+
+/* Seletores próprios de Dia, Início e Fim (cobrem a folha da Agenda). Deitado: o lado esquerdo diz o que se escolhe, o direito é onde se toca. Em pé: um embaixo do outro */
+.seletor { position: absolute; inset: 0; z-index: 4; display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: var(--secao); padding: var(--pad) var(--seguro-dir) var(--seguro-baixo) var(--seguro-esq); background: var(--cal-fundo); color-scheme: dark }
+.vertical .seletor { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); gap: var(--pad); padding: calc(var(--seguro-cima) + var(--pad)) var(--margem) var(--seguro-baixo) }
+.sel-lado { display: flex; flex-direction: column; gap: var(--pad); min-width: 0; min-height: 0 }
+.sel-lado header { display: flex; align-items: center; gap: var(--icone); min-height: var(--alvo) }
+.sel-lado h3 { margin: 0 auto 0 0; font-size: var(--texto-lg); font-weight: 700 }
+.sel-valor { margin: 0; font-size: var(--texto-lg); font-weight: 600; line-height: 1.25; overflow-wrap: anywhere }
+.sel-valor.hora { font-size: 44px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1 }
+.sel-valor small { display: block; margin-top: var(--item); font-size: var(--texto-sm); font-weight: 400; color: var(--texto-2); font-variant-numeric: normal }
+.sel-extra { display: grid; gap: var(--item) }
+.sel-chips, .sel-passo { display: flex; flex-wrap: wrap; gap: var(--item) }
+.sel-passo .btn { flex: 1 1 0; min-width: 0; padding: 0 var(--icone) }
+.sel-chip { font: inherit; font-size: var(--texto-base); font-weight: 600; min-height: var(--alvo); padding: 0 var(--pad); border: 0; border-radius: var(--raio-pilula); background: var(--superficie-2); color: var(--texto); cursor: pointer; touch-action: manipulation; font-variant-numeric: tabular-nums; transition: transform var(--mov-rapido) var(--curva-move) }
+.sel-chip:active:not(:disabled) { transform: scale(.97) }
+.sel-chip[aria-pressed="true"] { background: var(--destaque); color: var(--destaque-texto) }
+.sel-chip:disabled { opacity: .4; cursor: default }
+.sel-meio { min-height: 0; min-width: 0; overflow: auto; overscroll-behavior: contain; scrollbar-width: none; align-content: start }
+.sel-meio::-webkit-scrollbar { display: none }
+.sel-horas { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: var(--item) }
+.sel-duracoes { display: grid; grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); gap: var(--item) }
+.sel-chip.dur { display: grid; gap: var(--micro-gap); justify-items: center; align-content: center; min-height: 60px; border-radius: var(--raio); padding: var(--item) var(--icone) }
+.sel-chip.dur small { font-size: var(--texto-xs); font-weight: 400; opacity: .8 }
+.sel-mes { display: grid; grid-template-rows: auto auto auto; align-content: start; gap: var(--item); overflow: hidden }
+.sel-mes .sd-grade { grid-auto-rows: var(--dia-cal); align-items: center; row-gap: 0 }
+.sel-mes .sb-dia.hoje { background: none; color: var(--cal-vermelho) }
+.sel-mes .sb-dia.sel { background: var(--destaque); color: var(--destaque-texto) }
+.sel-mes .sb-dia { font-size: var(--texto-lg) }
+.sel-mes .mes-topo h2 { font-size: var(--texto-lg) }
+@media (prefers-reduced-motion: reduce) { .sel-chip, .sel-chip:active:not(:disabled) { transition: none; transform: none } }
+
+/* Lembrete (do app Lembretes) com barra laranja e o círculo do app, para não se misturar com evento de calendário de cor parecida */
+.ev-linha.lem > i { background: var(--lembrete) }
+.ev-linha .ic-lem { width: var(--ic-mini); height: var(--ic-mini); flex: none; margin-right: var(--item); color: var(--lembrete); vertical-align: -2px }
 .vertical .cal-corpo { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1fr); padding-top: var(--seguro-cima) }
 .vertical .lista-janela { margin: 0 }
 .vertical .lista-cal { border-left: 0; border-top: 1px solid var(--borda); padding: 0 }

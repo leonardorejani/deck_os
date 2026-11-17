@@ -463,7 +463,8 @@ function pintarListaCal() {
     h += `<section class="grupo-data"><h3>${nomeDia(g.d)}</h3>` + g.ev.map((e, j) => {
       const id = k + '#' + j, aberto = ag.aberto === id, cor = /^#[0-9a-f]{6}$/i.test(e.cor || '') ? e.cor : 'var(--texto-3)';
       const reuniao = reuniaoDe(e), local = reuniao && e.local && e.local.includes(reuniao.url) ? reuniao.nome : e.local; // o endereço da sala não vira o "local" da linha
-      return `<button class="ev-linha" data-ev="${esc(id)}" aria-expanded="${aberto}"><time>${e.diaTodo ? 'dia todo' : e.continua ? 'continua' : hhmm(e.d)}</time><i style="background:${cor}"></i><span class="tx"><b>${esc(e.titulo)}</b><span>${esc(e.calendario || '')}${local ? ', ' + esc(local) : ''}</span></span></button>`
+      const lem = e.lembrete === true; // vem do app Lembretes: laranja e com o círculo do app, a cor da lista fica só no nome dela
+      return `<button class="ev-linha ${lem ? 'lem' : ''}" data-ev="${esc(id)}" aria-expanded="${aberto}"><time>${e.diaTodo ? 'dia todo' : e.continua ? 'continua' : hhmm(e.d)}</time><i ${lem ? '' : `style="background:${cor}"`}></i><span class="tx"><b>${lem ? SVG.lembrete : ''}${esc(e.titulo)}</b><span>${lem ? 'Lembrete, ' : ''}${esc(e.calendario || '')}${local ? ', ' + esc(local) : ''}</span></span></button>`
         + (aberto ? `<div class="ev-detalhe">${reuniao ? `<button class="btn primario" data-ev-reuniao="${esc(reuniao.url)}" aria-label="Entrar na reunião (${esc(reuniao.nome)}), abre no Mac">Entrar na reunião</button>` : ''}<button class="btn secundario pequeno" data-ev-mac>Abrir no Calendário do Mac</button></div>` : '');
     }).join('') + '</section>';
   }
@@ -596,16 +597,16 @@ function pintarAlertas() {
   sel.value = lista.some(([v]) => v === antes) ? antes : '';
 }
 const MESES_CURTOS = ['jan.', 'fev.', 'mar.', 'abr.', 'mai.', 'jun.', 'jul.', 'ago.', 'set.', 'out.', 'nov.', 'dez.'];
-// o iPhone desenha a data por extenso ("13 de nov. de 2026") e ela não cabe na coluna: mostramos "13 nov." e o campo nativo só recebe o toque
+// o iPhone desenha a data por extenso ("13 de nov. de 2026") e ela não cabe na coluna: mostramos "13 nov." no botão que abre o seletor próprio
 function pintarValoresNovo() {
   for (const v of document.querySelectorAll('#ca-form .nc-vis')) {
     const x = $('#' + v.dataset.de).value, d = /^(\d{4})-(\d{2})-(\d{2})$/.exec(x);
-    v.textContent = d ? Number(d[3]) + ' ' + MESES_CURTOS[Number(d[2]) - 1] + (Number(d[1]) !== new Date(V.ref).getFullYear() ? ' ' + String(d[1]).slice(2) : '') : x || '--';
+    $('#' + v.dataset.de + '-val').textContent = d ? Number(d[3]) + ' ' + MESES_CURTOS[Number(d[2]) - 1] + (Number(d[1]) !== new Date(V.ref).getFullYear() ? ' ' + String(d[1]).slice(2) : '') : x || '--';
   }
 }
 function pintarTipoNovo() {
   $('#nc-todo').checked = fo.todo;
-  $('#nc-inicio').disabled = $('#nc-fim').disabled = fo.todo;
+  $('#nc-inicio').disabled = $('#nc-fim').disabled = $('#nc-inicio-val').closest('button').disabled = $('#nc-fim-val').closest('button').disabled = fo.todo;
   pintarAlertas(); pintarValoresNovo();
 }
 function pintarPadrao() {
@@ -662,7 +663,7 @@ async function carregarDestinos(pedirAcesso) {
   }
 }
 function abrirFormNovo() {
-  fo.aberto = true; fo.pediuAte = 0; fo.destinos = null; fo.antigo = false; fo.enviando = false; fo.todo = false; fo.querLista = false;
+  fo.aberto = true; fo.pediuAte = 0; fo.destinos = null; fo.antigo = false; fo.enviando = false; fo.todo = false; fo.querLista = false; fo.dur = 60;
   const hoje = mesmoDia(ag.dia, new Date(V.ref)), h = hoje ? Math.min(new Date(V.ref).getHours() + 1, 23) : 9;
   $('#nc-titulo').value = ''; $('#nc-dia').value = dataIso(ag.dia);
   $('#nc-inicio').value = pad2(h) + ':00'; $('#nc-fim').value = h < 23 ? pad2(h + 1) + ':00' : '23:59';
@@ -675,6 +676,7 @@ function abrirFormNovo() {
   carregarDestinos(false);
 }
 function fecharFormNovo() {
+  fecharSeletor(true);
   fo.aberto = false; clearInterval(fo.espera); fo.espera = null;
   if ($('#ca-form').contains(document.activeElement)) document.activeElement.blur();
   $('#ca-form').hidden = true; $('#ca-lista').hidden = false; $('#ca-puxa').hidden = false;
@@ -710,9 +712,7 @@ async function salvarCompromisso() {
 }
 $('#ca-form').addEventListener('submit', e => { e.preventDefault(); salvarCompromisso() });
 $('#ca-form').addEventListener('click', e => {
-  // o campo nativo está invisível por cima do texto nosso: no Chrome do desktop o clique cai nos segmentos e o seletor não abre, então abre na mão
-  const campo = e.target.closest('.nc-data');
-  if (campo) { const i = campo.querySelector('input'); if (i && !i.disabled && i.showPicker) { try { i.showPicker() } catch {} } }
+  const abre = e.target.closest('[data-sel]'); if (abre) return abrirSeletor(abre.dataset.sel);
   if (e.target.closest('[data-nc-cancelar]')) return fecharFormNovo();
 });
 for (const i of ['#nc-dia', '#nc-inicio', '#nc-fim']) { $(i).addEventListener('input', pintarValoresNovo); $(i).addEventListener('change', pintarValoresNovo) }
@@ -722,6 +722,100 @@ $('#nc-destino').addEventListener('change', e => {
   if (e.target.value === 'pedir') { fo.querLista = true; fo.pediuAte = Date.now() + 60000; mensagemNovo('Aceite o pedido de acesso na tela do Mac.'); carregarDestinos(true); return }
   pintarPadrao();
 });
+
+/* ---------- Seletores próprios do Novo compromisso: Dia, Início e Fim abrem dentro da folha (nada de calendário nem lista nativos do iPhone) ----------
+   Os inputs do formulário continuam sendo o valor guardado (escondidos): o seletor só escreve neles e o salvar segue igual. */
+const sl = { qual: '', mes: new Date(), voltar: null };
+const DURACOES = [15, 30, 45, 60, 90, 120, 180, 240, 360, 480];
+const minDe = v => { const m = /^(\d{2}):(\d{2})$/.exec(v || ''); return m ? Number(m[1]) * 60 + Number(m[2]) : null };
+const horaDe = n => pad2(Math.floor(n / 60)) + ':' + pad2(n % 60);
+const textoDuracao = n => n < 60 ? n + ' min' : Math.floor(n / 60) + ' h' + (n % 60 ? ' ' + (n % 60) + ' min' : '');
+const diaDoCampo = () => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec($('#nc-dia').value); return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : diaDe(ag.dia) };
+function gravarCampo(id, valor) { const el = $('#' + id); el.value = valor; el.dispatchEvent(new Event('input', { bubbles: true })) }
+/* mexer no início leva o fim junto, mantendo a duração (como o Calendário do Mac). O fim nunca passa das 23:59.
+   A duração é a que a pessoa escolheu (fo.dur), não a do fim já cortado em 23:59: senão voltar para um horário cedo perderia a duração */
+function gravarInicio(min) {
+  gravarCampo('nc-inicio', horaDe(min)); gravarCampo('nc-fim', horaDe(Math.min(1439, min + (fo.dur || 60))));
+}
+function gravarFim(min) {
+  const ini = minDe($('#nc-inicio').value) ?? 540, v = Math.min(1439, Math.max(ini + 5, min));
+  gravarCampo('nc-fim', horaDe(v)); if (v === min) fo.dur = v - ini; // pedido cortado no teto ou no piso não vira a duração desejada
+}
+const passoCinco = (min, sinal) => sinal > 0 ? (Math.floor(min / 5) + 1) * 5 : (Math.ceil(min / 5) - 1) * 5;
+function abrirSeletor(qual) {
+  if (fo.todo && qual !== 'dia') return;
+  sl.qual = qual; sl.voltar = document.activeElement; sl.mes = qual === 'dia' ? new Date(diaDoCampo().getFullYear(), diaDoCampo().getMonth(), 1) : sl.mes;
+  $('#ca-sel').hidden = false; animarEntrada($('#ca-sel'), 'entra-direita');
+  pintarSeletor(true);
+  $('#ca-sel [data-sel-ok]').focus({ preventScroll: true });
+}
+function fecharSeletor(semFoco) {
+  if ($('#ca-sel').hidden) return;
+  $('#ca-sel').hidden = true; sl.qual = '';
+  if (!semFoco && sl.voltar?.isConnected) sl.voltar.focus({ preventScroll: true });
+}
+function pintarSeletor(rolar) {
+  const q = sl.qual; if (!q) return;
+  const el = $('#sel-meio'), ini = minDe($('#nc-inicio').value), fim = minDe($('#nc-fim').value), rolagem = el.scrollTop;
+  $('#ca-sel').dataset.qual = q;
+  $('#sel-titulo').textContent = q === 'dia' ? 'Dia' : q === 'inicio' ? 'Início' : 'Fim';
+  const passo = '<div class="sel-passo"><button type="button" class="btn secundario" data-sel-passo="-5" aria-label="5 minutos antes">- 5 min</button><button type="button" class="btn secundario" data-sel-passo="5" aria-label="5 minutos depois">+ 5 min</button></div>';
+  if (q === 'dia') {
+    const d = diaDoCampo(), hoje = diaDe(new Date(V.ref)), amanha = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() + 1), m = sl.mes;
+    const longo = d.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
+    $('#sel-valor').textContent = longo[0].toUpperCase() + longo.slice(1) + (d.getFullYear() !== hoje.getFullYear() ? ' de ' + d.getFullYear() : '');
+    $('#sel-valor').className = 'sel-valor';
+    $('#sel-extra').innerHTML = `<div class="sel-chips"><button type="button" class="sel-chip" data-sel-atalho="${dataIso(hoje)}" aria-pressed="${mesmoDia(d, hoje)}">Hoje</button><button type="button" class="sel-chip" data-sel-atalho="${dataIso(amanha)}" aria-pressed="${mesmoDia(d, amanha)}">Amanhã</button></div>`;
+    let g = '<span></span>'.repeat(new Date(m.getFullYear(), m.getMonth(), 1).getDay());
+    for (let n = 1, dias = new Date(m.getFullYear(), m.getMonth() + 1, 0).getDate(); n <= dias; n++) {
+      const x = new Date(m.getFullYear(), m.getMonth(), n), dow = x.getDay();
+      g += `<button type="button" class="sb-dia ${dow === 0 || dow === 6 ? 'fds' : ''} ${mesmoDia(x, hoje) ? 'hoje' : ''} ${mesmoDia(x, d) ? 'sel' : ''}" data-sel-data="${dataIso(x)}" aria-pressed="${mesmoDia(x, d)}" aria-label="${x.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}">${n}</button>`;
+    }
+    el.className = 'sel-meio sel-mes';
+    el.innerHTML = `<div class="mes-topo"><h2>${m.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}</h2><button type="button" class="seta" data-sel-mes="-1" aria-label="Mês anterior">${SVG.esq}</button><button type="button" class="seta" data-sel-mes="1" aria-label="Próximo mês">${SVG.dir}</button></div>`
+      + '<div class="sb-semana" aria-hidden="true"><span class="fds">D</span><span>S</span><span>T</span><span>Q</span><span>Q</span><span>S</span><span class="fds">S</span></div>'
+      + `<div class="sb-grade sd-grade">${g}</div>`;
+    return;
+  }
+  if (q === 'inicio') {
+    const v = ini ?? 540, hoje = mesmoDia(diaDoCampo(), new Date(V.ref)), agora = new Date(V.ref), agora30 = agora.getHours() * 60 + Math.floor(agora.getMinutes() / 30) * 30;
+    $('#sel-valor').textContent = horaDe(v); $('#sel-valor').className = 'sel-valor hora';
+    $('#sel-extra').innerHTML = passo;
+    let h = ''; for (let t = 0; t < 1440; t += 30) h += `<button type="button" class="sel-chip" data-sel-hora="${horaDe(t)}" aria-pressed="${t === v}">${horaDe(t)}</button>`;
+    el.className = 'sel-meio sel-horas'; el.innerHTML = h;
+    if (!rolar) el.scrollTop = rolagem;
+    if (rolar) { // abre no horário de agora (hoje) ou no que já está escolhido, sem esconder o escolhido
+      const alvo = el.querySelector(`[data-sel-hora="${horaDe(hoje ? agora30 : Math.floor(v / 30) * 30)}"]`), marcado = el.querySelector('[aria-pressed="true"]');
+      if (alvo) el.scrollTop = alvo.offsetTop - el.offsetTop;
+      if (marcado) { const a = marcado.offsetTop - el.offsetTop; if (a < el.scrollTop || a + marcado.offsetHeight > el.scrollTop + el.clientHeight) el.scrollTop = a }
+    }
+    return;
+  }
+  const v = fim ?? (ini ?? 540) + 60, dur = ini != null ? v - ini : null;
+  $('#sel-valor').innerHTML = `${horaDe(v)}${dur > 0 ? `<small>${textoDuracao(dur)} depois do início</small>` : ''}`; $('#sel-valor').className = 'sel-valor hora';
+  $('#sel-extra').innerHTML = passo + '<div class="sel-passo"><button type="button" class="btn secundario" data-sel-passo="-60" aria-label="1 hora antes">- 1 h</button><button type="button" class="btn secundario" data-sel-passo="60" aria-label="1 hora depois">+ 1 h</button></div>';
+  el.className = 'sel-meio sel-duracoes';
+  el.innerHTML = DURACOES.map(n => { const t = (ini ?? 540) + n, cabe = t <= 1439; return `<button type="button" class="sel-chip dur" data-sel-dur="${n}" aria-pressed="${n === dur}" ${cabe ? '' : 'disabled'}><b>${textoDuracao(n)}</b><small>${cabe ? 'até ' + horaDe(t) : 'passa da meia-noite'}</small></button>` }).join('');
+}
+$('#ca-sel').addEventListener('click', e => {
+  if (e.target.closest('[data-sel-ok]')) return fecharSeletor();
+  const m = e.target.closest('[data-sel-mes]');
+  if (m) { sl.mes = new Date(sl.mes.getFullYear(), sl.mes.getMonth() + Number(m.dataset.selMes), 1); return pintarSeletor() }
+  const dia = e.target.closest('[data-sel-data], [data-sel-atalho]');
+  if (dia) { gravarCampo('nc-dia', dia.dataset.selData || dia.dataset.selAtalho); return fecharSeletor() }
+  const hora = e.target.closest('[data-sel-hora]');
+  if (hora) { gravarInicio(minDe(hora.dataset.selHora)); return pintarSeletor() }
+  const dur = e.target.closest('[data-sel-dur]');
+  if (dur && !dur.disabled) { gravarFim((minDe($('#nc-inicio').value) ?? 540) + Number(dur.dataset.selDur)); return pintarSeletor() }
+  const p = e.target.closest('[data-sel-passo]');
+  if (p) {
+    const q = Number(p.dataset.selPasso), sinal = q > 0 ? 1 : -1, ini = minDe($('#nc-inicio').value) ?? 540;
+    if (sl.qual === 'inicio') gravarInicio(Math.max(0, Math.min(1435, passoCinco(ini, sinal))));
+    else { const fim = minDe($('#nc-fim').value) ?? ini + 60; gravarFim(Math.abs(q) === 60 ? fim + q : passoCinco(fim, sinal)) }
+    pintarSeletor();
+  }
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#ca-sel').hidden) { e.stopPropagation(); fecharSeletor() } }, true);
 
 /* ---------- folha aberta: a lista acompanha o Mac a cada 4 s ---------- */
 setInterval(() => {
