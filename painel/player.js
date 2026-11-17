@@ -34,7 +34,7 @@ function curtir() {
 /* O Spotify limitou as leituras da API (429): o Mac manda até quando, e o painel diz em vez de falhar calado. Tocar, pausar e pular seguem pelo Mac. */
 function textoLimite(s) {
   const ate = s?.limitadoAte; if (!(ate * 1000 > Date.now())) return '';
-  return `O Spotify limitou as leituras até ${new Date(ate * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}. Tocar, pausar e pular continuam funcionando.`;
+  return `Lista volta às ${new Date(ate * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
 }
 
 /* ---------- a linha de extras do player grande ---------- */
@@ -132,7 +132,7 @@ function pintarListaPlayer(rolarPara) {
   $$('#pc-lista-abas [data-aba]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.aba === lp.aba)));
   pintarTopoFila();
   corpo.setAttribute('aria-busy', String(!lp.dados && !lp.erro));
-  if (lp.erro && !lp.semLogin && textoLimite(V.spotify)) { corpo.innerHTML = `<div class="vazio-bloco"><strong>Spotify limitou as leituras</strong><span>${esc(textoLimite(V.spotify))}</span></div>`; return }
+  if (lp.erro && !lp.semLogin && textoLimite(V.spotify)) { corpo.innerHTML = `<p class="pc-limite-lista" role="status">${esc(textoLimite(V.spotify))}</p>`; return }
   if (lp.erro) { corpo.innerHTML = lp.semLogin ? `<div class="vazio-bloco"><strong>Spotify não conectado</strong><span>${esc(lp.erro)}</span></div>` : erroLista(lp.erro, 0); return }
   if (!lp.dados) { if (!corpo.querySelector('.esq-lista')) corpo.innerHTML = esqueletoLinhas(); return }
   const y = rolarPara ?? corpo.scrollTop;
