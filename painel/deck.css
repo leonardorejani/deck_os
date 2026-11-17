@@ -997,20 +997,30 @@ button.item-lista.com-capa:active .capa-fila svg, button.item-lista.com-capa:foc
 .mt-estado.aberta { color: var(--texto) }
 .mt-estado.aberta i { background: var(--sucesso); box-shadow: 0 0 8px var(--sucesso) }
 .mt-aviso { min-height: calc(var(--texto-xs) * 2.6); padding-bottom: var(--item); color: var(--texto-2); font-size: var(--texto-xs) } /* o espaço do aviso fica reservado: ele aparece e some sem empurrar os botões */
-.mt-grade { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--icone) }
-.vertical .mt-grade { grid-template-columns: 1fr 1fr }
-.mt-bloco { font: inherit; display: grid; justify-items: center; align-content: center; gap: var(--item); min-height: 148px; padding: var(--pad) var(--icone); border: 0; border-radius: var(--raio-card); background: var(--superficie-2); color: var(--texto); cursor: pointer; text-align: center; transition: transform var(--mov-rapido) var(--curva-move), background-color var(--mov-rapido) var(--curva-move) }
-.mt-bloco:active:not(:disabled) { transform: scale(.97) }
-.mt-ic { display: grid; place-items: center; width: 44px; height: 44px }
-.mt-ic svg { width: 34px; height: 34px }
-.mt-nome { font-size: var(--texto-base); font-weight: 600 }
-.mt-sub { font-size: var(--texto-xs); color: var(--texto-2) }
-.mt-bloco.entrar { background: var(--destaque); color: var(--destaque-texto) }
-.mt-bloco.entrar .mt-sub { color: inherit; opacity: .8 }
-.mt-bloco.ligado { background: var(--sucesso-suave); box-shadow: inset 0 0 0 2px var(--sucesso); color: var(--sucesso) }
-.mt-bloco.desligado { background: var(--perigo-suave); box-shadow: inset 0 0 0 2px var(--perigo); color: var(--perigo) }
-.mt-bloco.ligado .mt-sub, .mt-bloco.desligado .mt-sub { color: inherit; font-weight: 600 }
-.mt-bloco.sair { color: var(--perigo) }
-.mt-bloco.sair .mt-sub { color: var(--texto-2) }
-.mt-bloco.sem, .mt-bloco:disabled { opacity: .5; cursor: default }
-.mt-bloco.esq { min-height: 148px; background: var(--superficie-2); opacity: .6 }
+#mt-corpo { display: flex; flex-direction: column }
+.mt-grade { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-rows: minmax(120px, 1fr); gap: var(--grade); padding-bottom: var(--pad); box-sizing: border-box }
+.vertical .mt-grade { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: minmax(220px, 1fr) }
+/* os mesmos cartões dos Controles do Mac: rótulo pequeno em cima, estado grande no meio, a cor diz o estado */
+.mt-bloco { font: inherit; position: relative; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: var(--item); min-width: 0; min-height: 0; padding: var(--pad) var(--icone); border: 0; border-radius: var(--raio-card); background: var(--superficie-2); color: var(--texto-2); cursor: pointer; text-align: left; -webkit-tap-highlight-color: transparent; transition: transform var(--mov-rapido) var(--curva-move), background-color var(--mov-padrao) var(--curva-move), color var(--mov-padrao) var(--curva-move) }
+.mt-bloco:active:not(:disabled) { transform: scale(.98) }
+.mt-bloco:focus-visible { outline: 2px solid var(--destaque); outline-offset: 2px }
+.mt-topo { display: flex; align-items: center; gap: var(--item); min-width: 0; font-size: var(--texto-sm) }
+.mt-ic { flex: none; display: grid; place-items: center }
+.mt-ic svg { width: 20px; height: 20px }
+.mt-nome { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.mt-valor { align-self: center; font-size: var(--texto-2xl); font-weight: 700; line-height: 1.1; color: var(--texto); overflow-wrap: anywhere }
+.mt-sub { min-height: 1.3em; font-size: var(--texto-xs); line-height: 1.3; color: inherit; opacity: .8 }
+.mt-bloco.entrar { background: var(--texto); color: var(--superficie) }
+.mt-bloco.entrar .mt-valor { color: var(--superficie) }
+.mt-bloco.ligado { background: var(--sucesso); color: var(--fundo) }
+.mt-bloco.desligado { background: var(--cal-vermelho); color: #fff }
+.mt-bloco.ligado .mt-valor { color: var(--fundo) }
+.mt-bloco.desligado .mt-valor { color: #fff }
+.mt-bloco.sair { background: color-mix(in srgb, var(--cal-vermelho) 55%, #000); color: #fff }
+.mt-bloco.sair .mt-valor { color: #fff }
+.mt-bloco.sem:not(.sair), .mt-bloco.incerto { background: var(--superficie-2); color: var(--texto-2) }
+.mt-bloco.sem .mt-valor, .mt-bloco.incerto .mt-valor { font-size: var(--texto-xl); color: var(--texto-2) }
+.mt-bloco:disabled { cursor: default; opacity: .5 }
+.mt-bloco.sem:not(.sair):disabled { opacity: 1 }
+.mt-bloco.esq { background: var(--superficie-2); opacity: .6 }
+@media (prefers-reduced-motion: reduce) { .mt-bloco { transition: none } .mt-bloco:active:not(:disabled) { transform: none } }

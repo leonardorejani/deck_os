@@ -154,7 +154,7 @@ final class SpotifyApiTestes: XCTestCase {
         guard case .failure(let e) = c.dispositivos() else { return XCTFail() }
         XCTAssertEqual(e, .semCadastro)
         XCTAssertTrue(e.pedeChavePropria)
-        XCTAssertTrue(e.texto.contains("pedem uma chave sua"))
+        XCTAssertEqual(e.texto, "Sua conta não está liberada na chave do Deck. Use a sua própria chave.")
         XCTAssertFalse(e.texto.contains("Developer Dashboard"))
         XCTAssertFalse(c.conectado)
         XCTAssertNil(a.ler().renovacao)
@@ -212,6 +212,28 @@ final class SpotifyApiTestes: XCTestCase {
         let p = try XCTUnwrap(try? c.prepararLogin(redirecionamento: "http://127.0.0.1:4778/retorno").get())
         XCTAssertEqual(c.concluirLogin(p, retorno: RetornoLogin(codigo: "X", estado: p.estado, erro: nil)), ErroSpotify.semCadastro.texto)
         XCTAssertTrue(c.precisaChavePropria)
+    }
+
+    /// O 403 de conta fora da lista também vale quando o Spotify manda só a pista no motivo, sem pedir chave a quem já usa a própria.
+    func testTrocaDeTokenComChavePropriaForaDaListaNaoPedeOutraChave() throws {
+        let t = TransporteFalso { _ in respostaForaDaLista() }
+        let (c, _) = contaComTransporte(t, embutida: chaveDoDeck, DadosSpotify(clientId: chaveDeTeste))
+        let p = try XCTUnwrap(try? c.prepararLogin(redirecionamento: "http://127.0.0.1:4778/retorno").get())
+        XCTAssertEqual(c.concluirLogin(p, retorno: RetornoLogin(codigo: "X", estado: p.estado, erro: nil)), ErroSpotify.recusou.texto)
+        XCTAssertFalse(c.precisaChavePropria)
+    }
+
+    /// PKCE sem segredo nos dois pedidos: a pessoa só precisa do Client ID, com a chave do Deck ou com a dela.
+    func testLoginComChavePropriaUsaPkceSemSegredoENaPrimeiraTrocaMandaAChaveDela() throws {
+        let t = TransporteFalso { _ in tokenOk() }
+        let (c, _) = contaComTransporte(t, embutida: chaveDoDeck, DadosSpotify(clientId: chaveDeTeste))
+        let p = try XCTUnwrap(try? c.prepararLogin(redirecionamento: "http://127.0.0.1:4778/retorno").get())
+        XCTAssertTrue(p.url.absoluteString.contains("client_id=\(chaveDeTeste)"))
+        XCTAssertNil(c.concluirLogin(p, retorno: RetornoLogin(codigo: "X", estado: p.estado, erro: nil)))
+        let corpo = corpoTexto(try XCTUnwrap(t.pedidos.last))
+        XCTAssertTrue(corpo.contains("client_id=\(chaveDeTeste)"))
+        XCTAssertTrue(corpo.contains("code_verifier="))
+        XCTAssertFalse(corpo.contains("client_secret"))
     }
 
     func testColarChavePropriaLimpaOPedidoDeChavePropria() {
