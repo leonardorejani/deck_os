@@ -287,8 +287,13 @@ button.cartao { font: inherit; color: inherit; text-align: left; border: 0; curs
 .folha .corpo { overflow: auto; overscroll-behavior: contain; padding: 0 var(--margem) var(--pad); min-height: 0 }
 .folha > footer { display: flex; gap: var(--item); padding: var(--icone) var(--margem) calc(var(--icone) + var(--seguro-baixo)); border-top: 1px solid var(--borda) }
 .folha > footer .espaco { flex: 1 }
-.fechar { width: var(--alvo-sm); height: var(--alvo-sm); border-radius: 50%; border: 0; background: var(--superficie-2); color: var(--texto); display: grid; place-items: center; cursor: pointer; flex: none }
+/* pílula "Fechar": só contorno, para não se confundir com o "Abrir no Mac" ao lado, que é cheio */
+.fechar { height: var(--alvo-sm); padding: 0 calc(var(--item) + 2px); border-radius: var(--raio-pilula); border: 0; background: none; box-shadow: inset 0 0 0 1px var(--borda); color: var(--texto-2); font: inherit; font-size: var(--texto-sm); font-weight: 600; display: inline-flex; align-items: center; justify-content: center; gap: var(--item); white-space: nowrap; cursor: pointer; flex: none; transition: background-color var(--mov-rapido) var(--curva-move), color var(--mov-rapido) var(--curva-move), transform var(--mov-rapido) var(--curva-move) }
 .fechar svg { width: 16px; height: 16px }
+.folha > header:has(#wa-filtro) { column-gap: var(--item) } /* o Fechar escrito é mais largo que o círculo: sem esse respiro a mais o subtítulo do WhatsApp ("23 não lidas em 5 conversas") ganhava reticências no celular deitado e na janela */
+.fechar:active { background: var(--superficie-2); color: var(--texto); transform: scale(.97) }
+@media (hover: hover) { .fechar:hover { background: var(--superficie-2); color: var(--texto) } }
+.player-cheio .fechar, .fechar-cal { background: color-mix(in srgb, var(--fundo) 35%, transparent); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px) } /* em cima da capa e da agenda o contorno sozinho some: um véu leve garante a leitura */
 
 .btn { font: inherit; font-size: var(--texto-base); font-weight: 600; min-height: var(--alvo); padding: 0 var(--pad); border-radius: var(--raio); border: 0; cursor: pointer; transition: transform var(--mov-rapido) var(--curva-move) }
 .btn:active { transform: scale(.97) }
@@ -779,7 +784,7 @@ a.btn { display: inline-flex; align-items: center; justify-content: center; text
 .pc-titulos { display: grid; gap: var(--item); min-width: 0 }
 .pc-titulos .faixa { font-size: var(--texto-2xl); white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; line-height: var(--altura-titulo) }
 /* o X de fechar fica no canto de cima à direita, em cima da primeira linha do título: o título acaba antes dele (em pé o X fica acima e o título é centrado) */
-.pc-titulos .faixa { padding-right: calc(var(--alvo-sm) + var(--item)) }
+.pc-titulos .faixa { padding-right: calc(60px + var(--item)) }
 .vertical .pc-titulos .faixa { padding-right: 0 }
 .pc-titulos .artista { font-size: var(--texto-md); display: flex; align-items: center; min-width: 0 }
 .pc-titulos .texto-artista { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
