@@ -89,6 +89,7 @@ final class ContaSpotify: @unchecked Sendable {
     static let folgaDoToken: Double = 60
 
     private let armazem: ArmazemSpotify
+    private let limite: ArmazemDoLimite
     private let transporte: TransporteWeb
     private let agora: @Sendable () -> Date
     private let trava = NSLock()
@@ -147,14 +148,16 @@ final class ContaSpotify: @unchecked Sendable {
         return e
     }
 
-    init(armazem: ArmazemSpotify, transporte: TransporteWeb = TransporteUrlSession(), agora: @escaping @Sendable () -> Date = { Date() },
+    init(armazem: ArmazemSpotify, limite: ArmazemDoLimite = LimiteEmMemoria(), transporte: TransporteWeb = TransporteUrlSession(), agora: @escaping @Sendable () -> Date = { Date() },
          embutida: String? = ChaveSpotify.embutida) {
         self.embutida = ChaveSpotify.valida(embutida)
         self.armazem = armazem
+        self.limite = limite
         self.transporte = transporte
         self.agora = agora
         // O pedido de espera sobrevive ao reinício do app: sem isso o 429 volta e a punição só cresce.
-        if let ate = armazem.ler().bloqueadoAte { _bloqueadoAte = Date(timeIntervalSince1970: ate) }
+        // Vem de um arquivo comum: a abertura do app não pode tocar no Chaveiro.
+        _bloqueadoAte = limite.ler()
     }
 
     // MARK: Estado
@@ -182,7 +185,7 @@ final class ContaSpotify: @unchecked Sendable {
         guard Self.chaveValida(c) else { return "A chave do app tem 32 letras e números. Copie de novo no site do Spotify." }
         precisaChavePropria = false
         var d = armazem.ler()
-        if clientId != c { d.acesso = nil; d.renovacao = nil; d.expiraEm = nil; d.nome = nil; d.bloqueadoAte = nil; esquecerLimite() }
+        if clientId != c { d.acesso = nil; d.renovacao = nil; d.expiraEm = nil; d.nome = nil; esquecerLimite() }
         d.clientId = c == embutida ? nil : c
         return armazem.gravar(d) ? nil : "Não consegui guardar a chave no Chaveiro do Mac."
     }
@@ -196,7 +199,7 @@ final class ContaSpotify: @unchecked Sendable {
         precisaChavePropria = false
         var d = armazem.ler()
         guard d.clientId != nil else { return }
-        d.clientId = nil; d.acesso = nil; d.renovacao = nil; d.expiraEm = nil; d.nome = nil; d.bloqueadoAte = nil
+        d.clientId = nil; d.acesso = nil; d.renovacao = nil; d.expiraEm = nil; d.nome = nil
         esquecerLimite()
         armazem.gravar(d)
     }
@@ -396,7 +399,7 @@ final class ContaSpotify: @unchecked Sendable {
     }
 
     /// O limite do Spotify é do app (da chave): trocando a chave, a espera da anterior não vale.
-    private func esquecerLimite() { travaLimite.lock(); _bloqueadoAte = nil; travaLimite.unlock() }
+    private func esquecerLimite() { travaLimite.lock(); _bloqueadoAte = nil; travaLimite.unlock(); limite.gravar(nil) }
 
     /// Segundos que ainda faltam do pedido de espera do Spotify, ou nil se já pode chamar.
     func limiteRestante() -> TimeInterval? {
@@ -412,7 +415,7 @@ final class ContaSpotify: @unchecked Sendable {
         let s = min(max(segundos ?? Self.esperaPadraoDoLimite, 1), 86_400)
         let ate = agora().addingTimeInterval(s)
         travaLimite.lock(); _bloqueadoAte = ate; travaLimite.unlock()
-        var d = armazem.ler(); d.bloqueadoAte = ate.timeIntervalSince1970; armazem.gravar(d)
+        limite.gravar(ate)
         registrar("spotify: limite de pedidos em \(metodo) \(caminho) (HTTP 429), esperando \(Int(s.rounded(.up))) s\(segundos == nil ? " (o Spotify não disse quanto)" : "")")
     }
 

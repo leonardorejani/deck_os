@@ -28,6 +28,26 @@ final class ChaveiroIsoladoTestes: XCTestCase {
         XCTAssertEqual(bloqueados, [], "ModeloApp(arquivo:) usou o Chaveiro real no teste")
     }
 
+    /// A partida do app não lê o Chaveiro: o modelo nasce sem tocar no armazém e só `atualizar()` o lê, fora da linha principal.
+    func testModeloDoSpotifyNaPartidaNaoLeOArmazem() async {
+        final class Espiao: ArmazemSpotify, @unchecked Sendable {
+            let trava = NSLock(); var n = 0; var naPrincipal = 0
+            func marcar() { trava.lock(); n += 1; if Thread.isMainThread { naPrincipal += 1 }; trava.unlock() }
+            func ler() -> DadosSpotify { marcar(); return DadosSpotify(clientId: nil, acesso: "A", renovacao: "R", expiraEm: 1e12, nome: "Leo") }
+            func gravar(_ d: DadosSpotify) -> Bool { marcar(); return true }
+            func apagar() { marcar() }
+        }
+        let espiao = Espiao()
+        let m = ModeloSpotify(conta: ContaSpotify(armazem: espiao, transporte: TransporteUrlSession()), lerNaPartida: false)
+        XCTAssertEqual(espiao.n, 0, "nascer não toca no Chaveiro")
+        XCTAssertFalse(m.conectado)
+        m.atualizar()
+        for _ in 0..<100 where !m.conectado { try? await Task.sleep(nanoseconds: 50_000_000) }
+        XCTAssertTrue(m.conectado)
+        XCTAssertGreaterThan(espiao.n, 0)
+        XCTAssertEqual(espiao.naPrincipal, 0, "a leitura do Chaveiro nunca roda na linha principal")
+    }
+
     func testChaveiroRealDoSpotifyFicaBloqueadoNoTeste() {
         let a = ArmazemSpotifyChaveiro()
         _ = a.ler()

@@ -136,6 +136,7 @@ struct SeletorComConexoes: View {
 
     var body: some View {
         SeletorDeMetodo(escolhido: modelo.metodoDeConexao, aoVivo: aoVivo) { modelo.metodoDeConexao = $0 }
+            .onAppear { spotify.atualizar() }
     }
 }
 

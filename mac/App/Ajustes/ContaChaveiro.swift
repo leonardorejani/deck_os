@@ -15,13 +15,16 @@ struct Chaveiro: CofreDeToken {
     var servico = Variante.atual.servicoDoChaveiro("token-claude")
 
     private func consulta(_ conta: String) -> [String: Any] {
-        [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: servico, kSecAttrAccount as String: conta]
+        // Nunca abre a janela de senha: item que este build não pode abrir responde com falha em vez de travar o app.
+        [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: servico, kSecAttrAccount as String: conta,
+         kSecUseAuthenticationUI as String: kSecUseAuthenticationUIFail]
     }
 
     func guardar(_ token: String, conta: String) throws {
         guard AmbienteDeTeste.chaveiroPermitido(servico: servico) else { throw ErroChaveiro(codigo: errSecInteractionNotAllowed) }
         apagar(conta: conta)
         var item = consulta(conta)
+        item[kSecUseAuthenticationUI as String] = nil
         item[kSecValueData as String] = Data(token.utf8)
         item[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
         item[kSecAttrLabel as String] = "Deck: token do Claude Code"
