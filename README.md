@@ -94,7 +94,7 @@ Precisa de Xcode e `brew install xcodegen`.
 ./build.sh
 ```
 
-Gera `dist/Deck-1.0.dmg`. Abra, arraste o Deck para Aplicativos e abra. Sem a conta paga da Apple, o macOS bloqueia a primeira
+Gera `dist/Deck-1.2.dmg`. Abra, arraste o Deck para Aplicativos e abra. Sem a conta paga da Apple, o macOS bloqueia a primeira
 abertura: vá em Ajustes do Sistema > Privacidade e Segurança e toque em "Abrir mesmo assim", uma vez só.
 
 **Abra o Deck pelo Finder, pelo Launchpad ou pelo Spotlight.** Nunca por `open` de dentro de um terminal (Terminal, iTerm,

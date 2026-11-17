@@ -77,8 +77,8 @@ func TestPersistenciaComPermissaoRestrita(t *testing.T) {
 func TestConversaSemNomeMostraONumero(t *testing.T) {
 	e := NovoEstado("")
 	e.Recebida("1@lid", "", false, Msg{De: "", Texto: "oi", Hora: "h"}, t0)
-	e.Numero("1@lid", "5544984097902")
-	if l := e.Lista(); l[0].Nome != "+55 44 98409-7902" {
+	e.Numero("1@lid", "5544999990001")
+	if l := e.Lista(); l[0].Nome != "+55 44 99999-0001" {
 		t.Fatalf("nome: %q", l[0].Nome)
 	}
 	e.Recebida("1@lid", "Ana", false, Msg{De: "", Texto: "oi", Hora: "h"}, t0)

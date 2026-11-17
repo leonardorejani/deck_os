@@ -106,6 +106,8 @@ final class ComandoSoltoTestes: XCTestCase {
         XCTAssertNil(vazio.andamento, "sem nada rodando o campo nem vai no JSON")
     }
 
+    // Usa zsh e perl de verdade, que só o Mac tem (o Linux do CI não tem zsh).
+    #if os(macOS)
     /// Processo de verdade: um comando de 3 s com o prazo do shell em 1 s. Antes ele era derrubado e o marcador nunca aparecia.
     func testProcessoRealLentoTerminaSemSerDerrubado() throws {
         let marca = try pastaTemporaria().appendingPathComponent("terminou").path
@@ -118,4 +120,5 @@ final class ComandoSoltoTestes: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: marca), "o comando foi até o fim")
         XCTAssertTrue(m.ligada("foco"))
     }
+    #endif
 }

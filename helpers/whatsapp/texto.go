@@ -104,7 +104,7 @@ func Analisar(m *waE2E.Message, unica bool) (Conteudo, bool) {
 }
 
 // formatarNumero escreve um número de telefone (só dígitos) para uma pessoa ler. Número do Brasil ganha o jeito de
-// sempre: +55 44 98409-7902.
+// sempre: +55 44 99999-0001.
 func formatarNumero(d string) string {
 	if d == "" {
 		return ""

@@ -158,7 +158,7 @@ enum LeitorDeMeetAX {
 
     /// Título de aba ou de janela de uma sala do Meet: "Meet: abc-defg-hij" ou "Meet - abc-defg-hij".
     static func ehTituloDeSala(_ titulo: String) -> Bool {
-        titulo.range(of: #"(^|[\s:])meet\s*[-\u{2013}\u{2014}:]\s*[a-z]{3}-[a-z]{4}-[a-z]{3}\b"#, options: [.regularExpression, .caseInsensitive]) != nil
+        titulo.range(of: #"(^|[\s:])meet\s*[-–—:]\s*[a-z]{3}-[a-z]{4}-[a-z]{3}\b"#, options: [.regularExpression, .caseInsensitive]) != nil
     }
 
     /// O título da aba (ou da janela) que é de uma sala do Meet.

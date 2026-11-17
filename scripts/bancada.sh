@@ -10,12 +10,14 @@ for f in xcodebuild xcodegen ditto; do
   command -v "$f" >/dev/null || { echo "Falta o $f. Instale o Xcode e rode: brew install xcodegen" >&2; exit 1; }
 done
 destino="$HOME/Applications/Deck Bancada.app"
+versao="$(tr -d '[:space:]' < "$raiz/VERSAO")"
+numero="$(git -C "$raiz" rev-list --count HEAD 2>/dev/null || echo 1)"
 
 echo "Compilando o Deck Bancada de $raiz..."
 cd "$raiz/mac/App"
 xcodegen generate --quiet
 xcodebuild -project Deck.xcodeproj -scheme DeckBancada -configuration Release -derivedDataPath build-bancada \
-  CODE_SIGN_IDENTITY="-" build | grep -E "error:|\*\* BUILD" | tail -5
+  MARKETING_VERSION="$versao" CURRENT_PROJECT_VERSION="$numero" CODE_SIGN_IDENTITY="-" build | grep -E "error:|\*\* BUILD" | tail -5
 app="$raiz/mac/App/build-bancada/Build/Products/Release/Deck Bancada.app"
 [ -d "$app" ] || { echo "A compilação não gerou o Deck Bancada.app" >&2; exit 1; }
 # Ajudante do WhatsApp por QR (Go) dentro da bancada, para a opção de QR funcionar nela. Sem Go, a bancada segue sem ele.

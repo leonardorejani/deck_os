@@ -3,6 +3,9 @@
 # Uso: bash ios/instalar.sh [id-do-aparelho] [--abrir]     (id em: xcrun devicectl list devices)
 set -euo pipefail
 cd "$(dirname "$0")"
+raiz="$(cd .. && pwd)"
+versao="$(tr -d '[:space:]' < "$raiz/VERSAO")"
+numero="$(git -C "$raiz" rev-list --count HEAD 2>/dev/null || echo 1)"
 abrir=0; aparelho=""
 for a in "$@"; do if [ "$a" = "--abrir" ]; then abrir=1; else aparelho="$a"; fi; done
 aparelho="${aparelho:-$(xcrun devicectl list devices 2>/dev/null | grep -E "available|connected" | grep -m1 -oE '[0-9A-F]{8}(-[0-9A-F]{4}){3}-[0-9A-F]{12}')}"
@@ -11,7 +14,8 @@ aparelho="${aparelho:-$(xcrun devicectl list devices 2>/dev/null | grep -E "avai
 bash scripts/empacotar-painel.sh
 xcodegen generate --spec project.yml --quiet
 xcodebuild -project Deck.xcodeproj -scheme Deck -configuration Debug \
-  -destination 'generic/platform=iOS' -derivedDataPath build -allowProvisioningUpdates build \
+  -destination 'generic/platform=iOS' -derivedDataPath build -allowProvisioningUpdates \
+  MARKETING_VERSION="$versao" CURRENT_PROJECT_VERSION="$numero" build \
   | grep -E "error:|BUILD" | tail -3
 xcrun devicectl device install app --device "$aparelho" build/Build/Products/Debug-iphoneos/Deck.app \
   | grep -E "App installed|error" | head -2
