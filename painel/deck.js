@@ -5,7 +5,7 @@ const tela = $('#tela');
 let estado = null, config = null;     // o que o Mac mandou
 let V = null;                         // a vista: o que a tela mostra agora (real ou o esqueleto)
 let posicao = 'horizontal';
-let offline = false, semAcesso = false, falhas = 0, tiquesConfig = 0;
+let offline = false, semAcesso = false, falhas = 0, tiquesConfig = 0, versaoConfig = null;
 let ultima = {};                      // o que já está desenhado, para só refazer o que mudou
 let organizando = false;              // modo organizar (segurar uma tecla)
 let sobrepor = {};                    // mudança local ainda a caminho do Mac (bloco escondido, perfil), por cima do estado
@@ -486,13 +486,14 @@ function virarPlaca(el, novo) {
   requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('virando')));
   setTimeout(() => { if (el.dataset.d === novo) montarPlaca(el, novo) }, 900);
 }
+const FORMATO_DATA = new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
 function tique(inicial) {
   const agora = new Date();
   const dig = (String(agora.getHours()).padStart(2, '0') + String(agora.getMinutes()).padStart(2, '0')).split('');
   const alvo = { ...dig, h: dig[0] + dig[1], m: dig[2] + dig[3] }; // h e m: as placas de dois algarismos da composição C
   $$('.placa').forEach(el => { const d = alvo[el.dataset.i]; if (inicial || !el.dataset.d) montarPlaca(el, d); else if (el.dataset.d !== d) virarPlaca(el, d) });
-  const [dia, ...resto] = agora.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }).split(', ');
-  $$('.data').forEach(d => { d.innerHTML = `<b>${dia}</b>, ${resto.join(', ')}` });
+  const [dia, ...resto] = FORMATO_DATA.format(agora).split(', '), html = `<b>${dia}</b>, ${resto.join(', ')}`;
+  $$('.data').forEach(d => { if (d.dataset.dia !== html) { d.innerHTML = html; d.dataset.dia = html } }); // a data muda uma vez por dia: não refaz a cada segundo
 }
 setInterval(() => tique(false), 1000);
 /* tela cheia: as mesmas placas e a data, grandes, em fundo preto. Tocar em qualquer lugar volta */
@@ -884,8 +885,10 @@ function pintarGlobal() {
   tela.classList.toggle('sem-acesso', semAcesso);
   const nome = estado?.nomeMac || lerGuardado('deck-nome-mac'); $('#nome-mac').textContent = nome || 'Seu Mac';
 }
+// O Mac manda o carimbo da config no estado (configVersao): só relê quando ele muda, em vez de baixar tudo a cada 5 s. Mac antigo, sem carimbo,
+// segue como antes (compara os blocos e relê de vez em quando, agora a cada 30). Nunca por cima de uma gravação a caminho
 const precisaConfig = e => !pendentes && !gesto?.arrastando && (!config || config.perfilAtivo !== e.perfilAtivo || config.comp !== e.comp || config.nomeMac !== e.nomeMac
-  || JSON.stringify(config.blocos) !== JSON.stringify(e.blocos) || ++tiquesConfig % 5 === 0); // e de vez em quando: teclas editadas no Mac. Nunca por cima de uma gravação a caminho
+  || (e.configVersao ? e.configVersao !== versaoConfig : JSON.stringify(config.blocos) !== JSON.stringify(e.blocos) || ++tiquesConfig % 30 === 0));
 let configFalhou = false, esqueletoDesde = 0, esqueletoTimer = 0, esqueletoPronto = false, configEmVoo = null;
 const pedirConfig = () => configEmVoo ??= canal.config().finally(() => { configEmVoo = null }); // nunca dois GET /api/config ao mesmo tempo
 let ultimoOk = performance.now(); // a última resposta boa do Mac
@@ -900,9 +903,10 @@ async function passo() {
     const e = await canal.estado();
     estado = e; falhas = 0; ultimoOk = performance.now(); offline = false; semAcesso = false;
     if (e.nomeMac) guardar('deck-nome-mac', e.nomeMac);
+    if (config && versaoConfig === null && e.configVersao) versaoConfig = e.configVersao; // config que chegou antes do primeiro estado (mostrarParcial): é desta versão, não há o que reler
     if (precisaConfig(e)) {
       const gen = geracaoConfig;
-      try { const nova = await pedirConfig(); if (gen === geracaoConfig && !pendentes) config = nova; configFalhou = false }
+      try { const nova = await pedirConfig(); if (gen === geracaoConfig && !pendentes) { config = nova; versaoConfig = e.configVersao ?? null } configFalhou = false }
       catch (er) {
         if (er.status === 401) throw er;
         // sem config não há teclas: avisa uma vez e continua tentando a cada passo
@@ -943,7 +947,8 @@ async function rodarLaco() {
     const t0 = performance.now();
     await buscar();
     if (semAcesso) return; // código inválido: sem QR novo nada mais vale
-    await new Promise(r => { const t = setTimeout(r, Math.max(0, AJUSTES.intervalo - (performance.now() - t0))); acordar = () => { clearTimeout(t); r() } });
+    // página escondida: o Mac não precisa ler Spotify, agenda e uso para ninguém ver. Espera 10 s (ou a volta à tela, que acorda na hora)
+    await new Promise(r => { const t = setTimeout(r, document.hidden ? 10000 : Math.max(0, AJUSTES.intervalo - (performance.now() - t0))); acordar = () => { clearTimeout(t); r() } });
   }
 }
 document.addEventListener('visibilitychange', () => { if (!document.hidden && !semAcesso) acordar?.() });

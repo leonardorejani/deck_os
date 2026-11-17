@@ -22,12 +22,14 @@ export default async function (h) {
   let c = await h.novoContexto(), p = await c.newPage();
   p.on('pageerror', e => console.log('ERRO na página: ' + e.message));
   await p.addInitScript(() => { window.DECK_AJUSTES = { intervalo: 300 } });
-  let nGet = 0, preso = false;
+  let nGet = 0, alvo = 2, preso = false;
   await p.route('**/api/config', async rota => {
-    if (rota.request().method() === 'GET' && ++nGet === 2) { preso = true; const r = await rota.fetch(); await h.dormir(2500); return rota.fulfill({ response: r }) }
+    if (rota.request().method() === 'GET' && ++nGet === alvo) { preso = true; const r = await rota.fetch(); await h.dormir(2500); return rota.fulfill({ response: r }) }
     return rota.continue();
   });
   await p.goto(`${h.base}/?codigo=${h.CODIGO}`); await pronta(h, p);
+  // a releitura que fica presa é a de uma edição de teclas feita no Mac (o carimbo da config muda), não a de um tique fixo
+  await h.dormir(1500); alvo = nGet + 1; await h.cenario({ nomeApagar: 'Apagar a tela' });
   for (let t = 0; !preso && t < 6000; t += 50) await h.dormir(50);
   h.ok(preso, 'a leitura de config do laço ficou presa no meio do caminho');
   await entrar(h, p); await arrastar(p, 'apagar', 'acordado');

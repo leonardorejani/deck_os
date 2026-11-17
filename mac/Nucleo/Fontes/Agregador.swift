@@ -270,7 +270,8 @@ final class Agregador: @unchecked Sendable {
             agenda: leituraAgenda.valor, acesas: acesas, selos: selos, avisos: avisos,
             monitor: b.monitor && config.monitor.algum ? (fm ?? cacheMonitor.ultimo())?.valor : nil,
             reuniao: leituraReuniao?.valor,
-            andamento: andamentoDasTeclas.isEmpty ? nil : andamentoDasTeclas
+            andamento: andamentoDasTeclas.isEmpty ? nil : andamentoDasTeclas,
+            configVersao: config.carimbo
         )
     }
 

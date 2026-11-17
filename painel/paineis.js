@@ -499,7 +499,7 @@ async function lerMesC(forcar) {
     const l = await canal.agenda(dataIso(ref), new Date(ref.getFullYear(), ref.getMonth() + 1, 0).getDate());
     if (n !== mesC.seq) return;
     mesC.ev = Array.isArray(l) ? l : [];
-  } catch (e) { if (n === mesC.seq && !mesC.ev) mesC.ev = []; if (e.status === 401) return tratarErro(e) } // sem agenda, o mês aparece sem pontinhos
+  } catch (e) { if (n === mesC.seq && !mesC.ev && !e.rede) mesC.ev = []; if (e.status === 401) return tratarErro(e) } // sem agenda, o mês aparece sem pontinhos
   if (V.comp === 'c') atualizar();
 }
 function moverMesC(passo) {
@@ -507,7 +507,7 @@ function moverMesC(passo) {
   atualizar(); lerMesC(true);
 }
 setInterval(() => {
-  if (!V || V.comp !== 'c' || document.hidden) return;
+  if (!V || V.comp !== 'c' || document.hidden || semAcesso || offline) return;
   if (mesC.volta && Date.now() > mesC.volta) { mesC.mes = null; mesC.ev = null; mesC.volta = 0; atualizar() }
   lerMesC();
 }, 5000);

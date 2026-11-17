@@ -280,6 +280,22 @@ struct Estado: Codable, Equatable, Sendable {
     /// Por id de tecla de comando que está rodando solta (ligando, desligando, rodando) ou que falhou há pouco.
     /// Ausente quando nenhuma está: o painel só mostra "Ligando..." enquanto o Mac roda o comando, e não espera o pedido.
     var andamento: [String: AndamentoDeTecla]? = nil
+    /// Carimbo da config (o mesmo conteúdo que /api/config devolve). O painel só relê a config quando ele muda.
+    /// Ausente em Mac antigo: o painel volta a reler de vez em quando.
+    var configVersao: String? = nil
+}
+
+extension Config {
+    /// Impressão digital do que /api/config devolve (sem o código de acesso e o que gira com ele). FNV-1a de 64 bits sobre o JSON ordenado.
+    var carimbo: String {
+        guard let dados = try? JSONEncoder().encode(self),
+              var obj = (try? JSONSerialization.jsonObject(with: dados)) as? [String: Any] else { return "" }
+        for k in ["codigoAcesso", "codigoCriadoEm", "codigoAnterior", "anteriorValeAte"] { obj.removeValue(forKey: k) }
+        guard let saida = try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys]) else { return "" }
+        var h: UInt64 = 0xcbf29ce484222325
+        for b in saida { h = (h ^ UInt64(b)) &* 0x100000001b3 }
+        return String(h, radix: 16)
+    }
 }
 
 /// Medidas do Mac. Cada uma é nil quando o item está escondido nos Ajustes ou o Mac não tem a medida
