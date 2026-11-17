@@ -71,7 +71,11 @@ final class RotasTestes: XCTestCase {
         XCTAssertEqual(nova?["v"] as? Int, 7)
         XCTAssertEqual((nova?["conversas"] as? [[String: Any]])?.first?["nome"] as? String, "Louvor")
         let igual = c.pedir("GET", "/api/whatsapp?v=7")
-        XCTAssertEqual(igual.json as? [String: AnyHashable], ["v": 7, "igual": true])
+        let corpoIgual = igual.json as? [String: Any]
+        XCTAssertEqual(Set(corpoIgual?.keys ?? [:].keys), ["v", "igual"])
+        XCTAssertEqual(corpoIgual?["v"] as? Int, 7)
+        // No Linux o JSON lê true como 1: só o texto do corpo distingue.
+        XCTAssertTrue(String(decoding: igual.corpo, as: UTF8.self).contains("\"igual\":true"), "igual vai como booleano")
         XCTAssertLessThan(igual.corpo.count, 40)
     }
 

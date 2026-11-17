@@ -64,7 +64,7 @@ func TestAnalisarMidiaEUnica(t *testing.T) {
 }
 
 func TestFormatarNumero(t *testing.T) {
-	for em, quer := range map[string]string{"5544984097902": "+55 44 98409-7902", "554433221100": "+55 44 3322-1100", "14155550100": "+14155550100", "": ""} {
+	for em, quer := range map[string]string{"5544999990001": "+55 44 99999-0001", "554433221100": "+55 44 3322-1100", "14155550100": "+14155550100", "": ""} {
 		if got := formatarNumero(em); got != quer {
 			t.Errorf("%q: veio %q, esperado %q", em, got, quer)
 		}

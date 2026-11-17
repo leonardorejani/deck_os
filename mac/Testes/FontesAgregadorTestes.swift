@@ -244,4 +244,23 @@ final class FontesAgregadorTestes: XCTestCase {
         XCTAssertEqual(TeclasAcesas.ler([tecla("a")], executor: ex), [])
         XCTAssertEqual(ex.comandos, [])
     }
+
+    // MARK: estado das teclas em cache (varredura 16/11/2026)
+
+    func testEstadoDasTeclasNaoConfereATodoPedidoDe1s() {
+        let n = ContadorDeChamadas()
+        let versao = ContadorDeChamadas()
+        var f = fontes()
+        f.acesas = { teclas in _ = n.proximo(); return teclas.map(\.id) }
+        f.versaoTeclas = { versao.valor }
+        let ag = Agregador(fontes: f)
+        let cfg = config(perfil: [tecla("liga", tipo: "tecla", valor: "cmd+k", estado: "echo x")])
+        for s in 0..<5 { _ = ag.estado(config: cfg, agora: agora.addingTimeInterval(Double(s))) }
+        XCTAssertLessThanOrEqual(n.valor, 2, "5 pedidos de 1 s não podem ser 5 conferências")
+        // Ligou ou desligou pela tecla: a próxima leitura confere na hora, sem esperar o prazo.
+        let antes = n.valor
+        _ = versao.proximo()
+        _ = ag.estado(config: cfg, agora: agora.addingTimeInterval(5.1))
+        XCTAssertEqual(n.valor, antes + 1)
+    }
 }

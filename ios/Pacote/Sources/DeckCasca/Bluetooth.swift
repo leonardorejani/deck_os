@@ -14,6 +14,11 @@ public final class GerenteBluetooth: @unchecked Sendable {
     /// Espera entre tentativas de reconectar. Cresce até o teto e volta ao mínimo quando conecta.
     static let esperaMinima: TimeInterval = 1
     static let esperaMaxima: TimeInterval = 15
+    /// Rodadas seguidas sem achar nenhum Mac (desligado, fora de alcance) depois das quais o iPhone passa a descansar mais:
+    /// a cada rodada o rádio varre e conecta por uns 14 s, e a tela nunca apaga. Conectar ou `retomar()` volta ao mínimo.
+    /// Quem volta rápido é o Mac, que conecta no iPhone anunciando (sentido invertido), sem depender deste descanso.
+    static let rodadasParaRecuar = 10
+    static let esperaMaximaSemMac: TimeInterval = 45
     /// Rejeitado pelo Mac (código de acesso que ele não reconhece): não adianta insistir a cada segundo.
     static let esperaSeNaoPareado: TimeInterval = 30
     /// Quantas vezes seguidas o Mac já conhecido pode recusar este iPhone antes de o pareamento valer como acabado.
@@ -73,6 +78,9 @@ public final class GerenteBluetooth: @unchecked Sendable {
     private var cifragemDesde: Date?
     /// O pareamento (iPhone novo) esperando o Mac conectar pelo sentido invertido.
     private var esperaInvertida: (@Sendable (FluxoBytes?) -> Void)?
+    /// Rodadas seguidas que não acharam nenhum Mac, e quantas vezes o app voltou ao primeiro plano (acorda o descanso).
+    private var rodadasSemMac = 0
+    private var retomadas = 0
 
     #if canImport(CoreBluetooth)
     /// Tudo que o Bluetooth anota vai também para o diário (Documents/bluetooth.log), além do `log` de quem criou.
@@ -172,7 +180,7 @@ public final class GerenteBluetooth: @unchecked Sendable {
     /// O app voltou ao primeiro plano: o iOS pode ter derrubado a conexão em segundo plano. Rodada nova: o sentido antigo
     /// volta a ser tentado, e o anúncio (que o iOS para em segundo plano) é conferido.
     public func retomar() {
-        trava.withLock { antigoParadoAte = nil }
+        trava.withLock { antigoParadoAte = nil; rodadasSemMac = 0; retomadas += 1 }
         iniciar()
         conferirAnuncio()
     }
@@ -229,6 +237,8 @@ public final class GerenteBluetooth: @unchecked Sendable {
             conexao = nova
             antigoParadoAte = nil
             cifragemDesde = nil
+            rodadasSemMac = 0
+            retomadas += 1
             return true
         }
         guard ok else { return false }
@@ -287,6 +297,8 @@ public final class GerenteBluetooth: @unchecked Sendable {
         while !Task.isCancelled, trava.withLock({ geracao == g }) {
             guard let pareado = cofre.ler() else { break }
             if trava.withLock({ conexao != nil }) {
+                // Conexão de pé (por qualquer sentido): o recuo de quando o Mac sumia não vale para a próxima queda.
+                espera = Self.esperaMinima
                 try? await Task.sleep(nanoseconds: 500_000_000)
                 continue
             }
@@ -321,6 +333,7 @@ public final class GerenteBluetooth: @unchecked Sendable {
                 cifragensSeguidas = 0
                 cofre.guardarBluetooth(id)
                 tentativa = 0
+                trava.withLock { rodadasSemMac = 0 }
                 espera = Self.esperaMinima
                 // O sentido invertido pode ter fechado o aperto de mão enquanto este conectava: o primeiro vale.
                 guard reivindicar(ConexaoCabo.bluetooth(fluxo: entrada.fluxo), id: id, nome: entrada.nomeMac) else {
@@ -391,12 +404,21 @@ public final class GerenteBluetooth: @unchecked Sendable {
                 espera = Self.esperaSeNaoPareado
             } catch {
                 log("bluetooth: tentativa \(tentativa) falhou: \(error)")
-                espera = min(espera * 2, Self.esperaMaxima)
+                let semMac = trava.withLock { rodadasSemMac += 1; return rodadasSemMac }
+                espera = min(espera * 2, semMac >= Self.rodadasParaRecuar ? Self.esperaMaximaSemMac : Self.esperaMaxima)
                 if let motivo = radio.indisponivel { situar(motivo) } else if !(error is CancellationError) {
                     situar("Não achei o Mac pelo Bluetooth. Tentando de novo. Tentativa \(tentativa).")
                 }
             }
-            try? await Task.sleep(nanoseconds: UInt64(esperaEntreTentativas(espera) * 1_000_000_000))
+            // Em fatias: o app voltar ao primeiro plano (retomar) acorda o descanso, que pode ser longo.
+            let retomadasAntes = trava.withLock { retomadas }
+            var resta = esperaEntreTentativas(espera)
+            while resta > 0, !Task.isCancelled, trava.withLock({ retomadas == retomadasAntes }) {
+                let fatia = min(resta, 0.25)
+                try? await Task.sleep(nanoseconds: UInt64(fatia * 1_000_000_000))
+                resta -= fatia
+            }
+            if trava.withLock({ retomadas != retomadasAntes }) { espera = Self.esperaMinima }
         }
     }
 

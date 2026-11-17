@@ -153,6 +153,8 @@ final class ContaSpotify: @unchecked Sendable {
         self.armazem = armazem
         self.transporte = transporte
         self.agora = agora
+        // O pedido de espera sobrevive ao reinício do app: sem isso o 429 volta e a punição só cresce.
+        if let ate = armazem.ler().bloqueadoAte { _bloqueadoAte = Date(timeIntervalSince1970: ate) }
     }
 
     // MARK: Estado
@@ -180,7 +182,7 @@ final class ContaSpotify: @unchecked Sendable {
         guard Self.chaveValida(c) else { return "A chave do app tem 32 letras e números. Copie de novo no site do Spotify." }
         precisaChavePropria = false
         var d = armazem.ler()
-        if clientId != c { d.acesso = nil; d.renovacao = nil; d.expiraEm = nil; d.nome = nil }
+        if clientId != c { d.acesso = nil; d.renovacao = nil; d.expiraEm = nil; d.nome = nil; d.bloqueadoAte = nil; esquecerLimite() }
         d.clientId = c == embutida ? nil : c
         return armazem.gravar(d) ? nil : "Não consegui guardar a chave no Chaveiro do Mac."
     }
@@ -194,7 +196,8 @@ final class ContaSpotify: @unchecked Sendable {
         precisaChavePropria = false
         var d = armazem.ler()
         guard d.clientId != nil else { return }
-        d.clientId = nil; d.acesso = nil; d.renovacao = nil; d.expiraEm = nil; d.nome = nil
+        d.clientId = nil; d.acesso = nil; d.renovacao = nil; d.expiraEm = nil; d.nome = nil; d.bloqueadoAte = nil
+        esquecerLimite()
         armazem.gravar(d)
     }
 
@@ -392,6 +395,9 @@ final class ContaSpotify: @unchecked Sendable {
         return agora().addingTimeInterval(resta)
     }
 
+    /// O limite do Spotify é do app (da chave): trocando a chave, a espera da anterior não vale.
+    private func esquecerLimite() { travaLimite.lock(); _bloqueadoAte = nil; travaLimite.unlock() }
+
     /// Segundos que ainda faltam do pedido de espera do Spotify, ou nil se já pode chamar.
     func limiteRestante() -> TimeInterval? {
         travaLimite.lock(); defer { travaLimite.unlock() }
@@ -404,7 +410,9 @@ final class ContaSpotify: @unchecked Sendable {
     /// O Spotify disse 429: respeita o Retry-After (sem ele, 30 s). Insistir durante a espera só a alonga.
     private func registrarLimite(_ segundos: TimeInterval?, metodo: String, caminho: String) {
         let s = min(max(segundos ?? Self.esperaPadraoDoLimite, 1), 86_400)
-        travaLimite.lock(); _bloqueadoAte = agora().addingTimeInterval(s); travaLimite.unlock()
+        let ate = agora().addingTimeInterval(s)
+        travaLimite.lock(); _bloqueadoAte = ate; travaLimite.unlock()
+        var d = armazem.ler(); d.bloqueadoAte = ate.timeIntervalSince1970; armazem.gravar(d)
         registrar("spotify: limite de pedidos em \(metodo) \(caminho) (HTTP 429), esperando \(Int(s.rounded(.up))) s\(segundos == nil ? " (o Spotify não disse quanto)" : "")")
     }
 

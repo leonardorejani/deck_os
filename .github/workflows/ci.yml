@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, bancada]
   pull_request:
-    branches: [main]
+    branches: [main, bancada]
 
 # Onde roda: push na main e PR de branch do próprio repositório usam o runner próprio (rótulo "leve").
 # PR vindo de fork, e qualquer evento que não seja push nem PR, usa o runner do GitHub (ubuntu-latest),
@@ -22,6 +22,10 @@ jobs:
         run: for f in prototipo/*.js painel/*.js painel/teste/*.mjs; do node --check "$f" || exit 1; done
       - name: Scripts abrem o Deck pelo Finder, nunca por open
         run: bash scripts/teste/abrir-deck.test.sh
+      - name: A bancada não encosta nos dados do Deck de verdade
+        run: bash scripts/teste/bancada.test.sh
+      - name: Repo público limpo e uma versão só
+        run: bash scripts/teste/seguranca-build.test.sh
 
   # ─── Núcleo Swift ──────────────────────────────────────────────────────
   # O runner é Linux: só o pacote sem tela (mac/Package.swift) roda aqui, dentro da

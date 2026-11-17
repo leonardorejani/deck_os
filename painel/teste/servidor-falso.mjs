@@ -385,10 +385,13 @@ async function api(req, res, url) {
     if (c.comandoLento && tecla.tipo === 'comando') {
       const ligada = c.acesas.includes(id), fase = tecla.desligar ? (ligada ? 'desligando' : 'ligando') : 'rodando';
       c.andamento = { ...(c.andamento || {}), [id]: { fase } };
+      // o timer mexe só no cenário que o armou: depois de um /__reset `c` já é outro e o timer velho não pode tocá-lo
+      const cen = c;
       setTimeout(() => {
-        if (c.comandoFalha) c.andamento = { ...c.andamento, [id]: { fase: 'falhou', erro: c.comandoFalha, fim: new Date().toISOString() } };
-        else { const { [id]: _, ...resto } = c.andamento || {}; c.andamento = resto; if (tecla.desligar) c.acesas = ligada ? c.acesas.filter(x => x !== id) : [...c.acesas, id] }
-      }, c.comandoLento);
+        if (c !== cen) return;
+        if (cen.comandoFalha) cen.andamento = { ...cen.andamento, [id]: { fase: 'falhou', erro: cen.comandoFalha, fim: new Date().toISOString() } };
+        else { const { [id]: _, ...resto } = cen.andamento || {}; cen.andamento = resto; if (tecla.desligar) cen.acesas = ligada ? cen.acesas.filter(x => x !== id) : [...cen.acesas, id] }
+      }, cen.comandoLento);
       return json(res, 200, { ok: true });
     }
     if (tecla.desligar) c.acesas = c.acesas.includes(id) ? c.acesas.filter(x => x !== id) : [...c.acesas, id]; // o Mac guarda o estado da tecla liga e desliga
