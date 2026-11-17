@@ -24,6 +24,18 @@ final class FontesAgregadorTestes: XCTestCase {
         )
     }
 
+    func testEstadoTrazOCarimboDaConfigESoMudaQuandoOQueOPainelLeMuda() {
+        var cfg = config(perfil: [tecla("a")])
+        let ag = Agregador(fontes: fontes())
+        let antes = ag.estado(config: cfg, agora: agora).configVersao
+        XCTAssertNotNil(antes)
+        XCTAssertEqual(antes, cfg.carimbo)
+        cfg.codigoAcesso = "outrocodigooutrocodig"
+        XCTAssertEqual(ag.estado(config: cfg, agora: agora).configVersao, antes, "o rodízio do código não é edição de teclas")
+        cfg.perfis[0].teclas[0].nome = "Renomeada"
+        XCTAssertNotEqual(ag.estado(config: cfg, agora: agora).configVersao, antes, "tecla editada no Mac muda o carimbo")
+    }
+
     func testMontaOEstadoComTudoLigado() {
         let cfg = config(perfil: [tecla("whats", valor: "WhatsApp"), tecla("luz", tipo: "tecla", valor: "cmd+k", estado: "sim"), tecla("lamp", tipo: "tecla", valor: "cmd+j", estado: "nao")],
                          contas: [ContaIA(id: "codex", nome: "Codex", conta: "pro")])

@@ -488,27 +488,32 @@ function trocarMes(passo) {
 }
 /* ---------- Mês da composição C: o mesmo mês da Agenda, em outro lugar da tela ---------- */
 /* O mês que a C mostra é só dela (as setas dela não mexem na Agenda). Sem mexer nas setas por 30 s, ela volta para o mês de agora. */
-const mesC = { mes: null, ev: null, seq: 0, lido: 0, volta: 0 };
+const mesC = { mes: null, ev: null, seq: 0, lido: 0, volta: 0, lento: false };
 const MESC_RELER = 30000;
 function mesCAtual() { if (!mesC.mes) { const h = new Date(V.ref); mesC.mes = new Date(h.getFullYear(), h.getMonth(), 1) } return mesC.mes }
 async function lerMesC(forcar) {
-  if (!V || V.comp !== 'c' || (!forcar && mesC.ev && Date.now() - mesC.lido < MESC_RELER)) return;
-  const ref = mesCAtual(), n = ++mesC.seq; mesC.lido = Date.now();
+  if (!V || V.comp !== 'c' || (!forcar && (mesC.ev || mesC.lento) && Date.now() - mesC.lido < MESC_RELER)) return;
+  const ref = mesCAtual(), n = ++mesC.seq, inicio = mesC.lido = Date.now();
   if (semPermissao()) { mesC.ev = []; return }
   try {
     const l = await canal.agenda(dataIso(ref), new Date(ref.getFullYear(), ref.getMonth() + 1, 0).getDate());
     if (n !== mesC.seq) return;
-    mesC.ev = Array.isArray(l) ? l : [];
-  } catch (e) { if (n === mesC.seq && !mesC.ev) mesC.ev = []; if (e.status === 401) return tratarErro(e) } // sem agenda, o mês aparece sem pontinhos
+    mesC.ev = Array.isArray(l) ? l : []; mesC.lento = false;
+  } catch (e) {
+    if (n === mesC.seq && !mesC.ev && !e.rede) mesC.ev = [];
+    // pedido pendurado até o tempo limite (Mac online, agenda esperando permissão): espaça como o resto, em vez de pedir a cada tique de 5 s. Rede que cai na hora segue tentando a cada tique
+    if (n === mesC.seq && e.rede && Date.now() - inicio >= AJUSTES.tempoLimite * 0.9) mesC.lento = true;
+    if (e.status === 401) return tratarErro(e) // sem agenda, o mês aparece sem pontinhos
+  }
   if (V.comp === 'c') atualizar();
 }
 function moverMesC(passo) {
-  const m = mesCAtual(); mesC.mes = new Date(m.getFullYear(), m.getMonth() + passo, 1); mesC.ev = null; mesC.volta = Date.now() + 30000;
+  const m = mesCAtual(); mesC.mes = new Date(m.getFullYear(), m.getMonth() + passo, 1); mesC.ev = null; mesC.lento = false; mesC.volta = Date.now() + 30000;
   atualizar(); lerMesC(true);
 }
 setInterval(() => {
-  if (!V || V.comp !== 'c' || document.hidden) return;
-  if (mesC.volta && Date.now() > mesC.volta) { mesC.mes = null; mesC.ev = null; mesC.volta = 0; atualizar() }
+  if (!V || V.comp !== 'c' || document.hidden || semAcesso || offline) return;
+  if (mesC.volta && Date.now() > mesC.volta) { mesC.mes = null; mesC.ev = null; mesC.lento = false; mesC.volta = 0; atualizar() }
   lerMesC();
 }, 5000);
 

@@ -6,6 +6,7 @@
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 export const CODIGO = 'ABCDEFGHJKLMNPQRSTUV';
@@ -51,6 +52,8 @@ const padrao = () => ({
   faixa: 'Faixa de Exemplo', artista: 'Artista Exemplo',
   acesas: ['acordado'],
   xss: false,                // texto do Mac, do WhatsApp e das sessões chega com HTML malicioso
+  nomeApagar: '',            // renomeia a tecla Apagar tela: simula edição de teclas no Mac
+  semCarimbo: false,         // Mac antigo: o estado não traz configVersao
   config500: false,          // GET /api/config responde erro 500
   rejeitar: '',              // PUT /api/config recusa com esse motivo (422), como a validação do Mac
   rodizio: '',               // trocar (o primeiro pedido troca o código) | botao (só um pedido de tecla troca)
@@ -91,14 +94,14 @@ const padrao = () => ({
 });
 let c = padrao();
 let T0 = Date.now(); // as sessões esperam desde um instante fixo (o Mac real manda sempre o mesmo `desde` até a sessão mudar)
-let cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, whatsapp: 0, whatsappV: [], whatsappIguais: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], criados: [], destinosPedidos: 0, controles: [], whatsappAbertas: [], midias: [], fotos: [], meetAcoes: [], meetLeituras: 0, usoDetalhe: [] };
+let cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, whatsapp: 0, whatsappV: [], whatsappIguais: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], criados: [], destinosPedidos: 0, controles: [], whatsappAbertas: [], midias: [], fotos: [], meetAcoes: [], meetLeituras: 0, usoDetalhe: [], configs: 0 };
 let posicaoBase = { s: 132, desde: Date.now() };
 let perfilAtivo = 'trabalho';
 let criadosAgenda = [], padraoAgenda = null, lembretesAcesso = null, liberarEm = 0; // o que o iPhone criou na agenda, o destino padrão e o acesso aos Lembretes
 let codigoAtual = CODIGO, codigoAnterior = null; // rodízio: o atual, e o anterior que ainda vale (a folga de 10 min)
 let parearGasto = false, parearErros = 0; // o código de 6 dígitos serve uma vez e aguenta 5 erros
 let gravada = null; // o que o iPhone gravou: perfis e blocos, como o Mac guardaria no config.json
-const zerar = () => { parearGasto = false; parearErros = 0; codigoAtual = CODIGO; codigoAnterior = null; T0 = Date.now(); gravada = null; c = padrao(); cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, whatsapp: 0, whatsappV: [], whatsappIguais: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], criados: [], destinosPedidos: 0, controles: [], whatsappAbertas: [], midias: [], fotos: [], meetAcoes: [], meetLeituras: 0, usoDetalhe: [] }; posicaoBase = { s: 132, desde: Date.now() }; perfilAtivo = 'trabalho'; criadosAgenda = []; padraoAgenda = null; lembretesAcesso = null };
+const zerar = () => { parearGasto = false; parearErros = 0; codigoAtual = CODIGO; codigoAnterior = null; T0 = Date.now(); gravada = null; c = padrao(); cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, whatsapp: 0, whatsappV: [], whatsappIguais: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], criados: [], destinosPedidos: 0, controles: [], whatsappAbertas: [], midias: [], fotos: [], meetAcoes: [], meetLeituras: 0, usoDetalhe: [], configs: 0 }; posicaoBase = { s: 132, desde: Date.now() }; perfilAtivo = 'trabalho'; criadosAgenda = []; padraoAgenda = null; lembretesAcesso = null };
 
 // com xss ligado, todo texto que a página mostra chega como HTML que tenta executar código
 const X = t => c.xss ? `"><img src=x onerror="window.__xss=(window.__xss||0)+1">${t}` : t;
@@ -109,7 +112,7 @@ function perfisConfig() {
     T('acordado', X('Manter acordado'), 'tecla', 'ctrl+opt+cmd+k', { estado: "pmset -g assertions | grep -q 'Vorssaint'", icone: 'Vorssaint' }),
     T('whatsapp', X('WhatsApp'), 'app', 'WhatsApp', { icone: c.xss ? X('x') : 'WhatsApp' }),
     T('calendario', 'Agenda', 'app', 'Calendar', { icone: 'Calendar' }),
-    T('apagar', 'Apagar tela', 'comando', 'pmset displaysleepnow', { icone: 'svg:tela' }),
+    T('apagar', c.nomeApagar || 'Apagar tela', 'comando', 'pmset displaysleepnow', { icone: 'svg:tela' }),
   ];
   if (c.comReuniao) trabalho.push(T('mic', 'Mutar', 'app', 'Google Meet', { icone: 'svg:video', acao: { id: 'reuniao-microfone' } }), T('cam', 'Câmera', 'app', 'Google Meet', { icone: 'svg:video', acao: { id: 'reuniao-camera' } }));
   if (c.comMeet) trabalho.push(T('meet', 'Google Meet', 'app', 'Google Meet', { icone: 'svg:video' }));
@@ -279,7 +282,7 @@ function estado() {
   const selos = { whatsapp: c.xss ? X('23') : '23' };
   if (c.agenda === 'sem') selos.calendario = '!';
   return {
-    agora: new Date(Date.now() + c.relogioMs).toISOString(), nomeMac: X(c.nomeMac), perfilAtivo: configCompleta().perfilAtivo, comp: c.comp, blocos: c.blocos,
+    agora: new Date(Date.now() + c.relogioMs).toISOString(), nomeMac: X(c.nomeMac), perfilAtivo: configCompleta().perfilAtivo, comp: c.comp, blocos: c.blocos, ...(c.semCarimbo ? {} : { configVersao: createHash('sha1').update(JSON.stringify(configCompleta())).digest('hex').slice(0, 12) }),
     ...(c.blocos.monitor ? { monitor: { ...c.monitor, itens: Object.keys(c.monitorItens).filter(k => c.monitorItens[k]) } } : {}),
     spotify: estadoSpotify(),
     uso: [
@@ -357,6 +360,7 @@ async function api(req, res, url) {
     return;
   }
   if (rota === '/api/config' && m === 'GET' && c.atrasoConfig) await new Promise(r => setTimeout(r, c.atrasoConfig));
+  if (rota === '/api/config' && m === 'GET') cont.configs++;
   if (rota === '/api/config' && m === 'GET') return c.config500 ? json(res, 500, { erro: 'config quebrada' }) : json(res, 200, configCompleta());
   if (rota === '/api/config' && m === 'PUT') {
     const nova = await lerCorpo(req); cont.configsGravadas.push(nova);
