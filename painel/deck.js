@@ -771,7 +771,7 @@ function devolverTela(f, fechar) {
 tela.addEventListener('touchstart', e => {
   puxar = null;
   const f = telaAberta(); if (!f || e.touches.length !== 1 || !f.contains(e.target)) return;
-  if (e.target.closest('input, textarea, select, .progresso, .volume, .trilho') || rolaParaCima(e.target, f)) return;
+  if (e.target.closest('input, textarea, select, .progresso, .volume, .trilho, .seletor') || rolaParaCima(e.target, f)) return;
   const t = e.touches[0]; puxar = { f, x: t.clientX, y: t.clientY, t: e.timeStamp, dy: 0, seguindo: false };
 }, { passive: true });
 tela.addEventListener('touchmove', e => {
