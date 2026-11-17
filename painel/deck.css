@@ -182,7 +182,7 @@ button.cartao { font: inherit; color: inherit; text-align: left; border: 0; curs
 .tela-offline { position: absolute; inset: 0; z-index: 24; display: grid; place-items: center; text-align: center; padding: var(--secao) var(--seguro-dir) var(--secao) var(--seguro-esq); background: var(--veu-offline); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); opacity: 0; pointer-events: none; transition: opacity var(--mov-lento) var(--curva-move) }
 .tela-offline > div { display: grid; justify-items: center; gap: var(--pad); max-width: 440px }
 .tela-offline strong { font-size: var(--texto-xl); letter-spacing: var(--tracking-titulo); line-height: var(--altura-titulo) }
-.tela-offline .disp { display: inline-flex; align-items: center; gap: var(--item); min-height: var(--alvo); padding: 0 var(--pad); border-radius: var(--raio-pilula); background: var(--superficie-2); box-shadow: var(--sombra-1); color: var(--texto); font-size: var(--texto-base); font-weight: 600 }
+.tela-offline .disp { display: inline-flex; align-items: center; gap: var(--item); min-height: var(--alvo); padding: 0 var(--pad) 0 var(--icone); border-radius: var(--raio-pilula); background: var(--superficie-2); box-shadow: var(--sombra-1); color: var(--texto); font-size: var(--texto-base); font-weight: 600 }
 .tela-offline .disp svg { width: 20px; height: 20px; color: var(--texto-2) }
 .tela-offline .dica-off { color: var(--texto-2); font-size: var(--texto-sm) }
 .girando { width: 16px; height: 16px; border-radius: 50%; border: 2px solid var(--borda); border-top-color: var(--texto); animation: girar 900ms linear infinite; flex: none }
@@ -289,6 +289,7 @@ button.cartao { font: inherit; color: inherit; text-align: left; border: 0; curs
 /* pílula "Fechar": só contorno, para não se confundir com o "Abrir no Mac" ao lado, que é cheio */
 .fechar { height: var(--alvo-sm); padding: 0 calc(var(--item) + 2px); border-radius: var(--raio-pilula); border: 0; background: none; box-shadow: inset 0 0 0 1px var(--borda); color: var(--texto-2); font: inherit; font-size: var(--texto-sm); font-weight: 600; display: inline-flex; align-items: center; justify-content: center; gap: var(--item); white-space: nowrap; cursor: pointer; flex: none; transition: background-color var(--mov-rapido) var(--curva-move), color var(--mov-rapido) var(--curva-move), transform var(--mov-rapido) var(--curva-move) }
 .fechar svg { width: 16px; height: 16px }
+.folha > header:has(#wa-filtro) { column-gap: var(--item) } /* o Fechar escrito é mais largo que o círculo: sem esse respiro a mais o subtítulo do WhatsApp ("23 não lidas em 5 conversas") ganhava reticências no celular deitado e na janela */
 .fechar:active { background: var(--superficie-2); color: var(--texto); transform: scale(.97) }
 @media (hover: hover) { .fechar:hover { background: var(--superficie-2); color: var(--texto) } }
 .player-cheio .fechar, .fechar-cal { background: color-mix(in srgb, var(--fundo) 35%, transparent); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px) } /* em cima da capa e da agenda o contorno sozinho some: um véu leve garante a leitura */
@@ -588,7 +589,7 @@ button.cartao { font: inherit; color: inherit; text-align: left; border: 0; curs
 .vertical .divisor .linha { width: 60%; height: 1px }
 .vertical .divisor .indicador { top: 50%; left: 0; width: auto; height: 6px; translate: 0 -50% }
 .vertical .relogio-linha .uso-tira { justify-content: center }
-.vertical .menu-area .tecla.menu { width: auto; height: var(--alvo); grid-auto-flow: column; gap: var(--item); padding: 0 var(--pad); border-radius: var(--raio-pilula) }
+.vertical .menu-area .tecla.menu { width: auto; height: var(--alvo); grid-auto-flow: column; gap: var(--item); padding: 0 var(--pad) 0 var(--icone); border-radius: var(--raio-pilula) }
 .vertical .menu-area .tecla.menu .svg { width: 24px; height: 24px }
 .vertical .menu-area .tecla.menu .svg svg { width: 18px; height: 18px }
 .vertical .menu-area .tecla.menu .nome { font-size: var(--texto-sm) }

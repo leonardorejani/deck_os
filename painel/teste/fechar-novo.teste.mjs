@@ -13,16 +13,18 @@ export default async function (h) {
     for (const [id, abre, rot] of FOLHAS) {
       await p.evaluate(a => eval(a), abre);
       await h.espera(p, i => document.querySelector(i).classList.contains('aberta'), id); await h.dormir(900);
+      // o WhatsApp só ganha o subtítulo ("23 não lidas em 5 conversas") depois de carregar as conversas: sem ele o teste media um título curto
+      if (rot === 'whatsapp') h.ok(await h.espera(p, () => document.querySelector('#wa-titulo').textContent.includes('23 não lidas em 5 conversas')), `${nome} whatsapp: subtítulo carregado`);
       const m = await p.evaluate(i => {
         const b = document.querySelector(i + ' .fechar'), r = b.getBoundingClientRect(), c = getComputedStyle(b), esc = document.querySelector('.moldura').getBoundingClientRect().width / 932 || 1;
         const sai = (x, y) => document.elementFromPoint(x, y)?.closest('.fechar') === b;
         const cx = (r.left + r.right) / 2, cy = (r.top + r.bottom) / 2;
         return { txt: b.textContent.trim(), alt: r.height, larg: r.width, raio: parseFloat(c.borderRadius), vp: [innerWidth, innerHeight], r: [r.left, r.top, r.right, r.bottom],
-          toqueV: sai(cx, cy - 22 + 1) && sai(cx, cy + 22 - 1), toqueH: sai(cx - 22 + 1, cy) && sai(cx + 22 - 1, cy), corta: [...document.querySelectorAll(i + ' > header h2')].some(e => e.scrollWidth > e.clientWidth + 1), dentro: r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight };
+          toqueV: sai(cx, cy - 22 + 1) && sai(cx, cy + 22 - 1), toqueH: sai(cx - 22 + 1, cy) && sai(cx + 22 - 1, cy), falta: Math.max(0, ...[...document.querySelectorAll(i + ' > header h2')].map(e => { const r = document.createRange(); r.selectNodeContents(e); return Math.ceil(r.getBoundingClientRect().width - e.getBoundingClientRect().width) })), corta: [...document.querySelectorAll(i + ' > header h2')].some(e => { const r = document.createRange(); r.selectNodeContents(e); return r.getBoundingClientRect().width > e.getBoundingClientRect().width + 1 }), dentro: r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight };
       }, id);
       h.ok(m.txt === 'Fechar' && m.raio >= m.alt / 2 - 1 && m.larg > m.alt, `${nome} ${rot}: o fechar é uma pílula escrita "Fechar" (texto "${m.txt}", ${Math.round(m.larg)}x${Math.round(m.alt)}, raio ${m.raio})`);
       h.ok(m.dentro, `${nome} ${rot}: o fechar cabe na tela (${m.r.map(Math.round)} em ${m.vp})`);
-      h.ok(!m.corta, `${nome} ${rot}: o título do cabeçalho não é cortado pelo fechar (${m.larg}px de fechar)`);
+      h.ok(!m.corta, `${nome} ${rot}: o título do cabeçalho não é cortado pelo fechar (${m.larg}px de fechar, faltam ${m.falta}px)`);
       if (w !== 1440) h.ok(m.toqueV && m.toqueH, `${nome} ${rot}: o toque do fechar tem 44 pt (vertical ${m.toqueV}, horizontal ${m.toqueH})`);
       await h.foto(p, `fechar-${fase}-${rot}-${nome}`);
       await p.keyboard.press('Escape'); await h.dormir(500);
@@ -31,6 +33,10 @@ export default async function (h) {
       await p.click(id + ' .fechar'); await h.dormir(500);
       h.ok(await p.evaluate(i => !document.querySelector(i).classList.contains('aberta'), id), `${nome} ${rot}: tocar no fechar fecha a folha`);
     }
+    // o recuo à esquerda de 12 px (ícone) da pílula do aparelho offline e da tecla de menu em pé não faz parte do botão Fechar e não pode mudar
+    const rec = await p.evaluate(() => { const pad = s => { const e = document.querySelector(s); return e ? parseFloat(getComputedStyle(e).paddingLeft) : null }; return { disp: pad('.tela-offline .disp'), menu: pad('.menu-area .tecla.menu'), vertical: document.querySelector('.vertical') != null } });
+    h.ok(rec.disp === 12, `${w}: pílula do aparelho offline mantém o recuo esquerdo de 12 px (${rec.disp})`);
+    if (rec.vertical) h.ok(rec.menu === 12, `${w}: tecla de menu em pé mantém o recuo esquerdo de 12 px (${rec.menu})`);
     await p.context().close();
   }
 }
