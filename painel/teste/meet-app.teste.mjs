@@ -8,7 +8,7 @@ const abrir = async (h, p) => {
   return ok;
 };
 const blocos = p => p.evaluate(() => Object.fromEntries([...document.querySelectorAll('#mt-corpo [data-mt]')].map(b => [b.dataset.mt, {
-  classe: b.className.replace('mt-bloco', '').trim(), sub: b.querySelector('.mt-sub').textContent, desligado: b.disabled, pressed: b.getAttribute('aria-pressed'), cor: getComputedStyle(b).color }])));
+  classe: b.className.replace('mt-bloco', '').trim(), valor: b.querySelector('.mt-valor').textContent, sub: b.querySelector('.mt-sub').textContent, desligado: b.disabled, pressed: b.getAttribute('aria-pressed'), cor: getComputedStyle(b).backgroundColor }])));
 const estado = p => p.evaluate(() => document.querySelector('.mt-estado')?.textContent.trim() || '');
 // o rgb() que o navegador dá a uma cor do tema, para comparar com o que a tela pintou
 const cor = (p, token) => p.evaluate(t => { const d = document.createElement('div'); d.style.color = `var(${t})`; document.querySelector('.tela').append(d); const c = getComputedStyle(d).color; d.remove(); return c }, token);
@@ -24,9 +24,9 @@ export default async function (h) {
   h.ok(await estado(p) === 'Reunião aberta', `diz que há reunião aberta (${await estado(p)})`);
   let b = await blocos(p);
   h.ok(Object.keys(b).join() === 'entrar,microfone,camera,sair', `os quatro botões, na ordem (${Object.keys(b)})`);
-  h.ok(b.microfone.classe === 'ligado' && b.microfone.sub === 'Ligado' && b.microfone.pressed === 'true', `microfone ligado: verde e "Ligado" (${JSON.stringify(b.microfone)})`);
-  h.ok(b.camera.classe === 'desligado' && b.camera.sub === 'Desligada' && b.camera.pressed === 'false', `câmera desligada: vermelha e "Desligada" (${JSON.stringify(b.camera)})`);
-  h.ok(b.microfone.cor === await cor(p, '--sucesso') && b.camera.cor === await cor(p, '--perigo'), 'a cor de um é a do sucesso e a do outro é a do perigo');
+  h.ok(b.microfone.classe === 'ligado' && b.microfone.valor === 'Ligado' && b.microfone.pressed === 'true', `microfone ligado: verde e "Ligado" (${JSON.stringify(b.microfone)})`);
+  h.ok(b.camera.classe === 'desligado' && b.camera.valor === 'Desligada' && b.camera.pressed === 'false', `câmera desligada: vermelha e "Desligada" (${JSON.stringify(b.camera)})`);
+  h.ok(b.microfone.cor === await cor(p, '--sucesso') && b.camera.cor === await cor(p, '--cal-vermelho'), 'o cartão ligado é verde (sucesso) e o desligado é o vermelho do Mudo dos Controles');
   h.ok(!b.sair.desligado && !b.entrar.desligado && b.entrar.sub === 'Trazer a reunião para a frente', 'sair e entrar valem com a reunião aberta');
   await h.foto(p, 'meet-na-chamada');
 
@@ -34,7 +34,7 @@ export default async function (h) {
   await h.cenario({ meetAtraso: 700 });
   await p.click('#mt-corpo [data-mt="microfone"]');
   b = await blocos(p);
-  h.ok(b.microfone.classe.startsWith('desligado') && b.microfone.sub === 'Mutado', `o microfone vira vermelho e "Mutado" na hora, antes do Mac responder (${JSON.stringify(b.microfone)})`);
+  h.ok(b.microfone.classe.startsWith('desligado') && b.microfone.valor === 'Mutado', `o microfone vira vermelho e "Mutado" na hora, antes do Mac responder (${JSON.stringify(b.microfone)})`);
   h.ok(await h.ate(async () => (await h.contadores()).meetAcoes.includes('microfone')), 'o Mac recebe o pedido de microfone');
   await h.cenario({ meetAtraso: 0 });
   h.ok(await h.espera(p, () => document.querySelector('[data-mt="microfone"]').classList.contains('desligado') && !document.querySelector('[data-mt="microfone"]').disabled, undefined, 5000), 'depois de o Mac confirmar o microfone segue vermelho');
@@ -50,7 +50,7 @@ export default async function (h) {
   h.ok(await h.ate(async () => (await h.contadores()).meetAcoes.includes('sair')), 'Sair da chamada vai para o Mac');
   h.ok(await h.espera(p, () => document.querySelector('.mt-estado')?.textContent.trim() === 'Nenhuma reunião aberta', undefined, 5000), 'depois de sair, diz que não há reunião aberta');
   b = await blocos(p);
-  h.ok(b.microfone.desligado && b.camera.desligado && b.sair.desligado && b.microfone.sub === 'Sem reunião', `sem reunião, microfone, câmera e sair ficam apagados e dizem isso (${JSON.stringify(b.microfone)})`);
+  h.ok(b.microfone.desligado && b.camera.desligado && b.sair.desligado && b.microfone.valor === 'Sem reunião', `sem reunião, microfone, câmera e sair ficam apagados e dizem isso (${JSON.stringify(b.microfone)})`);
   h.ok(!b.entrar.desligado && b.entrar.sub === 'Abrir meet.google.com', 'e Entrar no Meet abre o site');
   await h.foto(p, 'meet-sem-reuniao');
   await p.context().close();
@@ -74,7 +74,7 @@ export default async function (h) {
   await h.reset(); await h.cenario({ comMeet: true, meetEstado: { aberta: true, microfone: 'desconhecido', camera: 'desconhecido', aviso: 'Deixe a aba da reunião na frente do navegador.' } });
   p = await h.pagina(); await pronta(h, p); await abrir(h, p);
   b = await blocos(p);
-  h.ok(b.microfone.sub === 'Não consegui ler' && !b.microfone.desligado && b.microfone.classe === 'incerto', `mostra que não leu, sem verde nem vermelho (${JSON.stringify(b.microfone)})`);
+  h.ok(b.microfone.valor === 'Não consegui ler' && !b.microfone.desligado && b.microfone.classe === 'incerto', `mostra que não leu, sem verde nem vermelho (${JSON.stringify(b.microfone)})`);
   h.ok((await p.evaluate(() => document.querySelector('.mt-aviso').textContent)).includes('aba da reunião'), 'o aviso do Mac aparece');
   await p.context().close();
 
@@ -93,6 +93,25 @@ export default async function (h) {
   await p.click('#mt-corpo [data-mt-mac]');
   h.ok(await h.ate(async () => (await h.contadores()).botoes.includes('meet')), 'a tecla antiga ainda abre o Meet no navegador do Mac');
   await p.context().close();
+
+  /* ---------- o mesmo padrão dos Controles do Mac: cantos, altura e cartões lado a lado ---------- */
+  const rodada = process.env.DECK_FOTOS_RODADA;
+  for (const [w, al, nome] of [[932, 430, 'deitado'], [430, 932, 'em-pe'], [1440, 900, 'janela']]) {
+    await h.reset(); await h.cenario({ comMeet: true, comControles: true });
+    p = await h.pagina({ w, h: al }); await pronta(h, p);
+    const medir = () => p.evaluate(() => { const r = e => { const c = getComputedStyle(e), b = e.getBoundingClientRect(); return { raio: c.borderTopLeftRadius, h: Math.round(b.height), w: Math.round(b.width), y: Math.round(b.top), baixo: Math.round(b.bottom) } };
+      return { cartoes: [...document.querySelectorAll('#mt-corpo .mt-bloco')].map(r), ct: [...document.querySelectorAll('#ct-corpo .ctl-cartao')].map(r) } });
+    await p.evaluate(() => document.querySelector('.tecla[data-id="controles"]').click());
+    await h.espera(p, () => document.querySelector('#f-controles').classList.contains('aberta') && !document.querySelector('#ct-corpo .esq-lista')); await h.dormir(500);
+    const ct = (await medir()).ct; await p.evaluate(() => document.querySelector('#f-controles [data-fechar]').click()); await h.dormir(500);
+    await abrir(h, p); const mt = (await medir()).cartoes;
+    h.ok(mt.length === 4 && ct.length >= 3 && mt.every(c => c.raio === ct[0].raio), `${nome}: cantos dos cartões do Meet iguais aos dos Controles (${mt[0]?.raio} e ${ct[0]?.raio})`);
+    h.ok((w < 600 || mt.every(c => Math.abs(c.baixo - ct[ct.length - 1].baixo) <= 2)), `${nome}: os cartões chegam à mesma borda de baixo dos Controles, só cedem o espaço do estado em cima (${mt.map(c => c.baixo)} e ${ct[0]?.baixo})`);
+    h.ok(mt.every(c => c.h >= 110), `${nome}: cartões altos, não chips (${mt.map(c => c.h)})`);
+    h.ok(w < 600 ? new Set(mt.map(c => c.y)).size === 2 : new Set(mt.map(c => c.y)).size === 1, `${nome}: ${w < 600 ? 'duas por linha' : 'os quatro lado a lado'}`);
+    if (rodada) await p.screenshot({ path: `${rodada}/meet-cartoes-${nome}.png` });
+    await p.context().close();
+  }
 
   /* ---------- as teclas avulsas: verde ligada, vermelha desligada ---------- */
   await h.reset(); await h.cenario({ comReuniao: true, reuniaoEstado: { mic: 'ligado', cam: 'desligado' } });
