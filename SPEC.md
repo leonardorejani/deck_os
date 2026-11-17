@@ -196,8 +196,8 @@ está disponível some em vez de aparecer desligado:
 
 ### WhatsApp: não lidas por conversa
 
-Título com o total ("23 não lidas em 5 conversas"), filtro Todas / Contatos / Grupos e "Abrir no
-Mac". Uma linha por conversa (contato ou grupo): avatar (iniciais ou ícone de grupo), nome, quem
+Filtro Todas / Contatos / Grupos / Arquivadas à esquerda e o X à direita (ver o parágrafo de 17/11/2026
+no fim). Uma linha por conversa (contato ou grupo): avatar (iniciais ou ícone de grupo), nome, quem
 mandou e a última mensagem, hora e quantidade. Tocar abre as mensagens não lidas daquela conversa
 (com o nome de quem mandou, em grupo) e o botão "Responder no Mac". A conversa se expande em altura
 e os balões entram em cascata. Abrir outra recolhe a anterior antes. Não responde pelo celular.
@@ -206,7 +206,7 @@ e os balões entram em cascata. Abrir outra recolhe a anterior antes. Não respo
 entrega a lista por conversa: a folha mostra só o total ("23 não lidas"), esconde o filtro e diz em
 uma frase: "Pelo WhatsApp Web o Deck vê só o total. Para ver cada conversa, use o app do WhatsApp no Mac."
 Sem aba do WhatsApp Web aberta, o título fica só "WhatsApp" e o bloco diz "WhatsApp Web fechado", com o
-navegador e o endereço para abrir, em vez de "0 não lidas". "Abrir no Mac", "Responder no Mac" e a tecla do
+navegador e o endereço para abrir, em vez de "0 não lidas". "Responder no Mac" e a tecla do
 WhatsApp trazem a aba do WhatsApp Web para a frente (ou abrem web.whatsapp.com no navegador) em vez do app.
 
 ### Agenda: o mês do StandBy e a lista por data
@@ -549,8 +549,7 @@ uma linha e "Excluir tecla" (⌘Z desfaz). Embaixo, dois passos numerados:
 
 1. **O que a tecla faz:** quatro cartões de uma linha: App (abre um app), Teclado (aperta teclas),
    Comando (roda no Terminal) e Atalho (roda um atalho do app Atalhos). Não existe tipo "tela no
-   iPhone": a tecla do app WhatsApp ou Calendário abre a lista no próprio iPhone, com "Abrir no Mac"
-   dentro. Config antiga com o tipo painel vira o app correspondente.
+   iPhone": a tecla do app WhatsApp ou Calendário abre a lista no próprio iPhone. Config antiga com o tipo painel vira o app correspondente.
 2. **A configuração do tipo**, e no fim dela o ícone (no App é sempre o do próprio app):
    - App: busca entre todos os apps da pasta Aplicativos (sem acento e sem maiúscula), com "Mais
      usados" e "Todos, de A a Z" quando a busca está vazia. Ícones grandes (52px), para reconhecer o
@@ -1514,3 +1513,5 @@ Deck não trava mais esperando a senha do Chaveiro (17/11/2026, frente chaveiro-
 Agenda: círculos alinhados, seletores próprios e lembrete de outra cor (17/11/2026, frente agenda-seletores). Pedido do dono: "os circulos nao estao alinhados", "no celular esses seletores sao horríveis ... preciso de algo mais prático" e "lembretes devem ser de outra cor dos feriados pra nao misturar". O número dos círculos do mês usa algarismo proporcional e sobe 1 px, então o de hoje e o do dia escolhido têm o mesmo diâmetro e o número no centro (o "1" tabular empurrava o número para a direita). No Novo compromisso, Dia, Início e Fim deixam de abrir o calendário e a lista de horas do navegador: abrem um seletor do Deck dentro da folha, tudo com toque de 44 pt. Dia é um mini calendário com setas de mês e os atalhos Hoje e Amanhã. Início é a grade de horários de 30 em 30 min, aberta no horário de agora, com ajuste de 5 em 5 min, e mexer nele leva o fim junto mantendo a duração. Fim são chips de duração (15 min a 3 h) que calculam o fim, com o mesmo ajuste de 5 min, e o fim nunca fica antes do início nem passa de 23:59. Os inputs nativos seguem escondidos só como guarda do valor, então o Salvar não mudou. A cor de cada item da lista continua sendo a do calendário no Mac (`EKCalendar.cgColor`). O que faltava era o Mac dizer qual item é lembrete: o evento da agenda ganha `lembrete: true` (ausente em evento do Calendário e em Mac antigo, que seguem como estavam), e o painel mostra o lembrete com barra laranja, o círculo do app Lembretes e "Lembrete, <lista>" na linha de baixo. Teste: `painel/teste/agenda-seletores.teste.mjs` (substitui `agenda-seletor.teste.mjs`, que cobrava o seletor nativo) e `testLembreteComPrazo...` no núcleo. Correção da verificação: o Fim nunca passa de 23:59 (tocar em +/- 5 min com o Início em 23:55 deixava o campo vazio), ganhou durações de 4, 6 e 8 h e passos de 1 h, e a duração escolhida é lembrada, então voltar de um horário perto da meia-noite para um cedo não encurta o compromisso.
 
 Fechar das folhas do app (17/11/2026, frente fechar-novo). Pedido do Leonardo: "substitui o componente por outro que converse mais na UI, isso pro deck inteiro". O círculo cinza escuro com X virou uma pílula escrita "Fechar", só com contorno (não se confunde com o "Abrir no Mac" ao lado, que é cheio), na mesma família dos segmentos. É o mesmo botão em todas as folhas (WhatsApp, Agenda, Controles, Meet, Monitor, Uso das IAs, Player, Sessões e editor), com toque de 44 pt, Esc e puxar para baixo fechando como antes. Em cima da capa do Player e da Agenda leva um véu leve para ler bem. Correção da verificação: o Fechar escrito empurrava o subtítulo do WhatsApp ("23 não lidas em 5 conversas") para reticências no celular deitado e na janela, então o cabeçalho do WhatsApp ganhou 4 px a menos entre os itens. E o recuo esquerdo de 12 px da pílula do aparelho offline e da tecla de menu em pé, que tinha sido alterado sem pedido, voltou ao original.
+
+Cabeçalho do WhatsApp no app (17/11/2026, frente whatsapp-cabecalho). Pedido do dono: "deixa só os filtros alinhados a esquerda e o X na direita. o resto tira." O cabeçalho perdeu o título visível ("What..." truncado), o subtítulo com o total e o botão "Abrir no Mac": ficam o filtro à esquerda e o X à direita (o título segue no HTML só para leitor de tela). "Abrir no Mac" não existe em outro lugar da folha do WhatsApp Web, então some de vez (a conversa aberta continua com "Responder no Mac"). Selo de aba acima de 999 mostra "999+". Em pé as quatro abas passam da largura ao lado do X e o filtro rola por dentro, trazendo a aba tocada para a vista. Teste em `painel/teste/whatsapp-cabecalho.teste.mjs`.

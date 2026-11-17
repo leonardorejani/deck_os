@@ -24,7 +24,7 @@ export default async function (h) {
       }, id);
       h.ok(m.txt === 'Fechar' && m.raio >= m.alt / 2 - 1 && m.larg > m.alt, `${nome} ${rot}: o fechar é uma pílula escrita "Fechar" (texto "${m.txt}", ${Math.round(m.larg)}x${Math.round(m.alt)}, raio ${m.raio})`);
       h.ok(m.dentro, `${nome} ${rot}: o fechar cabe na tela (${m.r.map(Math.round)} em ${m.vp})`);
-      h.ok(!m.corta, `${nome} ${rot}: o título do cabeçalho não é cortado pelo fechar (${m.larg}px de fechar, faltam ${m.falta}px)`);
+      if (rot !== 'whatsapp') h.ok(!m.corta, `${nome} ${rot}: o título do cabeçalho não é cortado pelo fechar (${m.larg}px de fechar, faltam ${m.falta}px)`);
       if (w !== 1440) h.ok(m.toqueV && m.toqueH, `${nome} ${rot}: o toque do fechar tem 44 pt (vertical ${m.toqueV}, horizontal ${m.toqueH})`);
       await h.foto(p, `fechar-${fase}-${rot}-${nome}`);
       await p.keyboard.press('Escape'); await h.dormir(500);

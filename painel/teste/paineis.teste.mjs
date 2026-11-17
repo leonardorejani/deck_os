@@ -42,9 +42,8 @@ export default async function (h) {
   // os dois botões mandam a tecla do WhatsApp pelo Mac
   await p.click('#wa-lista [data-wa-mac]');
   h.ok(await h.espera(p, () => document.querySelector('#aviso-txt').textContent === 'Abrindo o WhatsApp no Mac'), 'Responder no Mac avisa que abre o WhatsApp no Mac');
-  await p.click('#wa-abrir');
   await h.dormir(300); c = await h.contadores();
-  h.ok(c.botoes.join() === 'whatsapp,whatsapp', `"Responder no Mac" e "Abrir no Mac" mandam a tecla do WhatsApp (${c.botoes.join()})`);
+  h.ok(c.botoes.join() === 'whatsapp', `"Responder no Mac" manda a tecla do WhatsApp (${c.botoes.join()})`);
   // fechar
   await p.click('#f-whats [data-fechar]');
   h.ok(await h.espera(p, () => !document.querySelector('#f-whats').classList.contains('aberta') && !document.querySelector('#tela').classList.contains('com-folha')), 'o X fecha a folha');
@@ -53,7 +52,7 @@ export default async function (h) {
   h.ok(await p.evaluate(() => document.querySelectorAll('#wa-lista .mensagens').length === 0 && document.querySelector('#wa-filtro [data-f="todas"]').getAttribute('aria-pressed') === 'true'), 'ao reabrir, filtro Todas e nenhuma conversa aberta');
   // em pé
   await p.setViewportSize({ width: 430, height: 932 }); await h.dormir(400); await h.foto(p, 'whatsapp-em-pe');
-  h.ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1 && document.querySelector('#wa-abrir').getBoundingClientRect().right <= innerWidth), 'em pé: nada passa da largura');
+  h.ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1 && document.querySelector('#f-whats .fechar').getBoundingClientRect().right <= innerWidth), 'em pé: nada passa da largura');
   await p.context().close();
 
   /* WhatsApp Web: o Mac só vê o total pelo título da aba, e a folha diz isso sem inventar conversas */
@@ -65,9 +64,6 @@ export default async function (h) {
   h.ok(web.conversas === 0 && web.filtro === true, `sem lista por conversa e sem filtro (${JSON.stringify(web)})`);
   h.ok(web.txt === '23 não lidasPelo WhatsApp Web o Deck vê só o total. Para ver cada conversa, use o app do WhatsApp no Mac.', `texto curto e honesto sobre ver só o total (${web.txt})`);
   await h.dormir(400); await h.foto(p, 'whatsapp-web');
-  const botoesAntes = (await h.contadores()).botoes.length;
-  await p.click('#wa-abrir'); await h.dormir(300);
-  h.ok((await h.contadores()).botoes.slice(botoesAntes).join() === 'whatsapp', '"Abrir no Mac" segue mandando a tecla do WhatsApp (o Mac abre o WhatsApp Web)');
   await p.setViewportSize({ width: 430, height: 932 }); await h.dormir(400); await h.foto(p, 'whatsapp-web-em-pe');
   h.ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'WhatsApp Web em pé: nada passa da largura');
   await p.context().close();
