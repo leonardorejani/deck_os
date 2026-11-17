@@ -129,8 +129,12 @@ final class ModeloApp: ObservableObject {
         self.defaults = defaults
         // Hospedeiro de teste: login do Spotify na memória, nunca o Chaveiro do dono. Log só no app de verdade.
         let testando = AmbienteDeTeste.ativo
-        let armazemSpotify: ArmazemSpotify = testando ? ArmazemSpotifyMemoria() : ArmazemSpotifyChaveiro()
-        self.spotify = ModeloSpotify(conta: ContaSpotify(armazem: armazemSpotify, transporte: TransporteUrlSession()))
+        // O Chaveiro só é lido em segundo plano e uma vez (cache): a partida nunca espera a senha dele. O fim da espera do 429
+        // fica num arquivo comum, que não é segredo.
+        let armazemSpotify: ArmazemSpotify = testando ? ArmazemSpotifyMemoria() : ArmazemSpotifyEmCache(ArmazemSpotifyChaveiro())
+        let limiteSpotify: ArmazemDoLimite = testando ? LimiteEmMemoria() : LimiteEmArquivo.padrao()
+        self.spotify = ModeloSpotify(conta: ContaSpotify(armazem: armazemSpotify, limite: limiteSpotify, transporte: TransporteUrlSession()),
+                                     lerNaPartida: testando)
         self.renovacao = RenovacaoDoApp.ler(defaults)
         if !testando {
             self.registrar = { LogDoDeck.padrao.escrever($0) }

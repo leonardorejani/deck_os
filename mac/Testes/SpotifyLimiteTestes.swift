@@ -87,32 +87,37 @@ final class SpotifyLimiteTestes: XCTestCase {
         let rel = RelogioDoLimite(Date(timeIntervalSince1970: 2_000_000))
         let armazem = ArmazemSpotifyMemoria(DadosSpotify(clientId: nil, acesso: "ACESSO", renovacao: "RENOVA", expiraEm: rel.agora.timeIntervalSince1970 + 90_000))
         let t = TransporteFalso { _ in RespostaWeb(status: 429, corpo: Data(), esperar: 26_657) }
-        let conta = ContaSpotify(armazem: armazem, transporte: t, agora: { rel.agora }, embutida: "abcdef0123456789abcdef0123456789")
+        let limite = LimiteEmMemoria()
+        let conta = ContaSpotify(armazem: armazem, limite: limite, transporte: t, agora: { rel.agora }, embutida: "abcdef0123456789abcdef0123456789")
         _ = conta.curtida("spotify:track:x")
         XCTAssertNotNil(conta.limiteRestante())
+        XCTAssertNotNil(limite.ler())
         XCTAssertNil(conta.definirClientId("0123456789abcdef0123456789abcdef"))
+        XCTAssertNil(limite.ler(), "o arquivo também esquece, senão a espera volta no reinício")
         XCTAssertNil(conta.limiteRestante(), "o limite é da chave: chave nova começa livre")
-        XCTAssertNil(armazem.ler().bloqueadoAte, "e o Chaveiro também esquece, senão volta no reinício")
         // Voltar à chave do Deck também troca a chave (a troca anterior tirou o login, então loga de novo).
         var d = armazem.ler(); d.acesso = "ACESSO"; d.renovacao = "RENOVA"; d.expiraEm = rel.agora.timeIntervalSince1970 + 90_000; armazem.gravar(d)
         _ = conta.curtida("spotify:track:x")
         XCTAssertNotNil(conta.limiteRestante())
         conta.usarChaveDoDeck()
         XCTAssertNil(conta.limiteRestante())
-        XCTAssertNil(armazem.ler().bloqueadoAte)
     }
 
     func testPedidoDeEsperaSobreviveAoReinicioDoApp() {
         let rel = RelogioDoLimite(Date(timeIntervalSince1970: 2_000_000))
         let armazem = ArmazemSpotifyMemoria(DadosSpotify(clientId: chaveDeTeste, acesso: "ACESSO", renovacao: "RENOVA", expiraEm: rel.agora.timeIntervalSince1970 + 90_000))
+        let arquivo = FileManager.default.temporaryDirectory.appendingPathComponent("spotify-limite-\(UUID())/spotify-limite.json")
+        defer { try? FileManager.default.removeItem(at: arquivo.deletingLastPathComponent()) }
         let t = TransporteFalso { _ in RespostaWeb(status: 429, corpo: Data(), esperar: 26_657) }
-        let conta = ContaSpotify(armazem: armazem, transporte: t, agora: { rel.agora })
+        let conta = ContaSpotify(armazem: armazem, limite: LimiteEmArquivo(url: arquivo), transporte: t, agora: { rel.agora })
         _ = conta.curtida("spotify:track:x")
         XCTAssertNotNil(conta.limiteRestante())
-        // O app reinicia: conta nova com o mesmo armazém.
+        let modo = (try? FileManager.default.attributesOfItem(atPath: arquivo.path))?[.posixPermissions] as? Int
+        XCTAssertEqual(modo, 0o600, "arquivo comum, só do dono")
+        // O app reinicia: conta nova com o mesmo arquivo.
         rel.ir(3600)
         let t2 = TransporteFalso { _ in respostaJson(200, [false]) }
-        let nova = ContaSpotify(armazem: armazem, transporte: t2, agora: { rel.agora })
+        let nova = ContaSpotify(armazem: armazem, limite: LimiteEmArquivo(url: arquivo), transporte: t2, agora: { rel.agora })
         XCTAssertEqual(nova.limiteRestante() ?? 0, 26_657 - 3600, accuracy: 2)
         _ = nova.curtida("spotify:track:y")
         XCTAssertEqual(t2.pedidos.count, 0, "dentro da espera nenhum pedido sai, nem depois de reiniciar")
@@ -164,4 +169,44 @@ final class SpotifyLimiteTestes: XCTestCase {
         XCTAssertFalse(reg.linhas.joined().contains("ACESSO"))
         _ = conta
     }
+
+    /// O 429 não vai mais para o armazém do Chaveiro: gravar o limite não pode tocar nele (nem ler).
+    func testLimiteNaoToucaNoArmazemDoChaveiro() {
+        let espiao = ArmazemEspiao()
+        let t = TransporteFalso { _ in RespostaWeb(status: 429, corpo: Data(), esperar: 60) }
+        let conta = ContaSpotify(armazem: espiao, transporte: t)
+        XCTAssertEqual(espiao.chamadas, 0, "criar a conta não lê o Chaveiro")
+        XCTAssertNil(conta.limiteRestante())
+        XCTAssertEqual(espiao.chamadas, 0)
+    }
+
+    /// A partida: criar a conta e pedir o limite na linha principal nunca chega ao Chaveiro. O que lê o Chaveiro lê fora dela.
+    func testPartidaNaoLeOChaveiroNaLinhaPrincipal() {
+        let espiao = ArmazemEspiao(dados: DadosSpotify(clientId: chaveDeTeste, acesso: "A", renovacao: "R", expiraEm: 1e12))
+        let cache = ArmazemSpotifyEmCache(espiao)
+        XCTAssertTrue(Thread.isMainThread)
+        let conta = ContaSpotify(armazem: cache, limite: LimiteEmMemoria(), transporte: TransporteFalso { _ in nil })
+        _ = conta.limiteRestante()
+        XCTAssertEqual(espiao.chamadas, 0, "a partida não pode tocar no Chaveiro")
+        let leu = expectation(description: "leitura em segundo plano")
+        DispatchQueue.global().async { _ = conta.conectado; _ = conta.conectado; _ = conta.nome; leu.fulfill() }
+        wait(for: [leu], timeout: 5)
+        XCTAssertEqual(espiao.chamadas, 1, "uma leitura só, e fora da linha principal")
+        XCTAssertEqual(espiao.chamadasNaPrincipal, 0)
+    }
+}
+
+/// Armazém que conta quem o chamou e de que fio.
+final class ArmazemEspiao: ArmazemSpotify, @unchecked Sendable {
+    private let trava = NSLock()
+    private var dados: DadosSpotify
+    private var _chamadas = 0
+    private var _naPrincipal = 0
+    init(dados: DadosSpotify = DadosSpotify()) { self.dados = dados }
+    var chamadas: Int { trava.lock(); defer { trava.unlock() }; return _chamadas }
+    var chamadasNaPrincipal: Int { trava.lock(); defer { trava.unlock() }; return _naPrincipal }
+    private func marcar() { trava.lock(); _chamadas += 1; if Thread.isMainThread { _naPrincipal += 1 }; trava.unlock() }
+    func ler() -> DadosSpotify { marcar(); return dados }
+    func gravar(_ d: DadosSpotify) -> Bool { marcar(); dados = d; return true }
+    func apagar() { marcar() }
 }

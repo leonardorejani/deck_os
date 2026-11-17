@@ -30,12 +30,26 @@ final class ModeloSpotify: ObservableObject {
     var esperaMaxima: TimeInterval = 180
     private var espera: EsperaDoRetorno?
 
-    init(conta: ContaSpotify) {
+    /// `lerNaPartida: false` (o app de verdade): nada aqui toca no Chaveiro ao nascer. O que está guardado lá chega por
+    /// `atualizar()`, em segundo plano, na primeira vez que uma tela precisa. Ler o Chaveiro na linha principal faz o macOS
+    /// pedir a senha e o app inteiro espera a resposta.
+    init(conta: ContaSpotify, lerNaPartida: Bool = true) {
         self.conta = conta
-        self.conectado = conta.conectado
-        self.chave = conta.chavePropria ?? ""
-        self.nome = conta.nome
+        if lerNaPartida {
+            self.conectado = conta.conectado
+            self.chave = conta.chavePropria ?? ""
+            self.nome = conta.nome
+            self.usaChavePropria = conta.chavePropria != nil
+            self.carregado = true
+        } else {
+            self.conectado = false
+            self.chave = ""
+            self.nome = nil
+            self.usaChavePropria = false
+        }
     }
+
+    private var carregado = false
 
     var chaveValida: Bool { ContaSpotify.chaveValida(chave.trimmingCharacters(in: .whitespacesAndNewlines)) }
 
@@ -43,7 +57,7 @@ final class ModeloSpotify: ObservableObject {
     var temChaveEmbutida: Bool { conta.temChaveEmbutida }
 
     /// A pessoa colou a própria chave (que vale no lugar da do Deck).
-    var usaChavePropria: Bool { conta.chavePropria != nil }
+    @Published private(set) var usaChavePropria = false
 
     /// Pronto para conectar: chave colada inteira, ou campo vazio com a chave do Deck.
     private var temChave: Bool {
@@ -53,11 +67,31 @@ final class ModeloSpotify: ObservableObject {
     var situacao: SituacaoSpotify { SpotifyLogica.situacao(chaveValida: temChave, conectado: conectado, conectando: conectando) }
 
     func atualizar() {
+        guard carregado else { carregarEmSegundoPlano(); return }
         conectado = conta.conectado
         nome = conta.nome
         if conectado, nome == nil { buscarNome() }
         // O Spotify recusou esta conta na chave do Deck (numa chamada do player): mostra o passo a passo da chave própria.
         if conta.precisaChavePropria, !conectado { pedirChavePropria() }
+    }
+
+    private var carregando = false
+
+    /// A primeira leitura do Chaveiro, fora da linha principal. As telas mostram "desconectado" até ela voltar.
+    private func carregarEmSegundoPlano() {
+        guard !carregando else { return }
+        carregando = true
+        let conta = self.conta
+        Task {
+            let lido = await Task.detached { (conta.conectado, conta.chavePropria, conta.nome) }.value
+            carregando = false
+            carregado = true
+            conectado = lido.0
+            usaChavePropria = lido.1 != nil
+            if chave.isEmpty { chave = lido.1 ?? "" }
+            nome = lido.2
+            atualizar()
+        }
     }
 
     private func buscarNome() {
@@ -80,6 +114,7 @@ final class ModeloSpotify: ObservableObject {
         guard ContaSpotify.chaveValida(c), c != conta.clientId else { return }
         _ = conta.definirClientId(c)
         conectado = conta.conectado
+        usaChavePropria = conta.chavePropria != nil
     }
 
     func conectar() async {
@@ -149,6 +184,7 @@ final class ModeloSpotify: ObservableObject {
     /// "Voltar para a chave do Deck": apaga a chave colada e o login que ela fez.
     func usarChaveDoDeck() {
         conta.usarChaveDoDeck()
+        usaChavePropria = false
         chave = ""
         nome = nil
         conectado = conta.conectado
