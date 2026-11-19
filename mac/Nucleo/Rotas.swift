@@ -188,6 +188,8 @@ struct Roteador: Sendable {
     var processos: (any ProcessosDoMac)? = nil
     /// A central do Google Meet (estado, entrar, microfone, câmera e sair). Nil: as rotas /api/meet não existem (404).
     var meet: (any MeetDoMac)? = nil
+    /// Os pedidos de permissão do Claude Code esperando Permitir ou Negar. Nil: o estado não leva `aprovacoes` e a rota /api/aprovacoes/<id> responde 404.
+    var aprovacoes: Aprovacoes? = nil
 
     func responder(_ r: HttpRequisicao) -> RespostaRota {
         if r.caminho == "/api/parear" {
@@ -230,7 +232,12 @@ struct Roteador: Sendable {
     private func api(_ r: HttpRequisicao, _ atual: Config) -> RespostaRota {
         switch r.caminho {
         case "/api/estado":
-            return somente(["GET"], r) ?? .codificar(200, paineis.estado())
+            if let e = somente(["GET"], r) { return e }
+            // Quem pede o estado é o iPhone: é assim que o gancho sabe que há alguém ali para responder.
+            aprovacoes?.iphoneApareceu()
+            var estado = paineis.estado()
+            if let pedidos = aprovacoes?.pendentes(), !pedidos.isEmpty { estado.aprovacoes = pedidos }
+            return .codificar(200, estado)
         case "/api/config":
             switch r.metodo {
             case "GET": return configSemCodigo(atual)
@@ -272,6 +279,9 @@ struct Roteador: Sendable {
         }
         if r.caminho == "/api/reuniao/entrar" {
             return somente(["POST"], r) ?? entrarNaReuniao(r)
+        }
+        if let id = sufixo(r.caminho, "/api/aprovacoes/") {
+            return somente(["POST"], r) ?? responderAprovacao(id, r)
         }
         if r.caminho.hasPrefix("/api/sessoes/"), r.caminho.hasSuffix("/abrir") {
             let id = String(r.caminho.dropFirst("/api/sessoes/".count).dropLast("/abrir".count))
@@ -435,6 +445,16 @@ struct Roteador: Sendable {
             }
             return .codificar(200, CompromissoCriado(ok: true, padraoSalvo: padraoSalvo))
         }
+    }
+
+    /// POST /api/aprovacoes/<id> com {"decisao": "allow"|"deny"} (ou ?decisao=). O pedido que venceu ou que o terminal já respondeu dá 404.
+    private func responderAprovacao(_ id: String, _ r: HttpRequisicao) -> RespostaRota {
+        guard let aprovacoes else { return .erro(404, "Essa rota não existe.") }
+        let corpo = (try? JSONSerialization.jsonObject(with: r.corpo)) as? [String: Any]
+        let texto = (corpo?["decisao"] as? String) ?? r.query["decisao"] ?? ""
+        guard let decisao = DecisaoDeAprovacao(rawValue: texto) else { return .erro(400, "A decisão tem que ser allow ou deny.") }
+        guard aprovacoes.decidir(id, decisao) else { return .erro(404, "Esse pedido já foi respondido ou venceu.") }
+        return .json(200, Data(#"{"ok":true}"#.utf8))
     }
 
     private func abrirSessao(_ id: String) -> RespostaRota {

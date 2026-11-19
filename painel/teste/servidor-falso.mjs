@@ -22,6 +22,10 @@ const padrao = () => ({
   spotify: 'tocando',        // tocando | pausado | fechado
   agenda: 'normal',          // normal | vazia | sem | muitas (um dia lotado) | erro (a rota falha)
   sessoes: 5,                // 0 a 12
+  aprovacoes: [],            // pedidos de permissão do Claude Code esperando: {id, projeto, ferramenta, titulo, resumo, segundos}. O tempo conta a partir do primeiro estado que os traz
+  aprovacaoVencida: false,   // POST /api/aprovacoes/<id> responde 404 (venceu, ou o terminal respondeu antes)
+  aprovacaoFalha: false,     // POST /api/aprovacoes/<id> responde 500 (o pedido não chegou ao Mac)
+  outrasSessoes: [],         // sessões que não esperam: {id, nome, projeto, situacao: trabalhando|parada|concluida, passo?, desde?}
   sessaoMuda: false,         // a primeira sessão chega com outra pergunta (ela mudou)
   whatsapp: 'normal',        // normal | vazio | muitas (30 conversas) | erro (a rota falha)
   whatsappFotos: 0,          // quantas conversas extras com foto de perfil (para medir o pico de pedidos juntos)
@@ -96,14 +100,14 @@ const padrao = () => ({
 });
 let c = padrao();
 let T0 = Date.now(); // as sessões esperam desde um instante fixo (o Mac real manda sempre o mesmo `desde` até a sessão mudar)
-let cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, whatsapp: 0, whatsappV: [], whatsappIguais: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], criados: [], destinosPedidos: 0, controles: [], whatsappAbertas: [], midias: [], fotos: [], meetAcoes: [], meetLeituras: 0, usoDetalhe: [], configs: 0 };
+let cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, whatsapp: 0, whatsappV: [], whatsappIguais: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], criados: [], destinosPedidos: 0, controles: [], whatsappAbertas: [], midias: [], fotos: [], meetAcoes: [], meetLeituras: 0, usoDetalhe: [], configs: 0, aprovacoes: [] };
 let posicaoBase = { s: 132, desde: Date.now() };
 let perfilAtivo = 'trabalho';
 let criadosAgenda = [], padraoAgenda = null, lembretesAcesso = null, liberarEm = 0; // o que o iPhone criou na agenda, o destino padrão e o acesso aos Lembretes
 let codigoAtual = CODIGO, codigoAnterior = null; // rodízio: o atual, e o anterior que ainda vale (a folga de 10 min)
 let parearGasto = false, parearErros = 0; // o código de 6 dígitos serve uma vez e aguenta 5 erros
 let gravada = null; // o que o iPhone gravou: perfis e blocos, como o Mac guardaria no config.json
-const zerar = () => { parearGasto = false; parearErros = 0; codigoAtual = CODIGO; codigoAnterior = null; T0 = Date.now(); gravada = null; c = padrao(); cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, whatsapp: 0, whatsappV: [], whatsappIguais: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], criados: [], destinosPedidos: 0, controles: [], whatsappAbertas: [], midias: [], fotos: [], meetAcoes: [], meetLeituras: 0, usoDetalhe: [], configs: 0 }; posicaoBase = { s: 132, desde: Date.now() }; perfilAtivo = 'trabalho'; criadosAgenda = []; padraoAgenda = null; lembretesAcesso = null };
+const zerar = () => { parearGasto = false; parearErros = 0; codigoAtual = CODIGO; codigoAnterior = null; T0 = Date.now(); gravada = null; c = padrao(); cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, whatsapp: 0, whatsappV: [], whatsappIguais: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], criados: [], destinosPedidos: 0, controles: [], whatsappAbertas: [], midias: [], fotos: [], meetAcoes: [], meetLeituras: 0, usoDetalhe: [], configs: 0, aprovacoes: [] }; posicaoBase = { s: 132, desde: Date.now() }; perfilAtivo = 'trabalho'; criadosAgenda = []; padraoAgenda = null; lembretesAcesso = null };
 
 // com xss ligado, todo texto que a página mostra chega como HTML que tenta executar código
 const X = t => c.xss ? `"><img src=x onerror="window.__xss=(window.__xss||0)+1">${t}` : t;
@@ -280,6 +284,7 @@ function estadoSpotify() {
     ...(c.spotifyExtras === 'nao' ? {} : { volume: c.volume, ...(c.spotifyExtras === 'volume' ? {} : { volumeMac: c.volumeMac }),
       ...(c.spotifyExtras === 'login' ? { conectado: true, ...(c.spotifyLimite ? { limitadoAte: Math.ceil(Date.now() / 1000) + c.spotifyLimite } : {}), curtida: c.curtida, repetirFaixa: c.repetirFaixa, aparelho: aparelhos().find(a => a.ativo).nome } : { conectado: false }) }) };
 }
+const outras = () => c.outrasSessoes.map(o => ({ pergunta: '', desde: new Date(Date.now() - 120000).toISOString(), projeto: 'deck', ...o }));
 function estado() {
   const semMed = c.uso === 'sem-medicao';
   const selos = { whatsapp: c.xss ? X('23') : '23' };
@@ -294,6 +299,8 @@ function estado() {
       { id: 'codex', nome: 'Codex', conta: 'pro', semana: semMed ? null : 4, renova: emDias(0, 23) },
     ],
     sessoes: SESSOES().slice(0, c.sessoes).map(({ contexto, ...leve }) => leve), // o Mac de verdade só manda o contexto em /api/sessoes
+    ...(c.outrasSessoes.length ? { outrasSessoes: outras() } : {}),
+    ...(c.aprovacoes.length ? { aprovacoes: c.aprovacoes.map(a => { a._t ??= Date.now(); const { segundos, _t, ...resto } = a; return { ...resto, restante: Math.max(0, Math.ceil((segundos ?? 90) - (Date.now() - _t) / 1000)) } }) } : {}),
     whatsapp: c.whatsappOrigem === 'web' ? { total: 23, conversas: 0, origem: 'web', navegador: 'Google Chrome', aberto: true }
       : c.whatsappOrigem === 'qr' && c.whatsappTudo ? { total: 6, conversas: 2, origem: 'qr', aberto: true }
       : c.whatsappOrigem === 'qr' ? { total: 23, conversas: 5, origem: 'qr', aberto: true }
@@ -540,7 +547,17 @@ async function api(req, res, url) {
     if (c.usoDetalhe === 'erro') return json(res, 500, { erro: 'O Mac não conseguiu ler o uso.' });
     return json(res, 200, detalheUso(['dia', 'semana', 'mes'].includes(periodo) ? periodo : 'semana'));
   }
-  if (rota === '/api/sessoes') { cont.sessoes++; return json(res, 200, SESSOES().slice(0, c.sessoes)) }
+  if (rota === '/api/sessoes') { cont.sessoes++; return json(res, 200, [...SESSOES().slice(0, c.sessoes), ...outras()]) }
+  const aprova = rota.match(/^\/api\/aprovacoes\/([^/]+)$/);
+  if (aprova && m === 'POST') {
+    const id = decodeURIComponent(aprova[1]), decisao = (await lerCorpo(req)).decisao;
+    if (!['allow', 'deny'].includes(decisao)) return json(res, 400, { erro: 'A decisão tem que ser allow ou deny.' });
+    if (c.aprovacaoFalha) return json(res, 500, { erro: 'O Mac não conseguiu responder o pedido.' });
+    if (c.aprovacaoVencida || !c.aprovacoes.some(a => a.id === id)) return json(res, 404, { erro: 'Esse pedido já foi respondido ou venceu.' });
+    cont.aprovacoes.push({ id, decisao });
+    c.aprovacoes = c.aprovacoes.filter(a => a.id !== id);
+    return json(res, 200, { ok: true });
+  }
   if ((rota === '/api/whatsapp' || rota === '/api/agenda') && c.atrasoListas) await new Promise(r => setTimeout(r, c.atrasoListas));
   if (c.whatsappRico && rota.startsWith('/api/whatsapp/foto/') && m === 'GET') {
     const arq = rota.split('/').pop(); cont.fotos.push(arq);
