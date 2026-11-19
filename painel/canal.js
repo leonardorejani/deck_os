@@ -44,7 +44,7 @@
    falhasParaOffline e msParaOffline: a tela "Mac desconectado" só fecha quando o Mac sumiu de fato, com essas falhas
    seguidas E esse tempo desde a última resposta boa. Com o Mac pendurado (cada pedido espera o tempo limite inteiro),
    falhasTravado e msTravado fecham mais cedo, senão a tela ficaria uns 16 s com cara de ao vivo. Um tropeço (pedido lento, Mac reiniciando) não pisca a tela. */
-const AJUSTES = Object.assign({ tempoLimite: 5000, intervalo: 1000, deslocamento: 180000, falhasParaOffline: 3, msParaOffline: 5000, falhasTravado: 2, msTravado: 10000 }, window.DECK_AJUSTES);
+const AJUSTES = Object.assign({ tempoLimite: 5000, intervalo: 1000, deslocamento: 180000, falhasParaOffline: 3, msParaOffline: 5000, falhasTravado: 2, msTravado: 10000, semToqueMs: 10000 }, window.DECK_AJUSTES);
 
 /* a lista do WhatsApp pelo Bluetooth (uns 25 KB/s) leva mais que os 5 s dos outros pedidos: com 5 s ela nunca chegava */
 const TEMPO_WHATSAPP = AJUSTES.tempoLimite * 5;

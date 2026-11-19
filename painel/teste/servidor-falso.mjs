@@ -50,6 +50,7 @@ const padrao = () => ({
   teclas: 'poucas',          // poucas (4) | muitas (12)
   perfis: 'um',              // um | dois
   comp: 'a',
+  regras: null,              // lista de regras valendo agora (estado.regras): [{ id, nome, seq, tipo, alvo, texto, durar, segundos }]. null: o Mac não manda a chave
   blocos: { spotify: true, agenda: true, whatsapp: true, sessoes: true, uso: true },
   monitorItens: { cpu: true, memoria: true, bateria: true, rede: true, gpu: true, disco: true, energia: true, ventoinhas: true, dispositivos: true }, // o que a pessoa deixou ligado nos Ajustes do Mac
   monitor: { cpu: 12, memoria: 63, bateria: 81, naTomada: false, baixa: 1258291, sobe: 40960, gpu: 27, discoLivre: 412000000000, discoTotal: 994000000000, watts: 11.4, carregando: false, ventoinhas: [2400, 2600], ventoinhaMax: 6000, dispositivos: 3 }, // o que o Mac mediu (sem `bateria` = Mac de mesa, e o que falta some)
@@ -290,7 +291,7 @@ function estado() {
   const selos = { whatsapp: c.xss ? X('23') : '23' };
   if (c.agenda === 'sem') selos.calendario = '!';
   return {
-    agora: new Date(Date.now() + c.relogioMs).toISOString(), nomeMac: X(c.nomeMac), perfilAtivo: configCompleta().perfilAtivo, comp: c.comp, blocos: c.blocos, ...(c.semCarimbo ? {} : { configVersao: createHash('sha1').update(JSON.stringify(configCompleta())).digest('hex').slice(0, 12) }),
+    agora: new Date(Date.now() + c.relogioMs).toISOString(), nomeMac: X(c.nomeMac), perfilAtivo: configCompleta().perfilAtivo, comp: c.comp, blocos: c.blocos, ...(c.regras ? { regras: c.regras } : {}), ...(c.semCarimbo ? {} : { configVersao: createHash('sha1').update(JSON.stringify(configCompleta())).digest('hex').slice(0, 12) }),
     ...(c.blocos.monitor ? { monitor: { ...c.monitor, itens: Object.keys(c.monitorItens).filter(k => c.monitorItens[k]) } } : {}),
     spotify: estadoSpotify(),
     uso: [
@@ -378,6 +379,7 @@ async function api(req, res, url) {
     const erro = c.rejeitar || validar(nova);
     if (erro) return json(res, 422, { erro });
     if (nova.perfilAtivo) perfilAtivo = nova.perfilAtivo;
+    if (['a', 'b', 'c'].includes(nova.comp)) c.comp = nova.comp;
     gravada = { perfis: nova.perfis };
     if (nova.blocos) c.blocos = nova.blocos;
     return json(res, 200, { ...nova, versao: 1, porta: 4777 });
