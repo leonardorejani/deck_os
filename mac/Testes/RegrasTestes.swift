@@ -25,8 +25,10 @@ private func regra(_ id: String = "r1", fonte: String = "sessao", limite: Int? =
           dias: dias, de: de, ate: ate, enquantoDurar: durar, descanso: descanso, prioridade: prioridade)
 }
 
-private func entrada(_ agora: Date, sessoes: Int = 0, meet: Bool = false, spotify: Bool = false, uso: Int? = nil, naoLidas: Int? = nil) -> EntradaDeRegras {
-    EntradaDeRegras(agora: agora, sessoes: sessoes, meetEmChamada: meet, spotifyTocando: spotify, usoMaximo: uso, naoLidas: naoLidas)
+private func entrada(_ agora: Date, sessoes: Int = 0, meet: Bool = false, spotify: Bool = false, uso: Int? = nil, naoLidas: Int? = nil,
+                     whatsappAberto: Bool = true, ids: [String]? = nil) -> EntradaDeRegras {
+    EntradaDeRegras(agora: agora, sessoes: sessoes, meetEmChamada: meet, spotifyTocando: spotify, usoMaximo: uso, naoLidas: naoLidas,
+                    whatsappAberto: whatsappAberto, idsDeSessoes: ids ?? (0..<sessoes).map { "s\($0)" })
 }
 
 final class MotorDeRegrasTestes: XCTestCase {
@@ -202,6 +204,63 @@ final class MotorDeRegrasTestes: XCTestCase {
         _ = m.avaliar(entrada(em(10, 0, seg: 10)), regras: r, perfis: perfis, pausada: false)
         m.testar("r1", agora: em(10, 1))
         XCTAssertEqual(m.avaliar(entrada(em(10, 1, seg: 1)), regras: r, perfis: perfis, pausada: false).count, 1)
+    }
+
+    func testAbaDoWhatsAppFechadaQueReabreNaoViraMensagemNova() {
+        var m = motor()
+        let r = [regra(fonte: "aviso", tipo: "aviso", alvo: "Mensagem nova")]
+        XCTAssertEqual(m.avaliar(entrada(em(10), naoLidas: 5), regras: r, perfis: perfis, pausada: false), [])
+        // aba fechada: o total 0 não é medição
+        XCTAssertEqual(m.avaliar(entrada(em(10, 0, seg: 5), naoLidas: 0, whatsappAberto: false), regras: r, perfis: perfis, pausada: false), [])
+        // reabre com as mesmas 5 não lidas: nada chegou
+        XCTAssertEqual(m.avaliar(entrada(em(10, 0, seg: 10), naoLidas: 5), regras: r, perfis: perfis, pausada: false), [])
+        // e uma mensagem de verdade ainda dispara
+        XCTAssertEqual(m.avaliar(entrada(em(10, 0, seg: 15), naoLidas: 6), regras: r, perfis: perfis, pausada: false).count, 1)
+    }
+
+    func testTestarDeNovoComARegraAindaAtivaGeraSeqNovo() {
+        var m = motor()
+        let r = [regra(fonte: "meet", durar: true, descanso: 60)]
+        let a = m.avaliar(entrada(em(10), meet: true), regras: r, perfis: perfis, pausada: false)
+        m.testar("r1", agora: em(10, 0, seg: 2))
+        let b = m.avaliar(entrada(em(10, 0, seg: 3), meet: true), regras: r, perfis: perfis, pausada: false)
+        XCTAssertEqual(b.count, 1)
+        XCTAssertNotEqual(a[0].seq, b[0].seq, "Testar com a regra já ativa precisa de seq novo, senão o iPhone descarta")
+        // e um teste a mais dentro da histerese do teste anterior também
+        var n = motor()
+        let t = [regra(ligada: false)]
+        n.testar("r1", agora: em(10))
+        let c = n.avaliar(entrada(em(10, 0, seg: 1)), regras: t, perfis: perfis, pausada: false)
+        _ = n.avaliar(entrada(em(10, 0, seg: 17)), regras: t, perfis: perfis, pausada: false)
+        n.testar("r1", agora: em(10, 0, seg: 18))
+        let d = n.avaliar(entrada(em(10, 0, seg: 19)), regras: t, perfis: perfis, pausada: false)
+        XCTAssertEqual(d.count, 1)
+        XCTAssertNotEqual(c[0].seq, d[0].seq)
+    }
+
+    func testSessaoNovaComOutraPendenteDisparaDeNovoDepoisDoDescanso() {
+        var m = motor()
+        let r = [regra(descanso: 1)]
+        let a = m.avaliar(entrada(em(10), sessoes: 1, ids: ["s1"]), regras: r, perfis: perfis, pausada: false)
+        XCTAssertEqual(a.count, 1)
+        // chega a segunda dentro do descanso: segue o mesmo seq
+        let b = m.avaliar(entrada(em(10, 0, seg: 20), sessoes: 2, ids: ["s1", "s2"]), regras: r, perfis: perfis, pausada: false)
+        XCTAssertEqual(b[0].seq, a[0].seq)
+        // passado o descanso, a terceira dispara de novo
+        let c = m.avaliar(entrada(em(10, 2), sessoes: 3, ids: ["s1", "s2", "s3"]), regras: r, perfis: perfis, pausada: false)
+        XCTAssertEqual(c.count, 1)
+        XCTAssertNotEqual(c[0].seq, a[0].seq)
+        // sem sessão nova o seq não muda
+        let d = m.avaliar(entrada(em(10, 2, seg: 5), sessoes: 3, ids: ["s1", "s2", "s3"]), regras: r, perfis: perfis, pausada: false)
+        XCTAssertEqual(d[0].seq, c[0].seq)
+    }
+
+    func testSessaoNovaSemDescansoDisparaNaHora() {
+        var m = motor()
+        let r = [regra(descanso: 0)]
+        let a = m.avaliar(entrada(em(10), sessoes: 1, ids: ["s1"]), regras: r, perfis: perfis, pausada: false)
+        let b = m.avaliar(entrada(em(10, 0, seg: 2), sessoes: 2, ids: ["s1", "s2"]), regras: r, perfis: perfis, pausada: false)
+        XCTAssertNotEqual(a[0].seq, b[0].seq)
     }
 
     func testDisparosNovosTemSeqDiferenteMesmoNoMesmoInstante() {

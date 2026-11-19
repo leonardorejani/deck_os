@@ -74,6 +74,8 @@ function regrasPasso(e) {
     const nova = lista.find(r => !RG.tratadas.has(r.seq));
     if (nova) {
       RG.tratadas.add(nova.seq);
+      /* a lista vem por prioridade: a primeira vence e as outras do mesmo tipo (tela, composição, perfil) valendo juntas ficam de fora */
+      if (nova.tipo !== 'aviso') for (const o of lista) if (o !== nova && o.tipo === nova.tipo) RG.tratadas.add(o.seq);
       if (nova.tipo === 'aviso') avisar(nova.texto);
       else { RG.atual = { ...nova, inicio: 0 }; regrasLigarTique() }
     }

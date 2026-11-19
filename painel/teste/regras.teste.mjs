@@ -157,4 +157,14 @@ export default async function (h) {
     h.ok(!(await cartao(p)).visivel && !(await aberta(p, '#f-sessoes')), 'organizar: com o modo organizar aberto nada troca');
     await p.context().close();
   }
+
+  /* 11. duas regras de tela valendo juntas: a de maior prioridade (primeira da lista) vence e a outra fica de fora */
+  await h.reset(); {
+    const p = await h.pagina({ w: 932, h: 430 }); await pronta(h, p);
+    await h.cenario({ regras: [regra({ id: 'alta', alvo: 'meet', texto: 'Indo para Meet' }), regra({ id: 'baixa', alvo: 'sessoes', texto: 'Indo para Sessões' })] });
+    h.ok(await h.espera(p, () => document.querySelector('#f-meet').classList.contains('aberta'), null, 6000), 'prioridade: a regra de maior prioridade levou ao Meet');
+    await h.dormir(4500);
+    h.ok((await aberta(p, '#f-meet')) && !(await aberta(p, '#f-sessoes')) && !(await cartao(p)).visivel, 'prioridade: a de menor prioridade não trocou nem mostrou cartão depois');
+    await p.context().close();
+  }
 }

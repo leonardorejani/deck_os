@@ -296,6 +296,10 @@ struct EntradaDeRegras: Sendable {
     var usoMaximo: Int?
     /// Total de não lidas do WhatsApp. nil sem leitura.
     var naoLidas: Int?
+    /// false quando o WhatsApp está sem aba ou sem conexão: o total 0 que vem junto não é medição e não entra na conta.
+    var whatsappAberto: Bool = true
+    /// Os ids das sessões pedindo você. Serve para perceber uma sessão nova chegando com outras ainda pendentes.
+    var idsDeSessoes: [String] = []
 }
 
 struct MotorDeRegras: Sendable {
@@ -312,6 +316,9 @@ struct MotorDeRegras: Sendable {
     private var naoLidasAntes: Int?
     private var chegouEm: Date?
     private var testes: [String: Date] = [:]
+    /// Testes pedidos que ainda não ganharam um seq novo. Sem isso, Testar numa regra já ativa não mostra cartão nenhum.
+    private var testesNovos: Set<String> = []
+    private var sessoesAntes: Set<String>?
     var calendario: Calendar
 
     /// Quanto tempo a mensagem nova vale como "chegou uma mensagem".
@@ -325,19 +332,27 @@ struct MotorDeRegras: Sendable {
     mutating func testar(_ id: String, agora: Date) {
         testes = testes.filter { $0.value > agora }
         testes[id] = agora.addingTimeInterval(Self.duracaoDoTeste)
+        testesNovos.insert(id)
     }
 
     mutating func avaliar(_ e: EntradaDeRegras, regras: [Regra], perfis: [Perfil], pausada: Bool) -> [RegraAtiva] {
         let ids = Set(regras.map(\.id))
         situacoes = situacoes.filter { ids.contains($0.key) }
         testes = testes.filter { $0.value > e.agora }
+        testesNovos = testesNovos.intersection(ids)
 
         // "Mensagem nova": o total de não lidas subiu desde a última olhada. Vale por 30 s.
-        if let total = e.naoLidas {
+        // Aba fechada ou conexão caída manda total 0 sem ser medição: fica de fora e o total anterior segue de base.
+        if let total = e.naoLidas, e.whatsappAberto {
             if let antes = naoLidasAntes, total > antes { chegouEm = e.agora }
             naoLidasAntes = total
         }
         let mensagemNova = chegouEm.map { e.agora.timeIntervalSince($0) < Self.validadeDoAviso } ?? false
+
+        // Uma sessão que não estava na última olhada: vale como nova mesmo com outras pendentes.
+        let idsAgora = Set(e.idsDeSessoes)
+        let sessaoChegou = sessoesAntes.map { !idsAgora.isSubset(of: $0) } ?? false
+        sessoesAntes = idsAgora
 
         var valendo: [(indice: Int, regra: Regra, seq: Int)] = []
         for (i, r) in regras.enumerated() {
@@ -358,9 +373,11 @@ struct MotorDeRegras: Sendable {
             }
             if (condicao && possivel) || teste {
                 s.cessouEm = nil
-                if !s.ativa {
+                let emDescanso = s.ultimoDisparo.map { e.agora.timeIntervalSince($0) < Double(r.descanso) * 60 } ?? false
+                let reteste = testesNovos.remove(r.id) != nil
+                let sessaoNova = s.ativa && sessaoChegou && r.quando.fonte == "sessao" && condicao && !emDescanso
+                if !s.ativa || reteste || sessaoNova {
                     s.ativa = true
-                    let emDescanso = s.ultimoDisparo.map { e.agora.timeIntervalSince($0) < Double(r.descanso) * 60 } ?? false
                     s.suprimida = emDescanso && !teste
                     if !s.suprimida {
                         ultimaSeq = max(ultimaSeq + 1, Int(e.agora.timeIntervalSince1970 * 1000))
@@ -423,7 +440,8 @@ final class VigiaDeRegras: @unchecked Sendable {
         let emChamada = usaMeet ? lerMeet(meet, agora) : false
         let entrada = EntradaDeRegras(
             agora: agora, sessoes: estado.sessoes.count, meetEmChamada: emChamada, spotifyTocando: estado.spotify?.tocando ?? false,
-            usoMaximo: estado.uso.compactMap(\.semana).max(), naoLidas: estado.whatsapp?.total)
+            usoMaximo: estado.uso.compactMap(\.semana).max(), naoLidas: estado.whatsapp?.total,
+            whatsappAberto: estado.whatsapp?.aberto != false, idsDeSessoes: estado.sessoes.map(\.id))
         trava.lock(); defer { trava.unlock() }
         return motor.avaliar(entrada, regras: config.regras, perfis: config.perfis, pausada: config.regrasPausadas)
     }
