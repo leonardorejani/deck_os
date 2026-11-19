@@ -216,6 +216,11 @@ struct Sessao: Codable, Equatable, Sendable {
     var contexto: String? = nil
     /// A resposta que a própria sessão sugere (`suggestedReply`), só para ler. Ausente em Mac antigo.
     var sugestao: String? = nil
+    /// nil: a sessão espera a sua resposta (é o caso de sempre). Nas outras: "trabalhando", "parada" ou "concluida".
+    /// Ausente em Mac antigo, e então toda sessão da lista espera resposta.
+    var situacao: String? = nil
+    /// O último passo da sessão, em poucas palavras (o `detail` do job), sem segredos. Só nas que não esperam resposta.
+    var passo: String? = nil
 }
 
 struct ResumoWhatsApp: Codable, Equatable, Sendable {
@@ -266,6 +271,7 @@ struct Estado: Codable, Equatable, Sendable {
     var blocos: Blocos
     var spotify: EstadoSpotify?
     var uso: [UsoConta]
+    /// Só as que esperam a resposta da pessoa.
     var sessoes: [Sessao]
     var whatsapp: ResumoWhatsApp?
     var agenda: ResumoAgenda?
@@ -285,6 +291,12 @@ struct Estado: Codable, Equatable, Sendable {
     /// Carimbo da config (o mesmo conteúdo que /api/config devolve). O painel só relê a config quando ele muda.
     /// Ausente em Mac antigo: o painel volta a reler de vez em quando.
     var configVersao: String? = nil
+    /// As sessões que não esperam resposta (trabalhando, paradas e as que acabaram de terminar), sem o contexto.
+    /// Ausente quando não há nenhuma e em Mac antigo.
+    var outrasSessoes: [Sessao]? = nil
+    /// Pedidos de permissão do Claude Code esperando Permitir ou Negar (o gancho de aprovação). Ausente quando não há
+    /// nenhum e em Mac antigo.
+    var aprovacoes: [PedidoDeAprovacao]? = nil
 }
 
 extension Config {
@@ -394,7 +406,8 @@ struct ConversaWhatsApp: Codable, Equatable, Sendable {
 // GET  /api/whatsapp/midia?chat=<id>&id=<mensagem> -> {"tipo", "dados" (base64)}  a foto ou o áudio de uma mensagem (origem "qr", até 8 MB, nunca visualização única)
 // POST /api/whatsapp/abrir         <- {"id": "<conversa>"}  abre a conversa no WhatsApp Web do Mac -> {"ok": true, "aviso"?}
 // GET  /api/agenda?de=AAAA-MM-DD&dias=N -> [Evento]
-// GET  /api/sessoes                -> [Sessao]
+// GET  /api/sessoes                -> [Sessao]  as que esperam resposta primeiro (com contexto), depois as outras (`situacao` e `passo`)
+// POST /api/aprovacoes/<id>        <- {"decisao": "allow"|"deny"}  responde um pedido de permissão do Claude Code (Estado.aprovacoes) -> {"ok": true}. Pedido vencido ou já respondido: 404.
 // POST /api/sessoes/<id>/abrir     traz para a frente o terminal da sessão no Mac -> SessaoAberta {"ok", "como": "terminal"|"pasta", "app"}
 // POST /api/reuniao/entrar         <- {"link": "https://..."} abre a reunião no Mac (Meet e Teams no navegador padrão, Zoom no app se houver). Só Meet, Zoom e Teams, senão 400.
 // GET  /api/meet                   -> EstadoMeet {"aberta", "naChamada"?, "microfone", "camera" (ligado|desligado|desconhecido|sem-reuniao), "aviso"?}  a central do Google Meet
