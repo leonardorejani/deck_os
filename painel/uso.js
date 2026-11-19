@@ -9,7 +9,7 @@
 const CHAVE_PERIODO_USO = 'deck-uso-periodo';
 const PERIODOS_USO = [['dia', 'Dia'], ['semana', 'Semana'], ['mes', 'Mês']];
 const periodoGuardado = () => { const p = lerGuardado(CHAVE_PERIODO_USO); return PERIODOS_USO.some(x => x[0] === p) ? p : 'semana' };
-const us = { periodo: 'semana', dados: null, erro: '', semRota: false, seq: 0, lendo: false, resta: false, hora: false, chave: '' };
+const us = { periodo: 'semana', dados: null, erro: '', semRota: false, seq: 0, lendo: false, resta: false, hora: false, chave: '', sel: {}, hov: null, graf: {} };
 
 /* ---------- formatos ---------- */
 const usoTexto = h => h.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
@@ -41,15 +41,17 @@ const usoRef = () => V?.ref ?? Date.now();
 function textoRitmo(r, ref) {
   if (!r) return '';
   const base = r.enche ? `No ritmo atual, enche em ${contagemRenova(r.enche, ref)}` : r.situacao === 'rapido' ? 'Passa do limite antes de renovar' : r.situacao === 'sobra' ? 'Vai sobrar muito' : r.projecao != null ? 'No ritmo atual, dá até a renovação' : '';
-  return `${base ? base + '. ' : ''}Esperado agora: ${r.esperado}%`;
+  return `${base}\nEsperado agora: ${r.esperado}%`; // duas linhas curtas, a primeira pode ficar vazia sem mudar a altura do cartão
 }
 
 /* ---------- forma (o que só muda quando a lista de contas, o período ou os modelos mudam) ---------- */
+/* anel do cartão de janela: a barra (i e u) segue como a fonte dos valores, o anel é só o desenho dela (--p: usado, --r: marca do ritmo) */
+const ANEL_USO = '<svg class="anel" viewBox="0 0 100 100" aria-hidden="true"><circle class="bg" cx="50" cy="50" r="42"/><circle class="fg" cx="50" cy="50" r="42" pathLength="100"/><line class="rit" x1="86" y1="50" x2="99" y2="50"/></svg>';
 const cartaoJanela = (k, rot) => `<div class="mn-cartao us-cartao us-janela" data-c="${k}" role="group" aria-label="${esc(rot)}">
   <button type="button" class="us-valor" data-us-resta><span class="mn-topo"><span class="mn-ic" aria-hidden="true">${SVG.raio}</span><span class="mn-rot">${esc(rot)}</span><span class="mn-tag" data-t="${k}.modo"></span></span><b class="mn-num us-num" data-n="${k}" data-f="pct"></b></button>
-  <span class="mn-barra us-barra"><i data-b="${k}"></i><u data-m="${k}"></u></span>
+  <span class="mn-barra us-barra"><i data-b="${k}"></i><u data-m="${k}"></u>${ANEL_USO}</span>
   <button type="button" class="us-nota us-renova" data-us-hora data-t="${k}.renova"></button>
-  <span class="us-nota" data-t="${k}.ritmo"></span><span class="us-nota" data-t="${k}.med"></span></div>`;
+  <span class="us-nota us-ritmo" data-t="${k}.ritmo"></span></div>`;
 
 const cartaoNumero = (k, icone, rot, f) => `<div class="mn-cartao us-cartao" data-c="${k}" role="group"><span class="mn-topo"><span class="mn-ic" aria-hidden="true">${SVG[icone]}</span><span class="mn-rot">${rot}</span></span><b class="mn-num us-num" data-n="${k}" data-f="${f}"></b><span class="us-nota" data-t="${k}.nota"></span></div>`;
 
@@ -63,20 +65,20 @@ function rotulosDoGrafico(periodo, ate) {
 }
 
 function blocoGasto(k, g, periodo, ate) {
-  const barras = '<i></i>'.repeat(g.serie.length || { dia: 24, semana: 7, mes: 30 }[periodo]);
+  const barras = '<span class="us-gl" data-gl="topo" aria-hidden="true"><small></small></span><span class="us-gl" data-gl="meio" aria-hidden="true"><small></small></span>' + '<i role="img"></i>'.repeat(g.serie.length || { dia: 24, semana: 7, mes: 30 }[periodo]);
   const modelos = g.modelos.map((m, i) => `<li class="us-modelo" data-c="${k}.m${i}"><span class="us-m-nome">${esc(m.nome)}</span><b class="us-m-parte" data-t="${k}.m${i}.parte"></b><span class="us-m-tok" data-t="${k}.m${i}.tok"></span><span class="us-m-custo" data-t="${k}.m${i}.custo"></span><span class="mn-barra us-m-barra"><i data-b="${k}.m${i}"></i></span></li>`).join('');
   return `${cartaoNumero(`${k}.tok`, 'cpu', 'Tokens', 'tok')}
   ${cartaoNumero(`${k}.usd`, 'raio', 'Custo estimado', 'usd')}
   ${cartaoNumero(`${k}.resp`, 'terminal', 'Respostas', 'int')}
   <div class="mn-cartao us-cartao us-larga" data-c="${k}.tipos" role="group" aria-label="Tokens por tipo"><span class="mn-topo"><span class="mn-ic" aria-hidden="true">${SVG.memoria}</span><span class="mn-rot">Por tipo de token</span></span>
     <dl class="us-tipos">${[['ent', 'Entrada'], ['sai', 'Saída'], ['cl', 'Cache lido'], ['ce', 'Cache escrito']].map(([c, r]) => `<div><dt>${r}</dt><dd class="us-num" data-n="${k}.${c}" data-f="tok"></dd></div>`).join('')}</dl></div>
-  <div class="mn-cartao us-cartao us-larga" data-c="${k}.graf" role="img"><span class="mn-topo"><span class="mn-ic" aria-hidden="true">${SVG.disco}</span><span class="mn-rot">Tokens por ${periodo === 'dia' ? 'hora' : 'dia'}</span><span class="mn-tag" data-t="${k}.pico"></span></span>
+  <div class="mn-cartao us-cartao us-larga" data-c="${k}.graf" role="group"><span class="mn-topo"><span class="mn-ic" aria-hidden="true">${SVG.disco}</span><span class="mn-rot">Tokens por ${periodo === 'dia' ? 'hora' : 'dia'}</span><span class="mn-tag" data-t="${k}.pico"></span></span>
     <span class="us-grafico" data-n-barras="${g.serie.length}">${barras}</span><span class="us-eixo us-eixo-${periodo}" aria-hidden="true">${rotulosDoGrafico(periodo, ate)}</span></div>
   <div class="mn-cartao us-cartao us-larga" data-c="${k}.modelos" role="group" aria-label="Divisão por modelo"><span class="mn-topo"><span class="mn-ic" aria-hidden="true">${SVG.rede}</span><span class="mn-rot">Por modelo</span></span>
     <ul class="us-modelos">${modelos || '<li class="us-nota">Nenhum uso neste período</li>'}</ul></div>`;
 }
 
-const cabecalhoConta = (id, c, sub) => `<h3 id="${id}">${icServico(c)}<span>${esc(c)}${sub ? ` <small>${esc(sub)}</small>` : ''}</span></h3>`;
+const cabecalhoConta = (id, c, sub, med) => `<h3 id="${id}">${icServico(c)}<span>${esc(c)}${sub ? ` <small>${esc(sub)}</small>` : ''}</span>${med ? `<small class="us-med" data-t="${med}"></small>` : ''}</h3>`;
 
 function estruturaUso(d) {
   const partes = [`${d.periodo}|${d.ate}`];
@@ -84,7 +86,7 @@ function estruturaUso(d) {
   d.contas.forEach((c, i) => {
     const gasto = c.gasto ? blocoGasto(`${i}.g`, c.gasto, d.periodo, d.ate) : '';
     const janelas = c.janelas.map((j, k) => cartaoJanela(`${i}.j${k}`, j.rotulo)).join('') || `<div class="mn-cartao us-cartao us-sem" data-c="${i}.sem" role="group"><span class="us-nota">Sem medição desta conta. O Mac ainda não leu o uso dela.</span></div>`;
-    html += `<section class="us-conta${c.gasto ? '' : ' us-simples'}" aria-labelledby="us-c${i}">${cabecalhoConta(`us-c${i}`, c.nome, c.conta)}<div class="us-grade">${janelas}${gasto}</div></section>`;
+    html += `<section class="us-conta${c.gasto ? '' : ' us-simples'}" aria-labelledby="us-c${i}">${cabecalhoConta(`us-c${i}`, c.nome, c.conta, `${i}.med`)}<div class="us-grade">${janelas}${gasto}</div></section>`;
     partes.push(`${c.id}:${c.janelas.map(j => j.rotulo).join(',')}:${c.gasto ? c.gasto.modelos.map(m => m.nome).join(',') + '/' + c.gasto.serie.length : '-'}`);
   });
   if (d.claudeMac) {
@@ -92,6 +94,49 @@ function estruturaUso(d) {
     partes.push('mac:' + d.claudeMac.modelos.map(m => m.nome).join(',') + '/' + d.claudeMac.serie.length);
   }
   return { html: `<div class="us-secoes">${html}</div><p class="us-rodape" id="us-rodape" aria-live="polite"></p>`, chave: partes.join('#') };
+}
+
+/* ---------- gráfico: toque (ou mouse em cima) numa barra diz o dia e o valor ---------- */
+const usoNum = n => usoTexto(usoTokens(n)).replace(/,0 /, ' '); // "27,0 mi" -> "27 mi" nas linhas de grade
+function rotuloBarra(info, i) {
+  const n = info.g.serie.length;
+  if (info.periodo === 'dia') return `${i}h`;
+  const [a, m, d] = info.ate.split('-').map(Number), dt = new Date(a, m - 1, d - (n - 1 - i));
+  return `${dt.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')} ${String(dt.getDate()).padStart(2, '0')}/${String(dt.getMonth() + 1).padStart(2, '0')}`;
+}
+const valorBarra = (info, i) => info.g.serie[i] ? usoTexto(usoTokens(info.g.serie[i])) : 'sem uso';
+function pintarGrafico(corpo, k) {
+  const info = us.graf[k], c = corpo.querySelector(`[data-c="${k}.graf"]`); if (!info || !c) return;
+  const graf = $('.us-grafico', c), barras = $$('i', graf);
+  const ativo = us.hov?.k === k ? us.hov.i : us.sel[k] ?? null;
+  barras.forEach((b, i) => { b.classList.toggle('sel', i === ativo); b.setAttribute('aria-label', `${rotuloBarra(info, i)}: ${valorBarra(info, i)}`) });
+  graf.classList.toggle('tem-sel', ativo != null);
+  const i = ativo ?? info.agora, topo = $('[data-t$=".pico"]', c), t = `${ativo == null ? (info.periodo === 'dia' ? 'Agora' : 'Hoje') : rotuloBarra(info, i)} · ${valorBarra(info, i)}`;
+  if (topo.textContent !== t) topo.textContent = t;
+  const gl = (q, f) => { const e = $(`[data-gl="${q}"]`, graf); e.style.bottom = `${f * 100}%`; e.firstChild.textContent = info.g.total ? usoNum(info.max * f) : ''; e.hidden = !info.g.total };
+  gl('topo', 1); gl('meio', .5);
+}
+const barraDoToque = (graf, x) => { const r = graf.getBoundingClientRect(), n = $$('i', graf).length; return Math.max(0, Math.min(n - 1, Math.floor((x - r.left) / r.width * n))) };
+{
+  const corpo = $('#us-corpo');
+  corpo.addEventListener('pointerdown', e => {
+    const graf = e.target.closest('.us-grafico'); if (!graf) return;
+    const k = graf.closest('[data-c]').dataset.c.replace(/\.graf$/, '');
+    us.sel[k] = barraDoToque(graf, e.clientX); us.hov = null; pintarGrafico(corpo, k);
+  });
+  corpo.addEventListener('pointermove', e => {
+    if (e.pointerType !== 'mouse' || e.buttons) return;
+    const graf = e.target.closest('.us-grafico'), antes = us.hov;
+    if (!graf) { if (antes) { us.hov = null; pintarGrafico(corpo, antes.k) } return }
+    const k = graf.closest('[data-c]').dataset.c.replace(/\.graf$/, ''), i = barraDoToque(graf, e.clientX);
+    if (antes?.k === k && antes.i === i) return;
+    us.hov = { k, i }; pintarGrafico(corpo, k);
+  });
+  corpo.addEventListener('pointerleave', () => { const antes = us.hov; if (antes) { us.hov = null; pintarGrafico(corpo, antes.k) } });
+  corpo.addEventListener('click', e => { // tocar fora do gráfico solta a seleção
+    if (e.target.closest('.us-grafico')) return;
+    const ks = Object.keys(us.sel); if (!ks.length) return; us.sel = {}; ks.forEach(k => pintarGrafico(corpo, k));
+  });
 }
 
 /* ---------- valores (a cada leitura, nos mesmos elementos) ---------- */
@@ -108,22 +153,23 @@ function preencherUso(corpo, d, animar) {
     num(k, p); txt(`${k}.modo`, us.resta ? 'resta' : 'usado');
     el('b', k).style.transform = `scaleX(${Math.max(0, Math.min(1, j.percentual / 100))})`;
     const m = el('m', k); m.hidden = !j.ritmo; if (j.ritmo) m.style.left = `${Math.max(0, Math.min(100, j.ritmo.esperado))}%`;
+    const anel = c.querySelector('.anel'); anel.style.setProperty('--p', Math.round(Math.max(0, Math.min(100, j.percentual)))); anel.style.setProperty('--r', j.ritmo ? Math.max(0, Math.min(100, j.ritmo.esperado)) : 0); anel.classList.toggle('sem-rit', !j.ritmo);
     const r = j.renova ? (us.hora ? `Renova ${horaExata(j.renova)}` : `Renova em ${contagemRenova(j.renova, ref)}`) : '';
     txt(`${k}.renova`, r); el('t', `${k}.renova`).hidden = !r;
     txt(`${k}.ritmo`, textoRitmo(j.ritmo, ref));
-    txt(`${k}.med`, j.medidoEm ? `Medido há ${haQuanto(j.medidoEm, ref).texto}` : '');
   };
 
   const gasto = (k, g) => {
     num(`${k}.tok`, g.total); txt(`${k}.tok.nota`, g.total ? `${usoTexto(usoTokens(g.entrada + g.saida))} sem contar o cache` : 'Nada neste período');
     num(`${k}.usd`, g.custo ?? null);
-    txt(`${k}.usd.nota`, g.custo == null ? (g.total ? 'Modelo sem preço na tabela' : '') : g.custoParcial ? 'Estimado, falta preço de algum modelo' : 'Estimado a preço de API');
+    txt(`${k}.usd.nota`, g.custo == null ? (g.total ? 'Modelo sem preço na tabela' : '') : g.custoParcial ? 'Estimativa parcial' : 'Estimado a preço de API');
     num(`${k}.resp`, g.turnos); txt(`${k}.resp.nota`, g.sessoes ? `${g.sessoes} ${g.sessoes === 1 ? 'sessão' : 'sessões'}` : '');
     num(`${k}.ent`, g.entrada); num(`${k}.sai`, g.saida); num(`${k}.cl`, g.cacheLeitura); num(`${k}.ce`, g.cacheEscrita);
     const max = Math.max(1, ...g.serie), barras = $$('.us-grafico i', el('c', `${k}.graf`));
     const agora = us.dados.periodo === 'dia' ? new Date(ref).getHours() : g.serie.length - 1;
     barras.forEach((b, i) => { b.style.transform = `scaleY(${g.serie[i] ? Math.max(.04, g.serie[i] / max) : 0})`; b.classList.toggle('agora', i === agora); b.classList.toggle('vazia', !g.serie[i]) });
-    txt(`${k}.pico`, g.total ? `Pico ${usoTexto(usoTokens(max))}` : '');
+    us.graf[k] = { g, max, agora, periodo: d.periodo, ate: d.ate };
+    pintarGrafico(corpo, k);
     el('c', `${k}.graf`).setAttribute('aria-label', g.total ? `Tokens por ${d.periodo === 'dia' ? 'hora' : 'dia'}. O maior valor foi ${usoTexto(usoTokens(max))}` : 'Nenhum uso neste período');
     g.modelos.forEach((m, i) => {
       txt(`${k}.m${i}.parte`, `${m.parte}%`); txt(`${k}.m${i}.tok`, usoTexto(usoTokens(m.tokens)));
@@ -135,6 +181,8 @@ function preencherUso(corpo, d, animar) {
 
   d.contas.forEach((c, i) => {
     c.janelas.forEach((j, k) => janela(`${i}.j${k}`, j));
+    const med = c.janelas.map(j => j.medidoEm).filter(Boolean).sort().pop(); // o mais recente da conta
+    txt(`${i}.med`, med ? `Medido há ${haQuanto(med, ref).texto}` : '');
     if (c.gasto) gasto(`${i}.g`, c.gasto);
   });
   if (d.claudeMac) gasto('mac.g', d.claudeMac);
@@ -165,7 +213,7 @@ function pintarUso(animar) {
     return;
   }
   const est = estruturaUso(d), refez = est.chave !== us.chave;
-  if (refez) { us.chave = est.chave; manterRolagem(corpo, est.html) }
+  if (refez) { us.chave = est.chave; us.sel = {}; us.hov = null; us.graf = {}; manterRolagem(corpo, est.html) }
   corpo.classList.remove('us-carregando');
   preencherUso(corpo, d, !!animar && !refez);
 }
