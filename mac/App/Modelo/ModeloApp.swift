@@ -51,6 +51,14 @@ final class ModeloApp: ObservableObject {
     /// O WhatsApp por QR (ajudante de leitura). Desligado até a pessoa escolher a origem QR nos Ajustes.
     let whatsappQR: ModeloWhatsAppQR
     let abrirComMac: AbrirComMac
+    /// Os pedidos de permissão do Claude Code esperando Permitir ou Negar no iPhone (Nucleo/Aprovacoes.swift).
+    let aprovacoes = Aprovacoes()
+    /// O gancho de aprovação está no settings.json do Claude Code? (Ajustes > Este Mac)
+    @Published private(set) var ganchoDoClaude: GanchoInstalador.Situacao = .naoInstalado
+    /// O settings.json do Claude Code e a pasta do segredo do gancho. Teste e fotos usam uma pasta de mentira: nunca o arquivo real do dono.
+    var arquivoDoClaude: URL = AmbienteDeTeste.ativo ? ModeloApp.pastaDeMentira().appendingPathComponent("settings.json") : GanchoInstalador.arquivoPadrao
+    var pastaDoGancho: URL = AmbienteDeTeste.ativo ? ModeloApp.pastaDeMentira() : Variante.atual.pastaDeDados()
+    private var servidorDoGancho: ServidorDoGancho?
     /// Compartilhado com o roteador: a trava dele evita duas trocas do código ao mesmo tempo.
     let rodizio = Rodizio()
     /// As regras automáticas: o servidor avalia e o botão Testar dos Ajustes dispara pela mesma instância.
@@ -172,6 +180,8 @@ final class ModeloApp: ObservableObject {
         vigia?.parar()
         servidorHttps?.parar()
         servidorHttps = nil
+        servidorDoGancho?.parar()
+        servidorDoGancho = nil
         // Fecha o ajudante com o app, sem apagar a sessão.
         whatsappQR.ponte.desligar()
         portaDoCabo?.parar(); portaDoCabo = nil
@@ -310,10 +320,10 @@ final class ModeloApp: ObservableObject {
         }
         var roteador = Ligacao.roteador(armazem: armazem, pareamento: pareamento, pagina: ArquivosPagina(raiz: pasta),
                                         rodizio: rodizio, certificadoCA: GeradorCertificado().arquivos.ca, contaSpotify: spotify.conta,
-                                        usoMedido: ModeloApp.usoMedidoPorToken(), ponteQR: whatsappQR.ponte, regras: vigiaDeRegras, registrar: registrar)
+                                        usoMedido: ModeloApp.usoMedidoPorToken(), ponteQR: whatsappQR.ponte, aprovacoes: aprovacoes, regras: vigiaDeRegras, registrar: registrar)
         roteador.aoInformarInstalacao = { [weak self] i in Task { @MainActor in self?.instalacaoInformada(i) } }
-        // A bancada não tem iPhone: nada de cabo nem Bluetooth.
-        if Variante.atual.ligaIphone { ligarNativo(roteador: roteador) }
+        // A bancada não tem iPhone: nada de cabo, Bluetooth nem gancho de aprovação.
+        if Variante.atual.ligaIphone { ligarNativo(roteador: roteador); subirGancho() }
         let portaInicial = Variante.atual.portaFixa ?? config.porta
         // Cada resposta da API pelo Wi-Fi diz que o iPhone está falando agora (a mesma fonte do cabo e do Bluetooth).
         let atendeu: @Sendable (String, Int) -> Void = { [weak self] caminho, status in
@@ -323,6 +333,42 @@ final class ModeloApp: ObservableObject {
             let resultado = Result { try ModeloApp.abrirPorta(roteador: roteador, a: portaInicial, aoAtender: atendeu) }
             await self?.servidorPronto(resultado)
         }
+    }
+
+    // MARK: Aprovar pedidos do Claude pelo iPhone
+
+    /// O servidor local do gancho (só no loopback, porta própria). Falhar aqui não derruba nada: sem ele o gancho fica mudo e o terminal pergunta.
+    private func subirGancho() {
+        guard !AmbienteDeTeste.ativo, let segredo = SegredoDoGancho.garantir(pasta: pastaDoGancho) else { return }
+        let servidor = ServidorDoGancho(tratador: TratadorDoGancho(aprovacoes: aprovacoes, segredo: segredo), porta: UInt16(Variante.atual.portaDoGancho))
+        let log = registrar
+        Task.detached { [weak self] in
+            do { try servidor.iniciar(); await self?.guardarGancho(servidor) }
+            catch { log("deck: o gancho de aprovação não abriu: \(error)") }
+        }
+    }
+
+    private func guardarGancho(_ s: ServidorDoGancho) { servidorDoGancho = s }
+
+    func lerGancho() { ganchoDoClaude = GanchoInstalador.situacao(arquivo: arquivoDoClaude) }
+
+    /// Liga ou desliga o gancho no settings.json do Claude Code. Formato estranho no arquivo: recusa e conta, sem mexer em nada.
+    func definirGancho(_ ligado: Bool) {
+        guard let _ = SegredoDoGancho.garantir(pasta: pastaDoGancho) else {
+            avisar("Não consegui criar o segredo do gancho.", falha: true)
+            return
+        }
+        if let erro = GanchoInstalador.aplicar(instalar: ligado, arquivo: arquivoDoClaude, porta: Variante.atual.portaDoGancho,
+                                                cabecalho: SegredoDoGancho.arquivo(pasta: pastaDoGancho)) {
+            avisar(erro, falha: true)
+        } else {
+            avisar(ligado ? "Pedidos do Claude Code agora chegam no iPhone." : "Pedidos do Claude Code voltaram só para o terminal.")
+        }
+        lerGancho()
+    }
+
+    nonisolated static func pastaDeMentira() -> URL {
+        FileManager.default.temporaryDirectory.appendingPathComponent("deck-teste-claude", isDirectory: true)
     }
 
     private func servidorPronto(_ r: Result<(ServidorHttps, Int), Error>) {

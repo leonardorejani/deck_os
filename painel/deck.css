@@ -426,6 +426,20 @@ button.cartao { font: inherit; color: inherit; text-align: left; border: 0; curs
 .detalhe-sessao .contexto { background: var(--superficie); border-radius: var(--raio-card); padding: var(--pad) }
 .detalhe-sessao .texto-contexto { display: grid; gap: var(--icone) }
 .detalhe-sessao .texto-contexto p { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; font-size: var(--texto-sm); line-height: 1.55; color: var(--texto) }
+/* resumo das sessões que não esperam (no título do bloco) e a lista delas na folha: só leitura, sem competir com o que pede você */
+.cartao-titulo .lado { display: inline-flex; align-items: center; gap: var(--icone); min-width: 0 }
+.cartao-titulo .outras { color: var(--texto-2); font-size: var(--texto-xs); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0 }
+#se-lista .vazio-bloco { height: auto }
+.outras-sessoes { display: grid; margin-top: var(--secao) }
+.outras-sessoes .rotulo-lista { padding: 0 0 var(--item) }
+.linha-sessao { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--icone); padding: var(--icone) 0; border-top: 1px solid var(--borda) }
+.linha-sessao > div { display: grid; gap: var(--micro-gap); min-width: 0 }
+.linha-sessao b { font-size: var(--texto-sm); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.linha-sessao small { color: var(--texto-2); font-size: var(--texto-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums }
+.linha-sessao p { margin: 0; color: var(--texto-2); font-size: var(--texto-xs); line-height: 1.45; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden }
+.estado-sessao { flex: none; color: var(--texto-2); background: var(--superficie-2); font-size: var(--texto-xs); font-weight: 600; padding: var(--micro-gap) var(--icone); border-radius: var(--raio-pilula) }
+.linha-sessao.trabalhando .estado-sessao { color: var(--destaque); background: var(--destaque-suave) }
+.linha-sessao.concluida .estado-sessao { color: var(--sucesso) }
 .detalhe-sessao .nota-sessao { margin: 0; color: var(--texto-2); font-size: var(--texto-sm); text-align: center }
 #f-sessoes > footer { border-top: 0; padding: var(--item) 0 calc(var(--item) + var(--seguro-baixo)) }
 #f-sessoes.detalhe .corpo { padding-bottom: 0 }
@@ -1053,3 +1067,18 @@ button.item-lista.com-capa:active .capa-fila svg, button.item-lista.com-capa:foc
 .mt-bloco.sem:not(.sair):disabled { opacity: 1 }
 .mt-bloco.esq { background: var(--superficie-2); opacity: .6 }
 @media (prefers-reduced-motion: reduce) { .mt-bloco { transition: none } .mt-bloco:active:not(:disabled) { transform: none } }
+
+/* ---------- Pedido de permissão do Claude Code (aprovacao.js) ---------- */
+/* abaixo do aviso (25), para o "já foi respondido" aparecer por cima */
+.aprovacao { position: absolute; inset: 0; z-index: 24; display: grid; place-items: center; padding: var(--pad) var(--seguro-dir) var(--seguro-baixo) var(--seguro-esq); background: var(--veu-modal); overscroll-behavior: contain }
+.ap-caixa { position: relative; overflow: hidden; display: grid; gap: var(--item); width: min(100%, 560px); background: var(--superficie); box-shadow: var(--sombra-3); border-radius: var(--raio-card); padding: var(--pad) var(--pad) var(--pad) calc(var(--pad) + var(--item)) }
+.ap-caixa::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 4px; background: var(--aviso) }
+.ap-caixa .rotulo { display: flex; align-items: center; gap: var(--item); color: var(--aviso); font-size: var(--texto-xs); font-weight: 600 }
+.ap-n { font-weight: 600; color: var(--texto-2); font-variant-numeric: tabular-nums }
+.ap-caixa h2 { margin: 0; font-size: var(--texto-md); line-height: 1.3 }
+.ap-projeto { color: var(--texto-2); font-size: var(--texto-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.ap-resumo { margin: 0; padding: var(--icone); background: var(--superficie-2); border-radius: var(--raio); overflow-wrap: anywhere; white-space: pre-wrap; font-size: var(--texto-sm); line-height: 1.45; }
+.ap-rodape { display: flex; align-items: center; gap: var(--icone); margin-top: var(--item) }
+.ap-tempo { flex: 1; color: var(--texto-2); font-size: var(--texto-sm); font-variant-numeric: tabular-nums }
+.ap-rodape .btn { position: relative; min-width: 112px }
+.ap-rodape .btn::after { content: ''; position: absolute; inset: calc(-1 * var(--toque)) } /* 44 pt de toque também com a tela reduzida */
