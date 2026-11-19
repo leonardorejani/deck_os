@@ -354,6 +354,24 @@ final class ModeloTeclasTestes: XCTestCase {
         try? await Task.sleep(nanoseconds: 300_000_000)
         XCTAssertEqual(tl.saidaDoTeste, "O comando falhou: nada")
     }
+
+    func testTesteFuncionaEmTeclaDeQualquerTipo() async {
+        let tl = ModeloTeclas(modelo: modelo(), pedirAcessibilidade: { }, executar: { _ in nil }, conferirLigada: { _ in nil })
+        tl.escolher("a")
+        tl.testarComando()
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        XCTAssertTrue(tl.saidaDoTeste.hasPrefix("Ok, rodou em "), tl.saidaDoTeste)
+    }
+
+    func testTesteDeLigaEDesligaConfereDepoisDeRodar() async {
+        var m = modelo()
+        m.gravar { c in c.perfis[0].teclas[0] = Tecla(id: "a", nome: "A", tipo: "comando", valor: "ligar", estado: "conferir", icone: "", desligar: "desligar") }
+        let tl = ModeloTeclas(modelo: m, pedirAcessibilidade: { }, executar: { _ in nil }, conferirLigada: { _ in true })
+        tl.escolher("a")
+        tl.testarComando()
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        XCTAssertTrue(tl.saidaDoTeste.hasSuffix("Agora está ligada"), tl.saidaDoTeste)
+    }
 }
 
 

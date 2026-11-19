@@ -44,6 +44,8 @@ final class ModeloTeclas: ObservableObject {
     @Published private(set) var capturaGlobal = false
     private let pedirAcessibilidade: () -> Void
     private let executar: (Tecla) -> String?
+    /// Roda o comando que confere da tecla liga e desliga (true = ligada). Nil: a tecla não tem um.
+    private let conferirLigada: (Tecla) -> Bool?
     /// true enquanto o botão do mouse está apertado (trocado nos testes).
     private let mouseApertado: () -> Bool
     private var vigiaDoArrasto: Task<Void, Never>?
@@ -51,6 +53,7 @@ final class ModeloTeclas: ObservableObject {
     init(modelo: ModeloApp, catalogo: CatalogoDeApps? = nil, acesas: Set<String> = [],
          pedirAcessibilidade: @escaping () -> Void = { if !AcoesSistema.temAcessibilidade() { AcoesSistema.pedirAcessibilidade() } },
          executar: @escaping (Tecla) -> String? = { ExecutorAcoes(shell: ExecutorShell(), graca: 300).executar($0) },
+         conferirLigada: @escaping (Tecla) -> Bool? = { t in t.comandoQueConfere.map { ExecutorAcoes(shell: ExecutorShell()).conferir($0) } },
          mouseApertado: @escaping () -> Bool = { NSEvent.pressedMouseButtons & 1 != 0 }) {
         self.mouseApertado = mouseApertado
         self.modelo = modelo
@@ -58,6 +61,7 @@ final class ModeloTeclas: ObservableObject {
         self.acesas = acesas
         self.pedirAcessibilidade = pedirAcessibilidade
         self.executar = executar
+        self.conferirLigada = conferirLigada
         let ativo = modelo.config.perfilAtivo
         let perfil = modelo.config.perfis.first { $0.id == ativo } ?? modelo.config.perfis.first
         self.editando = perfil?.id ?? ""
@@ -425,15 +429,18 @@ final class ModeloTeclas: ObservableObject {
 
     // MARK: Testar comando
 
+    /// "Testar" do editor, para qualquer tipo: executa a tecla como se tocada no iPhone e mostra o resultado em uma linha.
+    /// Tecla liga e desliga com comando que confere: depois de rodar, roda o que confere e diz como ficou.
     func testarComando() {
-        guard let t = tecla else { return }
-        saidaDoTeste = "Rodando..."
-        let executar = self.executar
+        guard let t = tecla, saidaDoTeste != ResultadoDoTeste.rodando else { return }
+        saidaDoTeste = ResultadoDoTeste.rodando
+        let executar = self.executar, conferirLigada = self.conferirLigada
         Task.detached(priority: .userInitiated) { [weak self] in
             let inicio = Date()
             let erro = executar(t)
             let ms = Int(Date().timeIntervalSince(inicio) * 1000)
-            await self?.mostrarTeste(erro ?? "Rodou sem erro em \(ms) ms")
+            let ligada = erro == nil && t.ligaEDesliga ? conferirLigada(t) : nil
+            await self?.mostrarTeste(ResultadoDoTeste.texto(erro: erro, ms: ms, ligada: ligada))
         }
     }
 
