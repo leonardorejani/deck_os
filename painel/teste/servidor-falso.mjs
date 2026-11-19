@@ -90,20 +90,24 @@ const padrao = () => ({
   meet: 'normal',            // normal | antigo (Mac sem a rota: 404) | erro (500) | recusa (as ações falham com 422)
   meetEstado: { aberta: true, naChamada: true, microfone: 'ligado', camera: 'desligado' }, // o que o Mac leu da reunião
   meetAtraso: 0,             // ms de espera antes de o Mac fazer uma ação do Meet
+  comGitHub: false, comValores: false, // o perfil ganha a tecla GitHub (abre a lista de PRs) e a tecla Valores (abre os valores de fora)
+  github: null,              // o resumo que o Mac manda em `github`: {estado, revisar, falhando, aviso?, lidoEm?}. null: o Mac ainda está lendo
+  githubRecusa: '',          // POST /api/github/abrir falha (422) com esse motivo
+  avisosDeFora: [], valoresDeFora: [], // o que chega de fora (script do Mac): vai em `avisosDeFora` e `valoresDeFora` do estado
   comMonitorApp: false,      // o perfil ganha a tecla do app Monitor de Atividade (abre a tela do monitor no iPhone)
   ctVolume: 30, ctMudo: false, ctBrilho: 60, ctTeclado: 20, ctAtraso: 0,
   spotifyModos: 'sim',       // sim | sem (Mac antigo: o estado não traz álbum, repetir nem aleatório)
 });
 let c = padrao();
 let T0 = Date.now(); // as sessões esperam desde um instante fixo (o Mac real manda sempre o mesmo `desde` até a sessão mudar)
-let cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, whatsapp: 0, whatsappV: [], whatsappIguais: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], criados: [], destinosPedidos: 0, controles: [], whatsappAbertas: [], midias: [], fotos: [], meetAcoes: [], meetLeituras: 0, usoDetalhe: [], configs: 0 };
+let cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, whatsapp: 0, whatsappV: [], whatsappIguais: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], criados: [], destinosPedidos: 0, controles: [], whatsappAbertas: [], midias: [], fotos: [], meetAcoes: [], meetLeituras: 0, usoDetalhe: [], configs: 0, githubAbertos: [] };
 let posicaoBase = { s: 132, desde: Date.now() };
 let perfilAtivo = 'trabalho';
 let criadosAgenda = [], padraoAgenda = null, lembretesAcesso = null, liberarEm = 0; // o que o iPhone criou na agenda, o destino padrão e o acesso aos Lembretes
 let codigoAtual = CODIGO, codigoAnterior = null; // rodízio: o atual, e o anterior que ainda vale (a folga de 10 min)
 let parearGasto = false, parearErros = 0; // o código de 6 dígitos serve uma vez e aguenta 5 erros
 let gravada = null; // o que o iPhone gravou: perfis e blocos, como o Mac guardaria no config.json
-const zerar = () => { parearGasto = false; parearErros = 0; codigoAtual = CODIGO; codigoAnterior = null; T0 = Date.now(); gravada = null; c = padrao(); cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, whatsapp: 0, whatsappV: [], whatsappIguais: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], criados: [], destinosPedidos: 0, controles: [], whatsappAbertas: [], midias: [], fotos: [], meetAcoes: [], meetLeituras: 0, usoDetalhe: [], configs: 0 }; posicaoBase = { s: 132, desde: Date.now() }; perfilAtivo = 'trabalho'; criadosAgenda = []; padraoAgenda = null; lembretesAcesso = null };
+const zerar = () => { parearGasto = false; parearErros = 0; codigoAtual = CODIGO; codigoAnterior = null; T0 = Date.now(); gravada = null; c = padrao(); cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, whatsapp: 0, whatsappV: [], whatsappIguais: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], criados: [], destinosPedidos: 0, controles: [], whatsappAbertas: [], midias: [], fotos: [], meetAcoes: [], meetLeituras: 0, usoDetalhe: [], configs: 0, githubAbertos: [] }; posicaoBase = { s: 132, desde: Date.now() }; perfilAtivo = 'trabalho'; criadosAgenda = []; padraoAgenda = null; lembretesAcesso = null };
 
 // com xss ligado, todo texto que a página mostra chega como HTML que tenta executar código
 const X = t => c.xss ? `"><img src=x onerror="window.__xss=(window.__xss||0)+1">${t}` : t;
@@ -118,6 +122,8 @@ function perfisConfig() {
   ];
   if (c.comReuniao) trabalho.push(T('mic', 'Mutar', 'app', 'Google Meet', { icone: 'svg:video', acao: { id: 'reuniao-microfone' } }), T('cam', 'Câmera', 'app', 'Google Meet', { icone: 'svg:video', acao: { id: 'reuniao-camera' } }));
   if (c.comMeet) trabalho.push(T('meet', 'Google Meet', 'app', 'Google Meet', { icone: 'svg:video' }));
+  if (c.comGitHub) trabalho.push(T('github', 'GitHub', 'app', 'Deck GitHub', { icone: 'svg:pr' }));
+  if (c.comValores) trabalho.push(T('valores', 'Valores', 'app', 'Deck Valores', { icone: 'svg:valores' }));
   if (c.comMonitorApp) trabalho.push(T('monitor', 'Monitor', 'app', 'Activity Monitor', { icone: 'Activity Monitor' }));
   if (c.comFoco) trabalho.push(T('foco', 'Mudar foco', 'comando', 'foco jogo', { icone: 'svg:tela', desligar: 'foco trabalho' }));
   if (c.comControles) trabalho.push(T('controles', 'Controles', 'app', 'Controles', { icone: 'svg:controles' }));
@@ -284,6 +290,9 @@ function estado() {
   const semMed = c.uso === 'sem-medicao';
   const selos = { whatsapp: c.xss ? X('23') : '23' };
   if (c.agenda === 'sem') selos.calendario = '!';
+  const nGh = c.github ? (c.github.revisar?.length || 0) + (c.github.falhando?.length || 0) : 0;
+  if (c.comGitHub && nGh > 0) selos.github = String(nGh);
+  if (c.comValores && c.valoresDeFora.length) selos.valores = String(c.valoresDeFora.length);
   return {
     agora: new Date(Date.now() + c.relogioMs).toISOString(), nomeMac: X(c.nomeMac), perfilAtivo: configCompleta().perfilAtivo, comp: c.comp, blocos: c.blocos, ...(c.semCarimbo ? {} : { configVersao: createHash('sha1').update(JSON.stringify(configCompleta())).digest('hex').slice(0, 12) }),
     ...(c.blocos.monitor ? { monitor: { ...c.monitor, itens: Object.keys(c.monitorItens).filter(k => c.monitorItens[k]) } } : {}),
@@ -306,6 +315,9 @@ function estado() {
       : { permissao: true, proximo: c.agenda === 'vazia' ? null : { titulo: X('Reunião de produto'), inicio: new Date(Date.now() + 2 * 3600000).toISOString(), diaTodo: false, calendario: X('Trabalho'), cor: X('#60A5FA'), local: X('Google Meet') } },
     acesas: c.acesas, selos, avisos: [],
     ...(c.andamento && Object.keys(c.andamento).length ? { andamento: c.andamento } : {}),
+    ...(c.avisosDeFora.length ? { avisosDeFora: c.avisosDeFora } : {}),
+    ...(c.comValores ? { valoresDeFora: c.valoresDeFora } : {}),
+    ...(c.comGitHub && c.github ? { github: c.github } : {}),
     ...(c.comReuniao && c.reuniaoEstado ? { reuniao: { mic: c.reuniaoEstado.mic, cam: c.reuniaoEstado.cam } } : {}),
   };
 }
@@ -509,6 +521,14 @@ async function api(req, res, url) {
     if (!/^https:\/\/(meet\.google\.com|([a-z0-9-]+\.)?zoom\.us|teams\.microsoft\.com|teams\.live\.com)\//.test(link)) return json(res, 400, { erro: 'Esse link não é de uma reunião do Meet, do Zoom ou do Teams.' });
     if (c.reuniaoRecusa) return json(res, 422, { erro: c.reuniaoRecusa });
     cont.reunioes.push(link);
+    return json(res, 200, { ok: true });
+  }
+  if (rota === '/api/github/abrir' && m === 'POST') {
+    const id = String((await lerCorpo(req)).id || '');
+    const conhecidos = [...(c.github?.revisar || []), ...(c.github?.falhando || [])].map(i => i.id);
+    if (!conhecidos.includes(id)) return json(res, 422, { erro: 'Não achei esse PR. Abra a lista de novo.' });
+    if (c.githubRecusa) return json(res, 422, { erro: c.githubRecusa });
+    cont.githubAbertos.push(id);
     return json(res, 200, { ok: true });
   }
   const abrir = rota.match(/^\/api\/sessoes\/([^/]+)\/abrir$/);

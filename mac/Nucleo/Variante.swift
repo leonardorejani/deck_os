@@ -22,6 +22,9 @@ enum Variante: Equatable, Sendable {
     /// Porta que a variante exige. O Deck de verdade usa a da config (4790 por padrão).
     var portaFixa: Int? { self == .bancada ? Self.portaDaBancada : nil }
 
+    /// Porta preferida dos avisos de fora (só loopback, HTTP). Ocupada, o Deck sobe numa vizinha e os Ajustes mostram a que valeu.
+    var portaDeFora: Int { self == .bancada ? 4793 : 4792 }
+
     /// A bancada não tem iPhone: sem cabo, sem Bluetooth e sem renovar o app do iPhone.
     var ligaIphone: Bool { self == .deck }
 

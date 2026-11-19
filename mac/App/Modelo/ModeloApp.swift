@@ -81,6 +81,13 @@ final class ModeloApp: ObservableObject {
     private let arquivoConfig: URL?
     private var vigia: VigiaConfig?
     private var servidorHttps: ServidorHttps?
+    /// Avisos e valores que scripts deste Mac mandam pela porta de fora. A mesma memória alimenta o estado do iPhone.
+    let avisosDeFora = ArmazemDeAvisos()
+    /// A chave da porta de fora. Nos testes mora numa pasta temporária: nunca grava na pasta do Deck de verdade.
+    let chaveDeFora = ChaveDeAvisos(pasta: AmbienteDeTeste.ativo ? FileManager.default.temporaryDirectory.appendingPathComponent("deck-teste-chave-de-fora") : Variante.atual.pastaDeDados())
+    /// A porta em que a porta de fora abriu (nil: ainda não, ou não abriu).
+    @Published private(set) var portaDeFora: Int?
+    private var servidorDeFora: ServidorDeFora?
     /// Quem relê os acessos recusados quando o app volta para a frente (Ajustes/AcessosVerificador.swift).
     var vigiaDeAcessos: AnyObject?
 
@@ -170,6 +177,9 @@ final class ModeloApp: ObservableObject {
         vigia?.parar()
         servidorHttps?.parar()
         servidorHttps = nil
+        servidorDeFora?.parar()
+        servidorDeFora = nil
+        portaDeFora = nil
         // Fecha o ajudante com o app, sem apagar a sessão.
         whatsappQR.ponte.desligar()
         portaDoCabo?.parar(); portaDoCabo = nil
@@ -308,7 +318,8 @@ final class ModeloApp: ObservableObject {
         }
         let roteador = Ligacao.roteador(armazem: armazem, pareamento: pareamento, pagina: ArquivosPagina(raiz: pasta),
                                         rodizio: rodizio, certificadoCA: GeradorCertificado().arquivos.ca, contaSpotify: spotify.conta,
-                                        usoMedido: ModeloApp.usoMedidoPorToken(), ponteQR: whatsappQR.ponte, registrar: registrar)
+                                        usoMedido: ModeloApp.usoMedidoPorToken(), ponteQR: whatsappQR.ponte, avisosDeFora: avisosDeFora, registrar: registrar)
+        subirPortaDeFora()
         // A bancada não tem iPhone: nada de cabo nem Bluetooth.
         if Variante.atual.ligaIphone { ligarNativo(roteador: roteador) }
         let portaInicial = Variante.atual.portaFixa ?? config.porta
@@ -319,6 +330,24 @@ final class ModeloApp: ObservableObject {
         Task.detached(priority: .userInitiated) { [weak self] in
             let resultado = Result { try ModeloApp.abrirPorta(roteador: roteador, a: portaInicial, aoAtender: atendeu) }
             await self?.servidorPronto(resultado)
+        }
+    }
+
+    /// A porta de fora (loopback, sem TLS). Se não abrir, o resto do Deck segue: só os avisos de fora ficam sem porta.
+    private func subirPortaDeFora() {
+        guard !AmbienteDeTeste.ativo, servidorDeFora == nil else { return }
+        let roteador = RoteadorDeFora(armazem: avisosDeFora, chave: { [chave = chaveDeFora] in chave.atual() })
+        let preferida = UInt16(Variante.atual.portaDeFora)
+        Task.detached(priority: .utility) { [weak self] in
+            let r = Result { try ServidorDeFora.ligar(roteador: roteador, preferida: preferida) }
+            await self?.portaDeForaPronta(r)
+        }
+    }
+
+    private func portaDeForaPronta(_ r: Result<ServidorDeFora, Error>) {
+        switch r {
+        case .success(let s): servidorDeFora = s; portaDeFora = Int(s.porta)
+        case .failure(let e): registrar("Porta de avisos de fora não abriu: \(e)")
         }
     }
 

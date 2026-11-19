@@ -47,6 +47,7 @@ struct EsteMac: View {
             }
             // O Monitor mora aqui, e não só na tecla do app: quem não tem a tecla do Monitor de Atividade também liga e desliga.
             AjustesDoMonitor(modelo: modelo)
+            AjustesAvisosDeFora(modelo: modelo)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .onAppear { abrirComMac.atualizar() }

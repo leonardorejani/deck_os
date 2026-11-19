@@ -91,6 +91,7 @@ function vistaReal() {
     perfis: (config?.perfis || []).map(p => ({ id: p.id, nome: p.nome, n: p.teclas.length })),
     acesas: acesasOtimistas(e.acesas || []), selos: e.selos || {}, agenda: e.agenda || null, reuniao: e.reuniao || null,
     whatsapp: blocos.whatsapp === false ? null : e.whatsapp || null,
+    github: e.github || null, valoresDeFora: e.valoresDeFora || [],
   };
 }
 /* Esqueleto: a forma da última visita (só contagens, nunca texto), desenhada com os mesmos blocos da tela real. */
@@ -272,7 +273,7 @@ const rotuloDaReuniao = (t, r) => {
 };
 function extraTecla(t, i) {
   const seloTxt = i.selo == null ? '' : /^\d+$/.test(i.selo) && +i.selo > 99 ? '99+' : i.selo;
-  const aria = i.selo === '!' ? 'Agenda sem permissão' : `${i.selo} não lidas`;
+  const qual = painelDe(t), aria = i.selo === '!' ? 'Agenda sem permissão' : qual === 'github' ? `${i.selo} PRs pedindo atenção` : qual === 'valores' ? `${i.selo} valores` : `${i.selo} não lidas`;
   return (i.selo != null ? `<span class="selo" aria-label="${esc(aria)}">${esc(seloTxt)}</span>` : '')
     + (i.reuniao ? `<span class="estado-tecla ${i.reuniao}" aria-label="${esc(rotuloDaReuniao(t, i.reuniao))}">${esc(textoDaReuniao(t, i.reuniao))}</span>` : '')
     + (i.fase ? `<span class="estado-tecla andando" aria-label="${esc(t.nome)}: ${esc(TEXTO_DA_FASE[i.fase].replace('...', ''))}">${esc(TEXTO_DA_FASE[i.fase])}</span>` : '')
@@ -915,7 +916,7 @@ async function passo() {
         if (!config && !configFalhou) { configFalhou = true; avisar('Não consegui ler as teclas do Mac. Tentando de novo.', { erro: true }) }
       }
     }
-    avisarFalhasDeComando();
+    avisarFalhasDeComando(); processarAvisosDeFora(e);
     pintarGlobal(); mostrarVista();
   } catch (er) {
     if (er.status === 401) semAcesso = true;
