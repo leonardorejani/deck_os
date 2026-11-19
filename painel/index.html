@@ -43,6 +43,14 @@
       <section class="aprovacao" id="aprovacao" role="alertdialog" aria-modal="true" aria-labelledby="ap-titulo" hidden></section>
       <div class="lista-perfis" id="lista-perfis" role="dialog" aria-label="Menu" hidden></div>
       <div class="veu" id="veu"></div>
+      <section class="cortina" id="cortina" role="dialog" aria-label="Controles rápidos" inert>
+        <div class="cx-fundo" id="cx-fundo"></div>
+        <div class="cx-painel" id="cx-painel">
+          <div class="cx-cartoes" id="cx-corpo" aria-live="polite"></div>
+          <div class="ctl-cartao cx-midia" id="cx-midia" hidden></div>
+          <span class="cx-alca" aria-hidden="true"></span>
+        </div>
+      </section>
       <section class="relogio-cheio" id="f-relogio" role="dialog" aria-modal="true" aria-label="Relógio. Toque para voltar" tabindex="-1"></section>
 
       <section class="folha cheia editor" id="f-editor" role="dialog" aria-modal="true" aria-labelledby="ed-titulo">
@@ -151,6 +159,7 @@
 <script src="paineis.js"></script>
 <script src="player.js"></script>
 <script src="controles.js"></script>
+<script src="cortina.js"></script>
 <script src="meet.js"></script>
 <script src="aprovacao.js"></script>
 <script src="monitor.js"></script>

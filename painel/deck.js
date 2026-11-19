@@ -362,6 +362,7 @@ function atualizar() {
     pintarMidia(pl, V.spotify);
   }
   if (folhaAberta?.id === 'f-player') pintarPlayerCheio();
+  if (cortinaVisivel()) pintarCortinaMidia();
   if (sem !== ultima.semMusica) { ultima.semMusica = sem; if (V.comp !== 'c') alternarMusica(sem) } // a C não tem player: o relógio já ocupa o lugar
   const uso = usoAtual(), elUso = $('.cartao.uso, .uso-tira');
   if (elUso && uso !== ultima.uso) { elUso.outerHTML = uso; ultima.uso = uso }
