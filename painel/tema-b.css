@@ -285,3 +285,4 @@ html, body { background: var(--cena-base) }
 .cartao-titulo .outras { color: var(--texto-2) }
 /* folha "Escrever no Mac" */
 .es-texto { background: var(--vidro-oco); border-color: var(--vidro-linha) }
+.es-texto:focus-visible { outline-color: var(--amb) }
