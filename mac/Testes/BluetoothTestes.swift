@@ -129,6 +129,23 @@ final class EnlaceTestes: XCTestCase {
         XCTAssertEqual([UInt8](r.corpo.prefix(2)), [0xFF, 0xD8], "JPEG")
     }
 
+    /// 19/11/2026: a tela cheia esticava a miniatura de 200 px. Com tam=grande a capa segue inteira (640 px), sem recomprimir.
+    func testCapaGrandeDaTelaCheiaSegueInteiraPeloBluetooth() throws {
+        let png = try XCTUnwrap(Self.imagem(640))
+        let pg = PedidoCabo(metodo: "GET", caminho: "/api/capa", query: ["tam": "grande"], cabecalhos: [:], corpo: Data())
+        let original = RespostaRota(status: 200, tipo: "image/png", corpo: png, extras: ["Cache-Control": "no-store"])
+        let r = CapaPequena.ajustar(pg, original)
+        XCTAssertEqual(r, original, "a capa da tela cheia não é reduzida nem recomprimida")
+        let origem = try XCTUnwrap(CGImageSourceCreateWithData(r.corpo as CFData, nil))
+        let img = try XCTUnwrap(CGImageSourceCreateImageAtIndex(origem, 0, nil))
+        XCTAssertEqual(max(img.width, img.height), 640)
+        // sem tam (mini player e fila) segue a pequena de 200 px
+        let pp = PedidoCabo(metodo: "GET", caminho: "/api/capa", query: ["v": "1"], cabecalhos: [:], corpo: Data())
+        let p = CapaPequena.ajustar(pp, original)
+        let o2 = try XCTUnwrap(CGImageSourceCreateWithData(p.corpo as CFData, nil))
+        XCTAssertLessThanOrEqual(try XCTUnwrap(CGImageSourceCreateImageAtIndex(o2, 0, nil)).width, CapaPequena.lado)
+    }
+
     /// Um degradê de 640 x 640, parecido com uma capa do Spotify.
     static func imagem(_ lado: Int) -> Data? {
         guard let ctx = CGContext(data: nil, width: lado, height: lado, bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
