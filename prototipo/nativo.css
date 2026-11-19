@@ -45,6 +45,15 @@
 .mac-linha b { display: block; font-weight: 600 }
 .mac-linha small { display: block; color: var(--texto-2); font-size: var(--texto-xs) }
 .mac-linha .acao { color: var(--texto-2); font-size: var(--texto-sm) }
+/* Parear em andamento: o botão da linha vira indicador, sem mudar a altura da lista */
+.mac-linha .acao.em-curso { display: inline-flex; align-items: center; gap: var(--item); color: var(--texto); font-weight: 600 }
+.mac-linha.em-curso { cursor: default }
+.mac-linha.parada { opacity: .5; cursor: default }
+.pareio .btn[disabled] { cursor: default }
+.pareio .btn.secundario[disabled] { opacity: .5 }
+.pareio .btn.primario[disabled] { display: inline-flex; align-items: center; justify-content: center; gap: var(--item) }
+.pareio .btn .girando { border-color: color-mix(in srgb, currentColor 30%, transparent); border-top-color: currentColor }
+.falha-par { display: grid; gap: var(--pad); justify-items: center; text-align: center }
 
 /* canal em uso: aviso curto ao trocar (escolhido em 10/11/2026). Em pé, desce para fora da ilha */
 .vertical .canal-chip { top: var(--seguro-cima) }

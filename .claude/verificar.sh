@@ -42,6 +42,8 @@ swift test --package-path ios/Pacote 2>&1 | grep -E "error:|failed|Executed [0-9
 node --check ios/Web/ponte.js
 node --check ios/Web/casca.js
 node ios/scripts/testar-ponte.js
+# as telas de pareamento do app: progresso na hora, toque duplo, falha com "Tentar de novo"
+node ios/scripts/testar-casca.js
 # o app do iPhone empacota o painel/ deste repo (sem os testes), nunca o de outra worktree
 bash ios/scripts/empacotar-painel.sh >/dev/null && [ -f ios/Pagina/canal.js ] && [ ! -d ios/Pagina/teste ]
 echo "verificar: ok"
