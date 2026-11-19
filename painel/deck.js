@@ -5,7 +5,7 @@ const tela = $('#tela');
 let estado = null, config = null;     // o que o Mac mandou
 let V = null;                         // a vista: o que a tela mostra agora (real ou o esqueleto)
 let posicao = 'horizontal';
-let offline = false, semAcesso = false, falhas = 0, tiquesConfig = 0;
+let offline = false, semAcesso = false, falhas = 0, tiquesConfig = 0, causa = null, tentativasOff = 0, versaoConfig = null, configTentadaEm = -Infinity;
 let ultima = {};                      // o que já está desenhado, para só refazer o que mudou
 let organizando = false;              // modo organizar (segurar uma tecla)
 let sobrepor = {};                    // mudança local ainda a caminho do Mac (bloco escondido, perfil), por cima do estado
@@ -25,11 +25,29 @@ function conferirSobrepor(e) {
   for (const [b, v] of Object.entries(sobrepor.blocos || {})) if ((e.blocos?.[b] ?? BLOCOS_PADRAO[b]) === v) delete sobrepor.blocos[b];
   if (sobrepor.perfilAtivo === e.perfilAtivo) delete sobrepor.perfilAtivo;
 }
+/* a capa que a tela mostra: a do Mac (capaId) ou, na troca otimista de faixa, a miniatura que a fila já tinha (capaUrl) */
+const capaSrc = (s, grande) => s.capaUrl || (s.capaId ? canal.capaUrl(s.capaId, grande) : '');
+const capaAttr = (s, grande) => { const u = capaSrc(s, grande); return u ? ` src="${esc(u)}"` : '' };
+const reduzMov = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+/* troca a imagem só depois de a nova estar baixada: a capa não pisca em branco quando o Mac confirma a faixa. A que falhou ao baixar é pedida de novo no próximo passo */
+function sincronizarCapa(img, s) {
+  if (!img) return; const quer = capaSrc(s, img.classList.contains('capa-grande')); if (!quer) return;
+  if (img.dataset.erro) { delete img.dataset.erro; img.dataset.quer = quer; img.src = quer; return }
+  if (img.getAttribute('src') === quer || img.dataset.quer === quer) return;
+  img.dataset.quer = quer;
+  const nova = new Image(); nova.onload = () => { if (img.dataset.quer === quer) img.src = quer }; nova.onerror = () => { if (img.dataset.quer === quer) delete img.dataset.quer }; nova.src = quer;
+}
+/* refazer o player não refaz a capa quando a faixa é a mesma (o Mac confirmando a troca otimista): a imagem que já está na tela fica */
+function guardarCapa(velha, nova, s) {
+  if (!nova) return; nova.dataset.faixa = s.faixa;
+  if (velha && velha.dataset.faixa === s.faixa && velha.getAttribute('src')) nova.replaceWith(velha);
+}
 const posEsperada = (p, agora) => p.p0 + (p.andando ? (agora - p.t0) / 1000 : 0);
 /* o Spotify como a tela deve mostrar: o que o Mac mandou, com por cima o que o toque já mudou e ele ainda não confirmou */
 function spotifyOtimista(s) {
   const o = otmSpotify; if (!o || !s) return s;
-  const agora = performance.now();
+  const agora = performance.now(), troca = o.troca;
+  if (troca && s.faixa === troca.faixa) { otmSpotify = null; return s } // o Mac já está na faixa que o toque escolheu: vale o dele
   if ((agora > o.ate && !pendSpotify) || s.faixa !== o.faixa) { otmSpotify = null; return s } // passou o prazo (sem comando a caminho), ou a faixa já é outra: vale o Mac
   // "ele já confirmou" só vale com a fila vazia: com comandos a caminho, o valor que o Mac mostra ainda é o do toque anterior
   // (play, pausa, play seguidos: o 2º volta ao que o Mac mostra, e a tela piscaria pausada até o 2º chegar)
@@ -37,11 +55,14 @@ function spotifyOtimista(s) {
   let posicao = null;
   if (o.pos) { const esperada = posEsperada(o.pos, agora); if (!pendSpotify && Math.abs((s.posicao || 0) - esperada) < 3) o.pos = null; else posicao = esperada }
   if (!Object.keys(o.campos).length && !o.pos) { otmSpotify = null; return s }
-  return { ...s, ...o.campos, ...(posicao == null ? {} : { posicao: Math.min(posicao, s.duracao || posicao) }) };
+  const vista = { ...s, ...troca, ...o.campos };
+  return posicao == null ? vista : { ...vista, posicao: Math.min(posicao, vista.duracao || posicao) };
 }
-function otimistaSpotify(campos, posicao) {
+/* troca: a faixa que o toque escolheu, antes de o Mac responder (tocar numa da fila). Fica em cima do estado do Mac até ele chegar na mesma faixa */
+function otimistaSpotify(campos, posicao, troca) {
   const agora = performance.now(), s = V.spotify, antes = otmSpotify && agora < otmSpotify.ate ? otmSpotify : null;
-  const novo = { campos: { ...(antes?.campos || {}), ...campos }, pos: antes?.pos ? { ...antes.pos, p0: posEsperada(antes.pos, agora), t0: agora } : null, faixa: s?.faixa, ate: agora + JANELA_OTM };
+  const novo = { campos: { ...(antes?.campos || {}), ...campos }, pos: antes?.pos ? { ...antes.pos, p0: posEsperada(antes.pos, agora), t0: agora } : null, faixa: antes?.faixa ?? s?.faixa, ate: agora + (troca || antes?.troca ? 8000 : JANELA_OTM) };
+  if (troca || antes?.troca) novo.troca = troca || antes.troca;
   if (posicao != null) novo.pos = { p0: posicao, t0: agora, andando: false };
   if (novo.pos) novo.pos.andando = !!(novo.campos.tocando ?? s?.tocando);
   otmSpotify = novo;
@@ -49,7 +70,7 @@ function otimistaSpotify(campos, posicao) {
 function acesasOtimistas(lista) {
   const agora = performance.now(), r = new Set(lista);
   for (const [id, o] of Object.entries(otmTeclas)) {
-    if (agora > o.ate || r.has(id) === o.acesa) { delete otmTeclas[id]; continue }
+    if (agora > o.ate || r.has(id) === o.acesa || rodandoSolto(id)) { delete otmTeclas[id]; continue } // o Mac já disse que está rodando: vale o "Ligando...", não o palpite
     if (o.acesa) r.add(id); else r.delete(id);
   }
   return [...r];
@@ -66,10 +87,13 @@ function vistaReal() {
     spotify: blocos.spotify === false ? null : spotifyOtimista(e.spotify || null),
     uso: blocos.uso === false ? [] : (e.uso || []).filter(u => mostrar(u.id)),
     sessoes: [...(e.sessoes || [])].filter(s => !dispensada(s)).sort((a, b) => Date.parse(b.desde) - Date.parse(a.desde)),
+    outras: blocos.sessoes === false ? [] : e.outrasSessoes || [], // trabalhando, paradas e as que acabaram de terminar: só um resumo no bloco
+    aprovacoes: e.aprovacoes || [], // pedidos de permissão do Claude Code esperando Permitir ou Negar (aprovacao.js)
     teclas: perfil?.teclas || [], perfilAtivo: perfilId,
     perfis: (config?.perfis || []).map(p => ({ id: p.id, nome: p.nome, n: p.teclas.length })),
     acesas: acesasOtimistas(e.acesas || []), selos: e.selos || {}, agenda: e.agenda || null, reuniao: e.reuniao || null,
     whatsapp: blocos.whatsapp === false ? null : e.whatsapp || null,
+    github: e.github || null, valoresDeFora: e.valoresDeFora || [],
   };
 }
 /* Esqueleto: a forma da última visita (só contagens, nunca texto), desenhada com os mesmos blocos da tela real. */
@@ -96,6 +120,13 @@ function vistaEsqueleto() {
     perfilAtivo: '', perfis: [], acesas: [], selos: {}, agenda: null, reuniao: null, whatsapp: null, monitor: null,
   };
 }
+/* Parcial: o esqueleto do resto com as teclas de verdade, para quando a config chega antes do estado. */
+function vistaParcial() {
+  const base = vistaEsqueleto(), perfil = (config.perfis || []).find(p => p.id === config.perfilAtivo);
+  return { ...base, parcial: true, comp: ['b', 'c'].includes(config.comp) ? config.comp : 'a', blocos: { ...base.blocos, ...config.blocos, uso: base.blocos.uso },
+    teclas: perfil?.teclas || [], perfilAtivo: config.perfilAtivo, perfis: (config.perfis || []).map(p => ({ id: p.id, nome: p.nome, n: p.teclas.length })) };
+}
+function mostrarParcial() { if (esqueletoPronto && V?.carregando && !V.parcial) { V = vistaParcial(); atualizar() } }
 const semMusica = () => !V.spotify;
 const usoVisivel = () => V.uso;
 
@@ -104,7 +135,7 @@ const usoVisivel = () => V.uso;
 function abrirMenu(el) {
   const r = el.getBoundingClientRect(), t = tela.getBoundingClientRect(), k = t.width / tela.offsetWidth;
   const l = $('#lista-perfis');
-  l.innerHTML = `<button data-nova-tecla>Nova tecla</button><span class="rotulo-lista">Perfil</span><div role="listbox" aria-label="Perfis">${V.perfis.map(p => `<button role="option" data-perfil="${esc(p.id)}" aria-selected="${p.id === V.perfilAtivo}">${esc(p.nome)}<small>${p.n} teclas</small></button>`).join('')}</div>${V.perfis.length > 1 ? '<span class="dica-perfis">Crie e edite perfis no Mac</span>' : ''}`;
+  l.innerHTML = `<button data-nova-tecla>Nova tecla</button><button data-escrever>Escrever no Mac</button><span class="rotulo-lista">Perfil</span><div role="listbox" aria-label="Perfis">${V.perfis.map(p => `<button role="option" data-perfil="${esc(p.id)}" aria-selected="${p.id === V.perfilAtivo}">${esc(p.nome)}<small>${p.n} teclas</small></button>`).join('')}</div>${V.perfis.length > 1 ? '<span class="dica-perfis">Crie e edite perfis no Mac</span>' : ''}`;
   l.hidden = false;
   // ancorada na tecla: abre para cima, ou para baixo se faltar espaço. Sem espaço nos dois (B deitado), abre ao lado
   const w = l.offsetWidth, h = l.offsetHeight, H = tela.offsetHeight, W = tela.offsetWidth;
@@ -119,15 +150,27 @@ const relogioHTML = () => `<div class="relogio" aria-label="Hora"><div class="pl
    algarismos na mesma placa que vira. O resto do relógio (tique, virarPlaca) é o mesmo das placas de um algarismo. */
 const relogioQHTML = () => `<div class="relogio relogio-q" aria-label="Hora"><div class="placa" data-i="h"></div><div class="placa" data-i="m"></div></div>`;
 const nivel = p => p == null ? '' : p >= 90 ? 'cheio' : p >= 70 ? 'alto' : '';
-const medidor = (rot, p) => `<div class="medidor ${nivel(p)}" aria-label="${rot}: ${p == null ? 'sem medição' : p + '%'}"><span class="trilho"><i style="width:${p ?? 0}%"></i></span><b>${p == null ? '-' : p + '%'}</b></div>`;
+/* esperado: onde o uso estaria se fosse parelho (ritmoSemana), uma marca fina na barra. Sem ele (poucas horas de janela) não há marca */
+const medidor = (rot, p, esperado) => `<div class="medidor ${nivel(p)}" aria-label="${rot}: ${p == null ? 'sem medição' : p + '%'}${esperado == null ? '' : `, o esperado agora é ${esperado}%`}"><span class="trilho"><i style="width:${p ?? 0}%"></i>${esperado == null ? '' : `<u style="left:${esperado}%"></u>`}</span><b>${p == null ? '-' : p + '%'}</b></div>`;
+/* o bloco todo é um botão: o toque abre o detalhe do uso (uso.js). O rótulo lê os números, já que o leitor de tela não entra no botão */
+const usoToque = () => `data-abrir-uso role="button" tabindex="0" aria-haspopup="dialog" aria-label="${esc('Uso das IAs: ' + usoVisivel().map(u => `${u.nome} ${u.conta} ${u.semana == null ? 'sem medição' : u.semana + '%'}`).join(', ') + '. Ver detalhes')}"`;
+/* só quando vai encher antes de renovar, o texto "enche 2 d" toma o lugar de "renova" na coluna (o cartão deitado não tem espaço para outra linha).
+   A coluna "renova" continua no DOM e no leitor de tela, que ouve as duas coisas. */
+function usoRenova(u) {
+  const r = ritmoSemana(u.semana, u.renova, V.ref), r0 = renovaEm(u.renova, true, V.ref);
+  const renova = `<span class="renova" aria-label="renova ${r0}">${r0}</span>`;
+  if (!r?.enche) return renova;
+  const t = contagemRenova(new Date(r.enche).toISOString(), V.ref);
+  return `<span class="renova-col tem-enche" aria-label="enche em ${t}, antes de renovar ${r0}">${renova}<span class="renova-enche" aria-hidden="true">enche ${t.split(' ').slice(0, 2).join(' ')}</span></span>`; // só a maior unidade (2 d, 5 h) na coluna estreita
+}
 function usoCartao() {
   if (!usoVisivel().length) return '';
-  return `<div class="cartao uso depende">${esconder('uso')}<div class="cartao-titulo"><span>Uso da semana</span><span class="renova-tit">renova</span></div>
-    ${usoVisivel().map(u => `<div class="uso-linha"><span class="uso-nome">${icServico(u.nome)}<span>${esc(u.nome)} <small>${esc(u.conta)}</small></span></span>${medidor('semana', u.semana)}<span class="renova" aria-label="renova ${renovaEm(u.renova, true, V.ref)}">${renovaEm(u.renova, true, V.ref)}</span></div>`).join('')}</div>`;
+  return `<div class="cartao uso depende" ${usoToque()}>${esconder('uso')}<div class="cartao-titulo"><span>Uso da semana</span><span class="renova-tit">renova</span></div>
+    ${usoVisivel().map(u => `<div class="uso-linha"><span class="uso-nome">${icServico(u.nome)}<span>${esc(u.nome)} <small>${esc(u.conta)}</small></span></span>${medidor('semana', u.semana, ritmoSemana(u.semana, u.renova, V.ref)?.esperado)}${usoRenova(u)}</div>`).join('')}</div>`;
 }
 function usoTira() {
   if (!usoVisivel().length) return ''; // nenhuma conta para mostrar: a faixa some
-  return `<div class="uso-tira depende">${esconder('uso')}${usoVisivel().map(u => { const p = u.semana, txt = p == null ? '-' : p + '%'; return `<span class="${nivel(p)}" aria-label="${esc(u.nome)} ${esc(u.conta)}: ${p == null ? 'sem medição' : txt}">${icServico(u.nome)}<span class="nome-u">${esc(u.nome === 'Claude' ? u.conta : u.nome)}</span> <span class="mini"><i style="width:${p ?? 0}%"></i></span><b>${txt}</b></span>` }).join('')}</div>`;
+  return `<div class="uso-tira depende" ${usoToque()}>${esconder('uso')}${usoVisivel().map(u => { const p = u.semana, txt = p == null ? '-' : p + '%'; const r = ritmoSemana(p, u.renova, V.ref); return `<span class="${nivel(p)}" aria-label="${esc(u.nome)} ${esc(u.conta)}: ${p == null ? 'sem medição' : txt}${r ? `, esperado agora ${r.esperado}%` : ''}${r?.enche ? `, enche em ${contagemRenova(new Date(r.enche).toISOString(), V.ref)}` : ''}">${icServico(u.nome)}<span class="nome-u">${esc(u.nome === 'Claude' ? u.conta : u.nome)}</span> <span class="mini"><i style="width:${p ?? 0}%"></i>${r ? `<u style="left:${r.esperado}%"></u>` : ''}</span><b>${txt}</b></span>` }).join('')}</div>`;
 }
 /* Monitor do Mac: uma faixa pequena com o que a pessoa deixou ligado nos Ajustes do Mac (`itens` do estado).
    Bateria some sozinha em Mac sem bateria. Processador, memória e rede ficam com "-" até a primeira medida. */
@@ -167,13 +210,13 @@ function mesCHTML() {
 const usoAtual = () => posicao === 'horizontal' && V.comp === 'a' ? usoCartao() : usoTira();
 const temModos = s => s.repetir !== undefined || s.aleatorio !== undefined; // Mac antigo não manda: sem inventar, os botões não aparecem
 const botaoModo = (k, s, rot) => k === 'repetir' && conectado(s)
-  ? `<button class="modo" data-midia="repetir" data-modo="${modoRepetir(s)}" aria-label="${ROTULO_REPETIR[modoRepetir(s)]}" aria-pressed="${modoRepetir(s) !== 'nao'}">${SVG.repetir}</button>`
+  ? `<button class="modo" data-midia="repetir" data-modo="${modoRepetir(s)}" aria-label="${ROTULO_REPETIR[modoRepetir(s)]}" aria-pressed="${modoRepetir(s) !== 'nao'}">${modoRepetir(s) === 'faixa' ? SVG.repetirFaixa : SVG.repetir}</button>`
   : `<button class="modo" data-midia="${k}" aria-label="${rot}" aria-pressed="${!!s[k]}">${SVG[k]}</button>`;
 const capaEstilo = s => { const c1 = corCapa(s.cores?.[0], .55), c2 = corCapa(s.cores?.[1] || s.cores?.[0], .35); return c1 ? ` style="--capa-1: ${c1}; --capa-2: ${c2}"` : '' };
 function playerHTML() {
   const s = V.spotify || { tocando: false, faixa: '', artista: '', posicao: 0, duracao: 0, cores: [] }, t = !!s.tocando;
   // cores da capa: o Mac tira as duas cores dominantes da arte e manda junto
-  const capa = s.capaId ? ` src="${esc(canal.capaUrl(s.capaId))}"` : '';
+  const capa = capaAttr(s);
   const modos = temModos(s);
   return `<div class="cartao player depende ${t ? '' : 'pausado'}"${capaEstilo(s)}>${esconder('spotify')}
     <img class="capa" data-abrir-spotify${capa} alt="${V.carregando ? '' : 'Capa: ' + esc(s.faixa)}" onerror="this.dataset.erro=1;this.removeAttribute('src')">
@@ -187,17 +230,33 @@ const ESCONDE = { spotify: 'Spotify', sessoes: 'Sessões', uso: 'Uso das IAs' };
 const esconder = b => `<span class="esconder-bloco" role="button" tabindex="0" data-esconder="${b}" aria-label="Esconder ${ESCONDE[b]}">${SVG.menos}</span>`;
 function sessoesHTML() {
   if (V.blocos.sessoes === false) return '';
-  const n = V.sessoes.length;
+  const n = V.sessoes.length, resumo = resumoOutras(V.outras);
   const corpo = n === 0 ? `<div class="vazio-rico"><img src="icones/claude.png" alt=""><div><strong>Tudo respondido</strong><span>Nenhuma sessão do Claude esperando você.</span></div></div>`
     : V.sessoes.slice(0, 7).map(s => { const h = haQuanto(s.desde, V.ref); return `<div class="sessao"><b>${esc(s.nome)}</b><span>${esc(s.pergunta)}</span><time class="${h.velha ? 'velha' : ''}">${h.texto}</time></div>` }).join('');
   // o bloco inteiro é um alvo só: linha pequena demais para acertar no dedo
-  return `<button class="cartao sessoes depende" data-painel="sessoes" aria-label="Sessões esperando: ${n}">${esconder('sessoes')}<div class="cartao-titulo"><span>${icServico('Claude')}Sessões esperando</span>${n ? `<span class="conta">${n}</span>` : ''}</div>${corpo}</button>`;
+  return `<button class="cartao sessoes depende" data-painel="sessoes" aria-label="Sessões esperando: ${n}${resumo ? `, ${esc(resumo)}` : ''}">${esconder('sessoes')}<div class="cartao-titulo"><span>${icServico('Claude')}Sessões esperando</span>${resumo || n ? `<span class="lado">${resumo ? `<small class="outras">${esc(resumo)}</small>` : ''}${n ? `<span class="conta">${n}</span>` : ''}</span>` : ''}</div>${corpo}</button>`;
 }
 /* horário do próximo evento na tecla da Agenda: "14:00", "amanhã 10:30", "qui 20:00" */
 function horaDoEvento(ev) {
   const d = new Date(ev.inicio), dias = diasEntre(V.ref, d), hh = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
   const dia = dias <= 0 ? '' : dias === 1 ? 'amanhã' : d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '');
   return ev.diaTodo ? dia || 'hoje' : (dia + ' ' + hh).trim();
+}
+/* Tecla de comando que o Mac está rodando solto (o comando demora: troca de apps, foco...). `andamento` do estado traz a fase de cada
+   uma: ligando, desligando, rodando, ou falhou (por uns 30 s, com o motivo). O toque responde na hora e a tecla mostra o que acontece. */
+const fasesLocais = {};  // tecla de comando tocada que o Mac ainda não respondeu: o "Ligando..." vem do próprio toque, a tecla não finge estar ligada
+const faseDaTecla = id => { const f = estado?.andamento?.[id]?.fase || fasesLocais[id]; return f === 'ligando' || f === 'desligando' || f === 'rodando' ? f : null };
+const rodandoSolto = id => !!faseDaTecla(id);
+const TEXTO_DA_FASE = { ligando: 'Ligando...', desligando: 'Desligando...', rodando: 'Rodando...' };
+// falha de comando solto: avisa uma vez por falha (o Mac guarda a falha por uns 30 s no estado)
+const falhasAvisadas = new Set();
+function avisarFalhasDeComando() {
+  for (const [id, a] of Object.entries(estado?.andamento || {})) {
+    if (a?.fase !== 'falhou' || !a.erro) continue;
+    const chave = id + '|' + a.fim; if (falhasAvisadas.has(chave)) continue;
+    falhasAvisadas.add(chave);
+    const t = V?.teclas?.find(x => x.id === id); avisar(`${t ? t.nome + ': ' : ''}${a.erro}`, { erro: true });
+  }
 }
 // tecla que acende: a que tem comando de conferir (`estado`) ou liga e desliga (`desligar`, o Mac guarda o estado)
 const acendeTecla = t => !!(t.estado || t.desligar);
@@ -214,9 +273,9 @@ function infoTecla(t) {
   const cal = painelDe(t) === 'calendario';
   const selo = V.selos[t.id] ?? (cal && V.agenda && V.agenda.permissao === false ? '!' : null);
   const prox = cal && !selo && V.agenda?.proximo ? V.agenda.proximo : null;
-  const reu = estadoDaReuniao(t);
+  const reu = estadoDaReuniao(t), fase = faseDaTecla(t.id);
   if (reu) return { acesa: reu === 'ligado', selo: null, hora: null, reuniao: reu };
-  return { acesa: acendeTecla(t) && V.acesas.includes(t.id), selo, hora: prox ? horaDoEvento(prox) : null, titulo: prox?.titulo };
+  return { acesa: acendeTecla(t) && V.acesas.includes(t.id), selo, hora: prox ? horaDoEvento(prox) : null, titulo: prox?.titulo, fase };
 }
 // aria-pressed: tecla de estado (acende ou apaga), e a de reunião só quando o Mac leu ligado ou desligado
 const pressionada = (t, i) => i.reuniao ? (i.reuniao === 'ligado' || i.reuniao === 'desligado' ? String(i.acesa) : null) : acendeTecla(t) ? String(i.acesa) : null;
@@ -226,9 +285,10 @@ const rotuloDaReuniao = (t, r) => {
 };
 function extraTecla(t, i) {
   const seloTxt = i.selo == null ? '' : /^\d+$/.test(i.selo) && +i.selo > 99 ? '99+' : i.selo;
-  const aria = i.selo === '!' ? 'Agenda sem permissão' : `${i.selo} não lidas`;
+  const qual = painelDe(t), aria = i.selo === '!' ? 'Agenda sem permissão' : qual === 'github' ? `${i.selo} PRs pedindo atenção` : qual === 'valores' ? `${i.selo} valores` : `${i.selo} não lidas`;
   return (i.selo != null ? `<span class="selo" aria-label="${esc(aria)}">${esc(seloTxt)}</span>` : '')
     + (i.reuniao ? `<span class="estado-tecla ${i.reuniao}" aria-label="${esc(rotuloDaReuniao(t, i.reuniao))}">${esc(textoDaReuniao(t, i.reuniao))}</span>` : '')
+    + (i.fase ? `<span class="estado-tecla andando" aria-label="${esc(t.nome)}: ${esc(TEXTO_DA_FASE[i.fase].replace('...', ''))}">${esc(TEXTO_DA_FASE[i.fase])}</span>` : '')
     + (i.hora ? `<span class="hora-tecla" aria-label="Próximo: ${esc(i.titulo)} ${esc(i.hora)}">${esc(i.hora)}</span>` : '');
 }
 function teclaHTML(t) {
@@ -255,8 +315,8 @@ const porPagina = () => V.comp === 'b' ? (posicao === 'vertical' ? 6 : 9) : posi
 
 /* ---------- desenho ---------- */
 // o que, se mudar, obriga a refazer a tela inteira
-const chaveLayout = () => JSON.stringify([posicao, V.comp, monitorItens(), !!V.carregando, V.blocos.sessoes !== false, usoVisivel().length > 0, V.perfilAtivo, V.perfis, V.teclas.map(t => [t.id, t.nome, t.tipo, t.valor, t.icone, acendeTecla(t)]), appsMac.versao]);
-const chaveTeclas = () => JSON.stringify(V.teclas.map(t => { const i = infoTecla(t); return [i.acesa, i.selo, i.hora, i.reuniao] }));
+const chaveLayout = () => JSON.stringify([posicao, V.comp, monitorItens(), !!V.carregando, !!V.parcial, V.blocos.sessoes !== false, usoVisivel().length > 0, V.perfilAtivo, V.perfis, V.teclas.map(t => [t.id, t.nome, t.tipo, t.valor, t.icone, acendeTecla(t)]), appsMac.versao]);
+const chaveTeclas = () => JSON.stringify(V.teclas.map(t => { const i = infoTecla(t); return [i.acesa, i.selo, i.hora, i.reuniao, i.fase] }));
 const chavePlayer = () => { const s = V.spotify; return s ? JSON.stringify([s.faixa, s.artista, s.album, s.capaId, s.cores, s.duracao, temModos(s), conectado(s)]) : null };
 
 function render() {
@@ -265,6 +325,7 @@ function render() {
   const sem = `${semMusica() ? 'sem-musica' : ''} ${V.blocos.sessoes === false ? 'sem-sessoes' : ''} ${usoVisivel().length ? '' : 'sem-uso'}`;
   const c = $('#conteudo');
   c.classList.toggle('carregando', !!V.carregando);
+  c.classList.toggle('parcial', !!V.parcial);
   c.setAttribute('aria-busy', String(!!V.carregando));
   const cm = monitorItens().length ? ' com-monitor' : '';
   c.innerHTML = V.comp === 'c'
@@ -296,14 +357,13 @@ function atualizar() {
   const sem = semMusica();
   if (V.spotify && V.comp !== 'c') { // a C não tem o player pequeno
     const kp = chavePlayer();
-    if (kp !== ultima.player) { $('.player').outerHTML = playerHTML(); ultima.player = kp }
+    if (kp !== ultima.player) { const velha = $('.player .capa'); $('.player').outerHTML = playerHTML(); guardarCapa(velha, $('.player .capa'), V.spotify); ultima.player = kp }
     const pl = $('.player');
-    // a capa que falhou ao baixar (Mac ocupado, rede) é pedida de novo no próximo passo
-    const img = $('.capa', pl);
-    if (img?.dataset.erro && V.spotify.capaId) { delete img.dataset.erro; img.src = canal.capaUrl(V.spotify.capaId) }
+    sincronizarCapa($('.capa', pl), V.spotify);
     pintarMidia(pl, V.spotify);
   }
   if (folhaAberta?.id === 'f-player') pintarPlayerCheio();
+  if (cortinaVisivel()) pintarCortinaMidia();
   if (sem !== ultima.semMusica) { ultima.semMusica = sem; if (V.comp !== 'c') alternarMusica(sem) } // a C não tem player: o relógio já ocupa o lugar
   const uso = usoAtual(), elUso = $('.cartao.uso, .uso-tira');
   if (elUso && uso !== ultima.uso) { elUso.outerHTML = uso; ultima.uso = uso }
@@ -324,7 +384,8 @@ function pintarMidia(raiz, s) {
   if (b && b.classList.contains('play') === t) { b.classList.toggle('play', !t); b.setAttribute('aria-label', t ? 'Pausar' : 'Tocar'); b.innerHTML = t ? SVG.pausar : SVG.tocar }
   $$('.modo', raiz).forEach(m => {
     if (m.dataset.midia !== 'repetir') return m.setAttribute('aria-pressed', String(!!s[m.dataset.midia]));
-    const modo = modoRepetir(s); // com o Spotify conectado são três jeitos: nada, a lista, só a música
+    const modo = modoRepetir(s), eraFaixa = m.dataset.modo === 'faixa'; // com o Spotify conectado são três jeitos: nada, a lista, só a música
+    if (eraFaixa !== (modo === 'faixa')) m.innerHTML = modo === 'faixa' ? SVG.repetirFaixa : SVG.repetir; // só a música leva o 1 dentro
     m.setAttribute('aria-pressed', String(modo !== 'nao')); m.setAttribute('aria-label', conectado(s) ? ROTULO_REPETIR[modo] : 'Repetir a lista ou o álbum');
     if (conectado(s)) m.dataset.modo = modo; else delete m.dataset.modo;
   });
@@ -356,7 +417,7 @@ function pintarProgresso(forcar) {
   $$('.progresso').forEach(pr => {
     const tr = $('.trilho', pr);
     pr.dataset.total = s.duracao || 0;
-    $('.decorrido', pr).textContent = mmss(s.posicao); $('.total', pr).textContent = mmss(s.duracao);
+    $('.decorrido', pr).textContent = mmss(s.posicao); $('.total', pr).textContent = s.aguardando ? '' : mmss(s.duracao); // trocou de faixa e o Mac ainda não disse a duração: sem total até chegar, para não saltar de 0:00
     $('i', tr).style.width = (s.duracao > 0 ? Math.min(100, s.posicao / s.duracao * 100) : 0) + '%';
     tr.setAttribute('aria-valuenow', Math.round(s.posicao || 0)); tr.setAttribute('aria-valuemax', Math.round(s.duracao || 0));
   });
@@ -415,7 +476,8 @@ document.addEventListener('pointerdown', ev => {
 document.addEventListener('pointermove', ev => { if (scrub) moverScrub(ev) });
 document.addEventListener('pointerup', async () => {
   if (!scrub) return;
-  const { pr, f } = scrub, s = Math.round(f * (+pr.dataset.total)), texto = $('.decorrido', pr).textContent;
+  const { pr, f } = scrub, total = +pr.dataset.total; if (!(total > 0)) { pr.classList.remove('arrastando'); scrub = null; pintarProgresso(true); return } // sem duração (faixa recém-trocada) não há onde buscar
+  const s = Math.round(f * total), texto = $('.decorrido', pr).textContent;
   pr.classList.remove('arrastando'); scrub = null; travaProgressoAte = performance.now() + 1500;
   otimistaSpotify({}, s); avisar('Pulou para ' + texto); // a barra já fica onde o dedo soltou: o Mac confirma em seguida
   V = vistaReal(); pintarProgresso(true); // e a do outro player (o pequeno atrás da tela cheia) também, sem esperar a trava
@@ -438,13 +500,14 @@ function virarPlaca(el, novo) {
   requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('virando')));
   setTimeout(() => { if (el.dataset.d === novo) montarPlaca(el, novo) }, 900);
 }
+const FORMATO_DATA = new Intl.DateTimeFormat('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
 function tique(inicial) {
   const agora = new Date();
   const dig = (String(agora.getHours()).padStart(2, '0') + String(agora.getMinutes()).padStart(2, '0')).split('');
   const alvo = { ...dig, h: dig[0] + dig[1], m: dig[2] + dig[3] }; // h e m: as placas de dois algarismos da composição C
   $$('.placa').forEach(el => { const d = alvo[el.dataset.i]; if (inicial || !el.dataset.d) montarPlaca(el, d); else if (el.dataset.d !== d) virarPlaca(el, d) });
-  const [dia, ...resto] = agora.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' }).split(', ');
-  $$('.data').forEach(d => { d.innerHTML = `<b>${dia}</b>, ${resto.join(', ')}` });
+  const [dia, ...resto] = FORMATO_DATA.format(agora).split(', '), html = `<b>${dia}</b>, ${resto.join(', ')}`;
+  $$('.data').forEach(d => { if (d.dataset.dia !== html) { d.innerHTML = html; d.dataset.dia = html } }); // a data muda uma vez por dia: não refaz a cada segundo
 }
 setInterval(() => tique(false), 1000);
 /* tela cheia: as mesmas placas e a data, grandes, em fundo preto. Tocar em qualquer lugar volta */
@@ -472,15 +535,24 @@ const ocupadas = new Set(); // um toque, uma ação: a tecla espera o Mac respon
 async function executar(id) {
   if (id === 'menu') { const lp = $('#lista-perfis'); return lp.hidden ? abrirMenu($('.tecla.menu')) : (lp.hidden = true) }
   const t = V.teclas.find(x => x.id === id); if (!t || ocupadas.has(id)) return;
+  if (rodandoSolto(id)) return avisar(`${t.nome}: ainda ${faseDaTecla(id)}. Espere terminar.`); // o Mac ainda está no comando anterior
   if (painelDe(t)) return abrirPainel(painelDe(t), id); // WhatsApp e Calendário abrem a lista aqui, com "Abrir no Mac" dentro
   ocupadas.add(id);
   // resposta otimista: a tecla acende (ou pisca) e o aviso aparece no toque. Se o Mac recusar, volta e o aviso vira o erro
   const el = $(`.tecla[data-id="${CSS.escape(id)}"]`), quer = !V.acesas.includes(id);
   el?.classList.add('piscando'); setTimeout(() => el?.classList.remove('piscando'), 400);
-  if (acendeTecla(t)) { otmTeclas[id] = { acesa: quer, ate: performance.now() + JANELA_OTM }; V = vistaReal(); atualizar(); avisar(`${t.nome}: ${quer ? 'ligado' : 'desligado'}`) }
+  if (t.tipo === 'comando') { fasesLocais[id] = t.desligar ? (quer ? 'ligando' : 'desligando') : 'rodando'; V = vistaReal(); atualizar() } // sem palpite: acende e avisa só depois de o Mac responder
+  else if (acendeTecla(t)) { otmTeclas[id] = { acesa: quer, ate: performance.now() + JANELA_OTM }; V = vistaReal(); atualizar(); avisar(`${t.nome}: ${quer ? 'ligado' : 'desligado'}`) }
   else avisar(t.tipo === 'app' && !itemDeReuniao(t) ? `Abrindo ${t.nome} no Mac` : `${t.nome}: feito`);
-  try { await canal.botao(id); atualizarJa() }
-  catch (e) { delete otmTeclas[id]; el?.classList.remove('piscando'); if (V) { V = vistaReal(); atualizar() } tratarErro(e) }
+  try {
+    await canal.botao(id);
+    if (t.tipo === 'comando') {
+      await atualizarJa(); delete fasesLocais[id];
+      if (rodandoSolto(id)) { V = vistaReal(); atualizar() } // o Mac disse que está rodando: vale o "Ligando..." dele
+      else { if (acendeTecla(t)) otmTeclas[id] = { acesa: quer, ate: performance.now() + JANELA_OTM }; V = vistaReal(); atualizar(); avisar(acendeTecla(t) ? `${t.nome}: ${quer ? 'ligado' : 'desligado'}` : `${t.nome}: feito`) }
+    } else atualizarJa();
+  }
+  catch (e) { delete otmTeclas[id]; delete fasesLocais[id]; el?.classList.remove('piscando'); if (V) { V = vistaReal(); atualizar() } tratarErro(e) }
   finally { ocupadas.delete(id) }
 }
 /* Spotify: um comando de cada vez, na ordem do toque (dois pedidos soltos podem chegar trocados ao Mac) */
@@ -505,7 +577,7 @@ function midia(acao) {
    na API do Spotify), então não aparecem. */
 let cheioChave = '';
 function playerCheioHTML(s) {
-  const t = !!s.tocando, modos = temModos(s), capa = s.capaId ? ` src="${esc(canal.capaUrl(s.capaId))}"` : '';
+  const t = !!s.tocando, modos = temModos(s), capa = capaAttr(s, true);
   return `<div class="pc ${t ? '' : 'pausado'}">
     <img class="capa-grande"${capa} alt="Capa: ${esc(s.faixa)}" onerror="this.dataset.erro=1;this.removeAttribute('src')">
     <div class="pc-info">
@@ -522,11 +594,11 @@ function pintarPlayerCheio() {
   if (k !== cheioChave) {
     cheioChave = k;
     f.style.setProperty('--capa-1', corCapa(s.cores?.[0], .55) || 'transparent'); f.style.setProperty('--capa-2', corCapa(s.cores?.[1] || s.cores?.[0], .35) || 'transparent');
-    $('#pc-corpo').innerHTML = playerCheioHTML(s); pintarProgresso(true);
+    const velha = $('.capa-grande', f); $('#pc-corpo').innerHTML = playerCheioHTML(s); guardarCapa(velha, $('.capa-grande', f), s); pintarProgresso(true);
   }
   pintarMidia($('.pc', f), s); pintarExtras(s);
-  if (lp.qual === 'fila' && s.faixa !== lp.faixa) { lp.faixa = s.faixa; pintarTopoFila(); lerListaPlayer() } // a fila anda com a música: o alto troca na hora, a lista quando o Mac responder
-  const img = $('.capa-grande', f); if (img?.dataset.erro && s.capaId) { delete img.dataset.erro; img.src = canal.capaUrl(s.capaId) }
+  if (lp.qual === 'fila' && s.faixa !== lp.faixa) { lp.faixa = s.faixa; pintarTopoFila(); lerListaPlayer() } else if (lp.qual === 'fila') pintarTopoFila(); // mesma faixa: só o artista e a capa, se mudaram // a fila anda com a música: o alto troca na hora, a lista quando o Mac responder
+  sincronizarCapa($('.capa-grande', f), s);
 }
 async function ativarPerfil(id) {
   $('#lista-perfis').hidden = true;
@@ -539,9 +611,11 @@ tela.addEventListener('click', ev => {
   const lp = $('#lista-perfis'), pf = ev.target.closest('[data-perfil]');
   if (pf) return ativarPerfil(pf.dataset.perfil);
   if (ev.target.closest('[data-nova-tecla]')) { lp.hidden = true; return abrirEditor('nova') }
+  if (ev.target.closest('[data-escrever]')) { lp.hidden = true; return abrirEscrever() }
   if (!lp.hidden && !ev.target.closest('#lista-perfis, .tecla.menu')) { lp.hidden = true; return }
   const eb = ev.target.closest('[data-esconder]'); if (eb && organizando) { ev.stopPropagation(); return trocarBloco(eb.dataset.esconder, false) }
   const mb = ev.target.closest('[data-mostrar]'); if (mb) return trocarBloco(mb.dataset.mostrar, true);
+  if (!organizando && ev.target.closest('[data-abrir-uso]')) return abrirUso();
   if (ev.target.closest('#f-relogio')) return fecharRelogio();
   const m = ev.target.closest('[data-midia]'); if (m) return midia(m.dataset.midia);
   if (!organizando && ev.target.closest('[data-abrir-spotify]') && V.spotify) return abrirPlayer();
@@ -554,6 +628,7 @@ tela.addEventListener('click', ev => {
   if (t && ev.detail === 0) return organizando ? abrirEditor(t.dataset.id === 'menu' ? 'nova' : t.dataset.id) : executar(t.dataset.id);
   if (organizando && !t && !ev.target.closest('.barra-organizar, .folha, .veu, #aviso')) sairOrganizar();
 });
+addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && !organizando && e.target.matches?.('[data-abrir-uso]')) { e.preventDefault(); abrirUso() } });
 addEventListener('keydown', e => { if (e.key === 'Escape') { fecharRelogio(); fecharFolha(); sairOrganizar() } });
 
 /* ---------- gravar no Mac: o iPhone só grava pela config inteira (PUT /api/config) ---------- */
@@ -693,7 +768,7 @@ let folhaAberta = null;
 tela.addEventListener('scroll', () => { tela.scrollTop = 0; tela.scrollLeft = 0 });
 function abrirFolha(id) { folhaAberta = $(id); folhaAberta.classList.add('aberta'); tela.classList.add('com-folha') }
 function fecharFolha() { if (folhaAberta?.contains(document.activeElement)) document.activeElement.blur(); folhaAberta?.classList.remove('aberta'); folhaAberta = null; tela.classList.remove('com-folha') }
-$$('[data-fechar]').forEach(b => { if (!b.textContent.trim()) b.innerHTML = SVG.x });
+$$('[data-fechar]').forEach(b => { if (!b.textContent.trim()) b.innerHTML = 'Fechar' });
 
 /* Puxar de cima para baixo fecha a tela aberta (folhas e relógio). A tela acompanha o dedo e, se soltar cedo, volta.
    Não rouba o gesto de lista que ainda rola para cima, de barra arrastável nem de campo de texto */
@@ -711,7 +786,7 @@ function devolverTela(f, fechar) {
 tela.addEventListener('touchstart', e => {
   puxar = null;
   const f = telaAberta(); if (!f || e.touches.length !== 1 || !f.contains(e.target)) return;
-  if (e.target.closest('input, textarea, select, .progresso, .volume, .trilho') || rolaParaCima(e.target, f)) return;
+  if (e.target.closest('input, textarea, select, .progresso, .volume, .trilho, .seletor') || rolaParaCima(e.target, f)) return;
   const t = e.touches[0]; puxar = { f, x: t.clientX, y: t.clientY, t: e.timeStamp, dy: 0, seguindo: false };
 }, { passive: true });
 tela.addEventListener('touchmove', e => {
@@ -774,7 +849,8 @@ $('#ed-acao').addEventListener('click', e => {
   const a = e.target.closest('[data-app]'); if (a) { rasc.valor = a.dataset.app; rasc.icone = a.dataset.app; if (!$('#ed-nome').value || APPS.some(x => x.nome === $('#ed-nome').value)) $('#ed-nome').value = a.dataset.app; pintarTipo(); return }
   if (e.target.id === 'ed-gravar') avisar('Grave a combinação no editor de teclas do Mac');
 });
-$('#ed-icones').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; rasc.icone = b.dataset.ic; pintarTipo() });
+// pintarTipo refaz o campo da ação a partir do rascunho: o que a pessoa já digitou entra no rascunho antes, senão o ícone apagava o comando
+$('#ed-icones').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; const v = $('#ed-valor'); if (v) rasc.valor = v.value; rasc.icone = b.dataset.ic; pintarTipo() });
 /* Salvar e Excluir são otimistas como o resto: o editor fecha e a tecla muda no toque. Se o Mac recusar, a tela volta
    ao que era e o editor reabre com o que a pessoa tinha digitado, junto com o motivo no aviso. */
 const mudarTecla = (pid, fn) => base => { const p = base.perfis.find(x => x.id === pid); if (!p) throw new Error('Esse perfil não existe mais no Mac.'); fn(p.teclas); return base };
@@ -823,27 +899,46 @@ function pintarGlobal() {
   tela.classList.toggle('offline', offline && !semAcesso);
   tela.classList.toggle('sem-acesso', semAcesso);
   const nome = estado?.nomeMac || lerGuardado('deck-nome-mac'); $('#nome-mac').textContent = nome || 'Seu Mac';
+  // a causa da queda no lugar do texto genérico (no app nativo quem escreve é o Swift, casca.js)
+  const dica = $('.tela-offline:not(.acesso) .dica-off');
+  if (!canal.nativo && offline && !semAcesso && dica.textContent !== CAUSAS.macIndisponivel) dica.textContent = CAUSAS.macIndisponivel;
+  $('#acesso-titulo').textContent = causa === 'codigoExpirou' ? 'Código expirou' : 'Deck não pareado';
 }
+// O Mac manda o carimbo da config no estado (configVersao): só relê quando ele muda, em vez de baixar tudo a cada 5 s. Mac antigo, sem carimbo,
+// segue como antes (compara os blocos e relê de vez em quando, agora a cada 30). Nunca por cima de uma gravação a caminho
+const ESPERA_CONFIG = 15000; // depois de uma releitura que falhou, o mesmo carimbo só é tentado de novo passado esse tempo
 const precisaConfig = e => !pendentes && !gesto?.arrastando && (!config || config.perfilAtivo !== e.perfilAtivo || config.comp !== e.comp || config.nomeMac !== e.nomeMac
-  || JSON.stringify(config.blocos) !== JSON.stringify(e.blocos) || ++tiquesConfig % 5 === 0); // e de vez em quando: teclas editadas no Mac. Nunca por cima de uma gravação a caminho
-let esqueletoDesde = 0, esqueletoTimer = 0, configFalhou = false;
+  || (e.configVersao ? e.configVersao !== versaoConfig && performance.now() - configTentadaEm > ESPERA_CONFIG : JSON.stringify(config.blocos) !== JSON.stringify(e.blocos) || ++tiquesConfig % 30 === 0));
+let configFalhou = false, esqueletoDesde = 0, esqueletoTimer = 0, esqueletoPronto = false, configEmVoo = null;
+const pedirConfig = () => configEmVoo ??= canal.config().finally(() => { configEmVoo = null }); // nunca dois GET /api/config ao mesmo tempo
 let ultimoOk = performance.now(); // a última resposta boa do Mac
 async function passo() {
   try {
+    // Primeira abertura: sem config não há teclas, e ela não depende do estado (que no Mac espera a leitura do Spotify).
+    // Pede as duas juntas e, se a config chegar primeiro, as teclas já saem de verdade (mostrarParcial).
+    if (!config) {
+      const gen = geracaoConfig;
+      pedirConfig().then(nova => { if (!config && !estado && gen === geracaoConfig && !pendentes) { config = nova; configFalhou = false; mostrarParcial() } }, () => {}); // o erro é tratado abaixo, quando alguém espera por ela
+    }
     const e = await canal.estado();
-    estado = e; falhas = 0; ultimoOk = performance.now(); offline = false; semAcesso = false;
+    estado = e; falhas = 0; tentativasOff = 0; causa = null; ultimoOk = performance.now(); offline = false; semAcesso = false;
     if (e.nomeMac) guardar('deck-nome-mac', e.nomeMac);
+    if (config && versaoConfig === null && e.configVersao) versaoConfig = e.configVersao; // config que chegou antes do primeiro estado (mostrarParcial): é desta versão, não há o que reler
     if (precisaConfig(e)) {
       const gen = geracaoConfig;
-      try { const nova = await canal.config(); if (gen === geracaoConfig && !pendentes) config = nova; configFalhou = false }
+      try { const nova = await pedirConfig(); if (gen === geracaoConfig && !pendentes) { config = nova; versaoConfig = e.configVersao ?? null } configFalhou = false; configTentadaEm = -Infinity }
       catch (er) {
         if (er.status === 401) throw er;
+        configTentadaEm = performance.now();
         // sem config não há teclas: avisa uma vez e continua tentando a cada passo
         if (!config && !configFalhou) { configFalhou = true; avisar('Não consegui ler as teclas do Mac. Tentando de novo.', { erro: true }) }
       }
     }
+    avisarFalhasDeComando(); processarAvisosDeFora(e);
     pintarGlobal(); mostrarVista();
+    regrasPasso(e);
   } catch (er) {
+    causa = causaDaFalha(er);
     if (er.status === 401) semAcesso = true;
     // Com o painel já aberto, o Mac só "sumiu" depois de várias falhas seguidas E de um tempo sem resposta boa: um tropeço
     // (pedido lento, o Mac reiniciando) não fecha a tela. Na primeira abertura não há o que proteger, e a falha já fecha.
@@ -853,13 +948,14 @@ async function passo() {
   }
 }
 function mostrarVista() {
-  // o esqueleto, depois de aparecer, fica pelo menos 400 ms (resposta que chega logo depois não pisca a tela)
-  const resta = esqueletoDesde ? esqueletoDesde + 400 - performance.now() : 0;
+  // o esqueleto, depois de aparecer, fica pelo menos 200 ms (resposta que chega logo depois não pisca a tela)
+  const resta = esqueletoDesde ? esqueletoDesde + 200 - performance.now() : 0;
   if (resta > 0) { clearTimeout(esqueletoTimer); esqueletoTimer = setTimeout(mostrarVista, resta); return }
-  const eraEsqueleto = !!V?.carregando;
+  const eraEsqueleto = !!V?.carregando, eraParcial = !!V?.parcial; // parcial já mostra as teclas reais: sem fade por cima delas
   V = vistaReal(); guardarForma(); esqueletoDesde = 0;
   atualizar();
-  if (eraEsqueleto) $('#conteudo').animate([{ opacity: 0 }, { opacity: 1 }], { duration: parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--mov-rapido')) || 180 });
+  pintarAprovacoes(); notarSessoes();
+  if (eraEsqueleto && !eraParcial) $('#conteudo').animate([{ opacity: 0 }, { opacity: 1 }], { duration: parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--mov-rapido')) || 180 });
 }
 let emVoo = null, acordar = null, lacoAtivo = false;
 const buscar = () => emVoo ??= passo().finally(() => { emVoo = null }); // nunca dois pedidos de estado ao mesmo tempo
@@ -869,22 +965,30 @@ async function laco() {
   try { await rodarLaco() } finally { lacoAtivo = false }
 }
 // o pareamento pela página (pareamento.js) deu um código novo: o laço parou no 401 e volta a andar
-function retomarAposParear() { semAcesso = false; falhas = 0; ultimoOk = performance.now(); pintarGlobal(); laco() }
+function retomarAposParear() { semAcesso = false; falhas = 0; tentativasOff = 0; causa = null; ultimoOk = performance.now(); pintarGlobal(); laco() }
 async function rodarLaco() {
   for (;;) {
     const t0 = performance.now();
     await buscar();
     if (semAcesso) return; // código inválido: sem QR novo nada mais vale
-    await new Promise(r => { const t = setTimeout(r, Math.max(0, AJUSTES.intervalo - (performance.now() - t0))); acordar = () => { clearTimeout(t); r() } });
+    // página escondida: o Mac não precisa ler Spotify, agenda e uso para ninguém ver. Espera 10 s (ou a volta à tela, que acorda na hora)
+    // Mac fora: cada tentativa espera mais (1, 2, 4, 8, 16, 30 s). Antes de a tela fechar vale o passo de 1 s de sempre
+    const espera = document.hidden ? 10000 : offline ? esperaOffline(++tentativasOff) : AJUSTES.intervalo;
+    await new Promise(r => { const t = setTimeout(r, Math.max(0, espera - (performance.now() - t0))); acordar = () => { clearTimeout(t); r() } });
   }
 }
-document.addEventListener('visibilitychange', () => { if (!document.hidden && !semAcesso) acordar?.() });
+// voltar para a frente ou a rede mudar: tenta já e recomeça a escala do 1 s (o laço é um só, então não vira rajada)
+function recomecarEscala() { if (semAcesso) return; tentativasOff = 0; acordar?.() }
+document.addEventListener('visibilitychange', () => { if (!document.hidden) recomecarEscala() });
+addEventListener('online', recomecarEscala);
+navigator.connection?.addEventListener?.('change', recomecarEscala);
 
 // carregando: nada nos primeiros 200 ms, depois o esqueleto com a forma da última visita
 posicionar();
 setTimeout(() => {
+  esqueletoPronto = true;
   if (V || offline || semAcesso) return;
-  V = vistaEsqueleto(); esqueletoDesde = performance.now(); atualizar();
-}, 200);
+  V = config ? vistaParcial() : vistaEsqueleto(); esqueletoDesde = performance.now(); atualizar();
+}, 100);
 pintarGlobal();
 laco();

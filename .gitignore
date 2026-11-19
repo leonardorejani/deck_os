@@ -36,3 +36,5 @@ helpers/whatsapp/build/
 # cache do auditor de PWA da tatile
 .pwa-nativo/
 *-e
+# binário solto do helper do WhatsApp (o build.sh gera em helpers/whatsapp/build/ e dentro do app)
+helpers/whatsapp/whatsapp

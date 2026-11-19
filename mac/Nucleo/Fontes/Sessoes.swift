@@ -1,7 +1,7 @@
 import Foundation
 
-/// Sessões do Claude Code paradas esperando resposta: `~/.claude/jobs/<id>/state.json` com
-/// `state` = "blocked". Só leitura, esses arquivos são do Claude Code.
+/// Sessões do Claude Code: `~/.claude/jobs/<id>/state.json`. As paradas esperando resposta (`state` = "blocked") vêm sem
+/// `situacao`. As outras (working, stopped, done) vêm com `situacao` e `passo`. Só leitura, esses arquivos são do Claude Code.
 enum FonteSessoes {
     /// Lê um state.json. Devolve nil se a sessão não está bloqueada ou o arquivo não faz sentido.
     /// `contexto` é o texto da última mensagem da sessão (lido do `timeline.jsonl`, que o parse não vê).
@@ -30,6 +30,39 @@ enum FonteSessoes {
         )
     }
 
+    /// Quanto tempo uma sessão que não espera resposta continua na lista: a que parou (stopped) some depois de um dia, a que
+    /// terminou (done) depois de poucos minutos (só serve para o aviso "terminou"), e a que diz estar trabalhando mas não mexe
+    /// no estado há horas é job morto, não trabalho.
+    static let validadeParada: TimeInterval = 24 * 3600
+    static let validadeConcluida: TimeInterval = 10 * 60
+    static let validadeTrabalhando: TimeInterval = 12 * 3600
+
+    /// Lê um state.json de sessão que não espera resposta. Nil: está bloqueada (é de `parse`), é antiga demais, ou não faz sentido.
+    static func parseOutra(_ dados: Data, pasta: String, agora: Date) -> Sessao? {
+        guard let obj = (try? JSONSerialization.jsonObject(with: dados)) as? [String: Any],
+              let estado = obj["state"] as? String else { return nil }
+        let (situacao, validade): (String, TimeInterval)
+        switch estado {
+        case "working": (situacao, validade) = ("trabalhando", validadeTrabalhando)
+        case "stopped": (situacao, validade) = ("parada", validadeParada)
+        case "done": (situacao, validade) = ("concluida", validadeConcluida)
+        default: return nil
+        }
+        func texto(_ chave: String) -> String? {
+            guard let t = obj[chave] as? String, !t.isEmpty else { return nil }
+            return t
+        }
+        let desde = texto("updatedAt") ?? texto("createdAt") ?? ""
+        guard let quando = Datas.ler(desde), agora.timeIntervalSince(quando) <= validade else { return nil }
+        let raiz = texto("originCwd") ?? texto("cwd") ?? ""
+        let projeto = raiz.split(separator: "/").last.map(String.init) ?? ""
+        // `detail` é o último passo. Em sessão parada ele só repete o estado ("stopped"), e aí não diz nada.
+        let passo = texto("detail").flatMap { $0 == estado ? nil : Mascara.segredos($0, limite: limitePasso) }
+        return Sessao(id: pasta, nome: texto("name") ?? pasta, projeto: projeto, pergunta: "", desde: desde,
+                      situacao: situacao, passo: passo)
+    }
+
+    static let limitePasso = 160
     static let limitePedido = 2000
     static let limiteContexto = 4000
 
@@ -66,6 +99,11 @@ enum FonteSessoes {
         return texto.isEmpty ? nil : Mascara.segredos(texto, limite: limiteContexto)
     }
 
+    /// As que esperam a sua resposta (sem `situacao`).
+    static func esperando(_ sessoes: [Sessao]) -> [Sessao] { sessoes.filter { $0.situacao == nil } }
+    /// As outras, em ordem: trabalhando, paradas, concluídas.
+    static func outras(_ sessoes: [Sessao]) -> [Sessao] { sessoes.filter { $0.situacao != nil } }
+
     /// Mais recente primeiro. Quem não tem data legível vai para o fim.
     static func ordenar(_ sessoes: [Sessao]) -> [Sessao] {
         sessoes.sorted { a, b in
@@ -78,21 +116,25 @@ enum FonteSessoes {
         }
     }
 
-    static func ler(raiz: URL) -> Leitura<[Sessao]> {
+    /// As que esperam (mais recente primeiro) e depois as outras (trabalhando, paradas, concluídas, cada grupo do mais recente ao mais antigo).
+    static func ler(raiz: URL, agora: Date = Date()) -> Leitura<[Sessao]> {
         let fm = FileManager.default
         guard fm.fileExists(atPath: raiz.path) else { return Leitura(valor: [], aviso: nil) }
         guard let pastas = try? fm.contentsOfDirectory(atPath: raiz.path) else {
             return Leitura(valor: [], aviso: Aviso(fonte: "sessoes", texto: "Não consegui ler as sessões do Claude Code neste Mac."))
         }
-        var achadas: [Sessao] = []
+        var achadas: [Sessao] = [], outras: [Sessao] = []
         for p in pastas {
             let arquivo = raiz.appendingPathComponent(p).appendingPathComponent("state.json")
             guard let dados = try? Data(contentsOf: arquivo) else { continue }
+            if let o = parseOutra(dados, pasta: p, agora: agora) { outras.append(o); continue }
             let contexto = contexto(timeline: raiz.appendingPathComponent(p).appendingPathComponent("timeline.jsonl"))
             guard let s = parse(dados, pasta: p, contexto: contexto) else { continue }
             achadas.append(s)
         }
-        return Leitura(valor: ordenar(achadas), aviso: nil)
+        // Um grupo por vez: o `ordenar` já põe o mais recente primeiro dentro dele.
+        let outrasOrdenadas = ["trabalhando", "parada", "concluida"].flatMap { g in ordenar(outras.filter { $0.situacao == g }) }
+        return Leitura(valor: ordenar(achadas) + outrasOrdenadas, aviso: nil)
     }
 }
 

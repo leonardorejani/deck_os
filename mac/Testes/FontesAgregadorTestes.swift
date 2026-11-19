@@ -24,6 +24,36 @@ final class FontesAgregadorTestes: XCTestCase {
         )
     }
 
+    func testEstadoSeparaAsSessoesQueEsperamDasOutras() {
+        let esperando = Sessao(id: "e", nome: "e", projeto: "p", pergunta: "?", desde: "2026-11-10T10:00:00Z", contexto: "longo")
+        let rodando = Sessao(id: "r", nome: "r", projeto: "p", pergunta: "", desde: "2026-11-10T10:00:00Z", situacao: "trabalhando", passo: "lendo")
+        var f = fontes()
+        f.sessoes = { Leitura(valor: [esperando, rodando], aviso: nil) }
+        let cfg = config(perfil: [tecla("a")])
+        let est = Agregador(fontes: f).estado(config: cfg, agora: agora)
+        XCTAssertEqual(est.sessoes.map(\.id), ["e"])
+        XCTAssertNil(est.sessoes.first?.contexto)
+        XCTAssertEqual(est.outrasSessoes?.map(\.id), ["r"])
+        f.sessoes = { Leitura(valor: [esperando], aviso: nil) }
+        XCTAssertNil(Agregador(fontes: f).estado(config: cfg, agora: agora).outrasSessoes, "sem outras o campo nem vai")
+        var desligado = cfg
+        desligado.blocos.sessoes = false
+        f.sessoes = { Leitura(valor: [esperando, rodando], aviso: nil) }
+        XCTAssertNil(Agregador(fontes: f).estado(config: desligado, agora: agora).outrasSessoes, "bloco desligado no Mac: o iPhone não pede")
+    }
+
+    func testEstadoTrazOCarimboDaConfigESoMudaQuandoOQueOPainelLeMuda() {
+        var cfg = config(perfil: [tecla("a")])
+        let ag = Agregador(fontes: fontes())
+        let antes = ag.estado(config: cfg, agora: agora).configVersao
+        XCTAssertNotNil(antes)
+        XCTAssertEqual(antes, cfg.carimbo)
+        cfg.codigoAcesso = "outrocodigooutrocodig"
+        XCTAssertEqual(ag.estado(config: cfg, agora: agora).configVersao, antes, "o rodízio do código não é edição de teclas")
+        cfg.perfis[0].teclas[0].nome = "Renomeada"
+        XCTAssertNotEqual(ag.estado(config: cfg, agora: agora).configVersao, antes, "tecla editada no Mac muda o carimbo")
+    }
+
     func testMontaOEstadoComTudoLigado() {
         let cfg = config(perfil: [tecla("whats", valor: "WhatsApp"), tecla("luz", tipo: "tecla", valor: "cmd+k", estado: "sim"), tecla("lamp", tipo: "tecla", valor: "cmd+j", estado: "nao")],
                          contas: [ContaIA(id: "codex", nome: "Codex", conta: "pro")])
@@ -231,5 +261,24 @@ final class FontesAgregadorTestes: XCTestCase {
         let ex = ExecutorFalso([])
         XCTAssertEqual(TeclasAcesas.ler([tecla("a")], executor: ex), [])
         XCTAssertEqual(ex.comandos, [])
+    }
+
+    // MARK: estado das teclas em cache (varredura 16/11/2026)
+
+    func testEstadoDasTeclasNaoConfereATodoPedidoDe1s() {
+        let n = ContadorDeChamadas()
+        let versao = ContadorDeChamadas()
+        var f = fontes()
+        f.acesas = { teclas in _ = n.proximo(); return teclas.map(\.id) }
+        f.versaoTeclas = { versao.valor }
+        let ag = Agregador(fontes: f)
+        let cfg = config(perfil: [tecla("liga", tipo: "tecla", valor: "cmd+k", estado: "echo x")])
+        for s in 0..<5 { _ = ag.estado(config: cfg, agora: agora.addingTimeInterval(Double(s))) }
+        XCTAssertLessThanOrEqual(n.valor, 2, "5 pedidos de 1 s não podem ser 5 conferências")
+        // Ligou ou desligou pela tecla: a próxima leitura confere na hora, sem esperar o prazo.
+        let antes = n.valor
+        _ = versao.proximo()
+        _ = ag.estado(config: cfg, agora: agora.addingTimeInterval(5.1))
+        XCTAssertEqual(n.valor, antes + 1)
     }
 }

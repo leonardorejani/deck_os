@@ -5,7 +5,7 @@ import ServiceManagement
 final class SecoesTestes: XCTestCase {
     func testSecoesNaOrdemDoPrototipo() {
         XCTAssertEqual(SecaoAjustes.grupos.flatMap { $0 }.map(\.nome),
-                       ["Suas teclas", "Uso das IAs", "Conexões", "Acessos do Mac", "Este Mac", "Sobre o Deck"])
+                       ["Suas teclas", "Regras", "Uso das IAs", "Conexões", "Acessos do Mac", "Este Mac", "Sobre o Deck"])
     }
 
     /// Palavras dele: "As permissões não aparecem no painel". A seção some do menu lateral só quando o
@@ -202,5 +202,42 @@ final class MudancaDeForaTestes: XCTestCase {
         XCTAssertEqual(m.mudancasDeFora, 1)
         m.usarComposicao("b")
         XCTAssertEqual(m.mudancasDeFora, 1, "gravar pelo Mac não conta como mudança de fora")
+    }
+}
+
+/// O botão "Aprovar pedidos do Claude pelo iPhone" (Este Mac). Nunca encosta no settings.json real: o modelo de teste usa uma pasta de mentira.
+@MainActor
+final class AprovacaoDoClaudeTestes: XCTestCase {
+    private func modelo() throws -> (ModeloApp, URL) {
+        let pasta = FileManager.default.temporaryDirectory.appendingPathComponent("deck-aprovacao-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: pasta, withIntermediateDirectories: true)
+        let m = ModeloApp(config: Config.padrao(nomeMac: "Mac"))
+        m.arquivoDoClaude = pasta.appendingPathComponent("settings.json")
+        m.pastaDoGancho = pasta
+        return (m, pasta)
+    }
+
+    func testLigarEDesligarMostraOEstadoRealEGuardaOSegredoSoNaPastaDoDeck() throws {
+        let (m, pasta) = try modelo()
+        defer { try? FileManager.default.removeItem(at: pasta) }
+        m.lerGancho()
+        XCTAssertEqual(m.ganchoDoClaude, .naoInstalado)
+        m.definirGancho(true)
+        XCTAssertEqual(m.ganchoDoClaude, .instalado)
+        let texto = try String(contentsOf: m.arquivoDoClaude, encoding: .utf8)
+        let segredo = try XCTUnwrap(SegredoDoGancho.ler(String(contentsOf: SegredoDoGancho.arquivo(pasta: pasta), encoding: .utf8)))
+        XCTAssertFalse(texto.contains(segredo), "o segredo nunca vai para o settings.json")
+        m.definirGancho(false)
+        XCTAssertEqual(m.ganchoDoClaude, .naoInstalado)
+    }
+
+    func testArquivoEstranhoNaoEhMexidoEOAjusteDizPorque() throws {
+        let (m, pasta) = try modelo()
+        defer { try? FileManager.default.removeItem(at: pasta) }
+        try "[1]".write(to: m.arquivoDoClaude, atomically: true, encoding: .utf8)
+        m.definirGancho(true)
+        if case .formatoInesperado = m.ganchoDoClaude {} else { XCTFail("deveria recusar") }
+        XCTAssertEqual(try String(contentsOf: m.arquivoDoClaude, encoding: .utf8), "[1]")
+        XCTAssertTrue(AjusteDeAprovacao.apoio(m.ganchoDoClaude).contains("Nada foi mudado"))
     }
 }

@@ -56,6 +56,29 @@ final class RotasTestes: XCTestCase {
         XCTAssertEqual((c.pedir("GET", "/api/sessoes").json as? [[String: Any]])?.first?["id"] as? String, "s1")
     }
 
+    // MARK: WhatsApp pelo Bluetooth (13/11/2026): a lista não vai inteira a cada leitura
+
+    func testWhatsAppSemVersaoNoMacOuNoPedidoVaiInteiro() throws {
+        let semVersao = try Cenario()
+        XCTAssertNotNil(semVersao.pedir("GET", "/api/whatsapp?v=3").json as? [[String: Any]], "banco do app e Web não têm versão")
+        let comVersao = try Cenario(versaoZap: 7)
+        XCTAssertNotNil(comVersao.pedir("GET", "/api/whatsapp").json as? [[String: Any]], "iPhone antigo, sem ?v, recebe a lista de sempre")
+    }
+
+    func testWhatsAppComVersaoNovaVaiComAVersaoEIgualVaiPequeno() throws {
+        let c = try Cenario(versaoZap: 7)
+        let nova = c.pedir("GET", "/api/whatsapp?v=3").json as? [String: Any]
+        XCTAssertEqual(nova?["v"] as? Int, 7)
+        XCTAssertEqual((nova?["conversas"] as? [[String: Any]])?.first?["nome"] as? String, "Louvor")
+        let igual = c.pedir("GET", "/api/whatsapp?v=7")
+        let corpoIgual = igual.json as? [String: Any]
+        XCTAssertEqual(Set(corpoIgual?.keys ?? [:].keys), ["v", "igual"])
+        XCTAssertEqual(corpoIgual?["v"] as? Int, 7)
+        // No Linux o JSON lê true como 1: só o texto do corpo distingue.
+        XCTAssertTrue(String(decoding: igual.corpo, as: UTF8.self).contains("\"igual\":true"), "igual vai como booleano")
+        XCTAssertLessThan(igual.corpo.count, 40)
+    }
+
     // MARK: WhatsApp por QR: foto, mídia e Responder no Mac (12/11/2026)
 
     func testFotoDePerfilVemEmBase64EOutroNomeDa404() throws {
@@ -213,6 +236,24 @@ final class RotasTestes: XCTestCase {
         XCTAssertEqual(c.pedir("POST", "/api/spotify/repetir?modo=faixa").status, 200)
         XCTAssertEqual(c.pedir("POST", "/api/spotify/repetir?modo=nao").status, 200)
         XCTAssertEqual(c.registro.todos, ["transferir d1", "curtir true", "curtir false", "repetirModo faixa", "repetirModo nao"])
+    }
+
+    func testPularNaFilaEOsRecentes() throws {
+        let c = try Cenario()
+        XCTAssertEqual(c.pedir("POST", "/api/spotify/pular?n=3&uri=spotify:track:x").status, 200)
+        XCTAssertEqual(c.pedir("POST", "/api/spotify/pular?n=1").status, 200)
+        XCTAssertEqual(c.registro.todos, ["pularFila 3 spotify:track:x ctx=-", "pularFila 1 - ctx=-"])
+        XCTAssertEqual(c.pedir("POST", "/api/spotify/pular?n=2&uri=spotify:track:y&ctx=spotify:playlist:p").status, 200)
+        XCTAssertEqual(c.registro.todos.last, "pularFila 2 spotify:track:y ctx=spotify:playlist:p", "o contexto do painel chega ao controle")
+        XCTAssertEqual(c.pedir("POST", "/api/spotify/pular").status, 400)
+        XCTAssertEqual(c.pedir("POST", "/api/spotify/pular?n=0").status, 400)
+        XCTAssertEqual(c.pedir("POST", "/api/spotify/pular?n=99").status, 400)
+        XCTAssertEqual(c.pedir("GET", "/api/spotify/pular?n=1").status, 405)
+        XCTAssertEqual(c.pedir("GET", "/api/spotify/recentes").status, 200)
+        XCTAssertEqual(c.pedir("POST", "/api/spotify/recentes").status, 405)
+        let sem = try Cenario(spotifyConectado: false)
+        XCTAssertEqual(sem.pedir("POST", "/api/spotify/pular?n=1").status, 409)
+        XCTAssertEqual(sem.pedir("GET", "/api/spotify/recentes").status, 409)
     }
 
     func testSpotifyRotasNovasRecusamPedidoMalFeito() throws {

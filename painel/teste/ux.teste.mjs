@@ -4,9 +4,16 @@
 const pronta = (h, p) => h.espera(p, () => !document.querySelector('#conteudo.carregando') && !!document.querySelector('.tecla[data-id="apagar"]'));
 const aviso = p => p.evaluate(() => ({ txt: document.querySelector('#aviso-txt').textContent, visivel: document.querySelector('#aviso').classList.contains('visivel'), erro: document.querySelector('#aviso').classList.contains('erro') }));
 const centro = async (p, sel) => { const b = await p.locator(sel).boundingBox(); return { x: b.x + b.width / 2, y: b.y + b.height / 2 } };
+// HHMM das placas contra HHMM do relógio: compara em minutos do dia, com volta à meia-noite, e tolera 1 min (a placa vira durante a leitura).
+// Antes subtraía os números HHMM crus: 1459 contra 1500 dava 41 e o teste caía na virada de toda hora.
+const horaConfere = (placas, relogio) => { if (!/^\d{4}$/.test(placas) || !/^\d{4}$/.test(relogio)) return false; const m = s => +s.slice(0, 2) * 60 + +s.slice(2); const d = Math.abs(m(placas) - m(relogio)); return Math.min(d, 1440 - d) <= 1 };
+// \w não casa "ç": na terça-feira o teste caía só por isso. \p{L} cobre todos os dias.
+const diaPorExtenso = /^\p{L}+-feira|^sábado|^domingo/u;
 const MAX_TOQUE = 500; // a tela muda em menos que isto, com o Mac levando 1,5 s ou mais
 
 export default async function (h) {
+  // a comparação da hora nas viradas: hora cheia, meia-noite e diferença real de mais de 1 min, e o dia por extenso de toda a semana
+  h.ok(horaConfere('1500', '1459') && horaConfere('1459', '1500') && horaConfere('0000', '2359') && horaConfere('2359', '0000') && horaConfere('1230', '1230') && !horaConfere('1500', '1458') && !horaConfere('0001', '2359') && !horaConfere('12x0', '1230') && ['segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado', 'domingo'].every(d => diaPorExtenso.test(d + ', 17 de novembro')), 'comparar a hora das placas aguenta a virada da hora e da meia-noite');
   // quanto tempo a tela leva para mostrar o que o toque pediu (-1 se não mostrou)
   const ate = async (p, fn, arg, max = 3000) => { const t0 = Date.now(); return (await h.espera(p, fn, arg, max)) ? Date.now() - t0 : -1 };
   const pausado = () => !!document.querySelector('.player.pausado') && !!document.querySelector('.player .tocar.play');
@@ -72,7 +79,9 @@ export default async function (h) {
   await h.dormir(1800);
   h.ok(await p.evaluate(apagada) && (await h.contadores()).botoes.join() === 'acordado', 'depois que o Mac confirma, segue apagada e ele recebeu a tecla');
   await p.click('.tecla[data-id="apagar"]');
-  h.ok(await ate(p, () => !!document.querySelector('.tecla[data-id="apagar"].piscando'), null, 600) >= 0 && (await aviso(p)).txt === 'Apagar tela: feito', 'tecla comum: o LED pisca e o aviso aparece no toque, antes de o Mac responder');
+  // 13/11/2026 (frente comando-foco): a tecla de comando não diz "feito" antes de o Mac responder, só pisca e mostra "Rodando..."
+  h.ok(await ate(p, () => !!document.querySelector('.tecla[data-id="apagar"].piscando'), null, 600) >= 0 && !/feito/.test((await aviso(p)).txt), 'tecla de comando: o LED pisca no toque e o aviso "feito" não sai antes de o Mac responder');
+  h.ok(await h.espera(p, () => document.querySelector('#aviso-txt').textContent === 'Apagar tela: feito', null, 4000), 'e o aviso "feito" sai quando o Mac responde');
   await p.context().close();
   await h.reset(); await h.cenario({ falha: true, atrasoAcao: 600 });
   p = await h.pagina(); await pronta(h, p);
@@ -223,7 +232,7 @@ export default async function (h) {
     h.ok(c.fundo === 'rgb(0, 0, 0)' && c.pl.length === 4 && alturaPlaca >= 240 && dentro, `${pos}: fundo preto, quatro placas grandes (${Math.round(alturaPlaca)} px de altura), tudo dentro da área segura`);
     if (pos === 'horizontal') h.ok(c.pl.every(x => Math.abs(x.t - c.pl[0].t) < 1) && c.data.t >= c.pl[0].b - 1, 'deitado: as quatro placas em uma linha e a data embaixo');
     else h.ok(Math.abs(c.pl[0].t - c.pl[1].t) < 1 && c.pl[2].t > c.pl[0].b - 1 && c.data.b <= c.pl[0].t + 1, 'em pé: a data em cima e as horas sobre os minutos');
-    h.ok(/^\w+-feira|^sábado|^domingo/.test(c.txt) && /^\d{4}$/.test(c.hora) && Math.abs(+c.hora - +c.hh) <= 1, `${pos}: a data por extenso (${c.txt}) e as placas com a hora (${c.hora})`);
+    h.ok(diaPorExtenso.test(c.txt) && /^\d{4}$/.test(c.hora) && horaConfere(c.hora, c.hh), `${pos}: a data por extenso (${c.txt}) e as placas com a hora (${c.hora})`);
     await h.dormir(600); await h.foto(p, `relogio-cheio-${pos}`);
     await p.click('#f-relogio');
     h.ok(await h.espera(p, () => !document.querySelector('#f-relogio').classList.contains('aberta') && getComputedStyle(document.querySelector('#f-relogio')).visibility === 'hidden', null, 2000), `${pos}: tocar em qualquer lugar fecha`);

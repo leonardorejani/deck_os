@@ -129,6 +129,23 @@ final class EnlaceTestes: XCTestCase {
         XCTAssertEqual([UInt8](r.corpo.prefix(2)), [0xFF, 0xD8], "JPEG")
     }
 
+    /// 19/11/2026: a tela cheia esticava a miniatura de 200 px. Com tam=grande a capa segue inteira (640 px), sem recomprimir.
+    func testCapaGrandeDaTelaCheiaSegueInteiraPeloBluetooth() throws {
+        let png = try XCTUnwrap(Self.imagem(640))
+        let pg = PedidoCabo(metodo: "GET", caminho: "/api/capa", query: ["tam": "grande"], cabecalhos: [:], corpo: Data())
+        let original = RespostaRota(status: 200, tipo: "image/png", corpo: png, extras: ["Cache-Control": "no-store"])
+        let r = CapaPequena.ajustar(pg, original)
+        XCTAssertEqual(r, original, "a capa da tela cheia não é reduzida nem recomprimida")
+        let origem = try XCTUnwrap(CGImageSourceCreateWithData(r.corpo as CFData, nil))
+        let img = try XCTUnwrap(CGImageSourceCreateImageAtIndex(origem, 0, nil))
+        XCTAssertEqual(max(img.width, img.height), 640)
+        // sem tam (mini player e fila) segue a pequena de 200 px
+        let pp = PedidoCabo(metodo: "GET", caminho: "/api/capa", query: ["v": "1"], cabecalhos: [:], corpo: Data())
+        let p = CapaPequena.ajustar(pp, original)
+        let o2 = try XCTUnwrap(CGImageSourceCreateWithData(p.corpo as CFData, nil))
+        XCTAssertLessThanOrEqual(try XCTUnwrap(CGImageSourceCreateImageAtIndex(o2, 0, nil)).width, CapaPequena.lado)
+    }
+
     /// Um degradê de 640 x 640, parecido com uma capa do Spotify.
     static func imagem(_ lado: Int) -> Data? {
         guard let ctx = CGContext(data: nil, width: lado, height: lado, bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
@@ -783,6 +800,99 @@ final class AgendaDoMacTestes: XCTestCase {
         a.conectando("i")
         a.terminou("i", duracao: AgendaDoMac.sessaoBoa, agora: t0)
         XCTAssertEqual(a.espera("i"), AgendaDoMac.esperaMinima)
+    }
+
+    /// 13/11/2026: o Mac já estava a 30 s de espera (iPhone sem o app aberto, sem o serviço) quando o app abriu e o pareamento,
+    /// que espera 15 s, acabava antes de o Mac voltar. Iphone sem o serviço não é aperto de mão falhando: começa curto.
+    /// 16/11/2026: mas com o app fechado por horas, 5 s fixos davam 810 conexões no log de produção. Cresce em degraus até 30 s
+    /// (antes fixo em 5 s, teste antigo trocado a pedido da varredura de 16/11) e volta a 5 s quando o iPhone reaparece.
+    func testIphoneSemOServicoCrescePorDegrausEVoltaRapidoQuandoOAppAbre() {
+        var a = AgendaDoMac()
+        XCTAssertEqual(AgendaDoMac.esperaSemServico, 5)
+        XCTAssertLessThan(AgendaDoMac.esperaSemServico, 15, "o pareamento do iPhone espera 15 s pelo Mac")
+        var t = t0
+        var vistas: [TimeInterval] = []
+        for _ in 0..<20 {
+            a.conectando("i")
+            a.terminou("i", duracao: nil, semServico: true, agora: t)
+            let falta = a.faltam("i", agora: t)
+            vistas.append(falta)
+            XCTAssertFalse(a.podeConectar("i", agora: t.addingTimeInterval(falta - 1)))
+            XCTAssertTrue(a.podeConectar("i", agora: t.addingTimeInterval(falta)))
+            t = t.addingTimeInterval(falta)
+        }
+        XCTAssertEqual(Array(vistas.prefix(5)), [5, 10, 20, 30, 30])
+        XCTAssertEqual(vistas.last, 30, "nunca passa de 30 s")
+        // O app abre: o iPhone volta a anunciar depois do silêncio e o Mac conecta na hora, com a espera zerada.
+        a.anunciou("i", agora: t.addingTimeInterval(AgendaDoMac.silencioQueZera))
+        XCTAssertTrue(a.podeConectar("i", agora: t.addingTimeInterval(AgendaDoMac.silencioQueZera)))
+        a.conectando("i")
+        a.terminou("i", duracao: nil, semServico: true, agora: t.addingTimeInterval(AgendaDoMac.silencioQueZera))
+        XCTAssertEqual(a.faltam("i", agora: t.addingTimeInterval(AgendaDoMac.silencioQueZera)), 5, "recomeça do primeiro degrau")
+        // O aperto de mão que falha de verdade continua dobrando.
+        a.conectando("i")
+        a.terminou("i", duracao: 1, agora: t0)
+        XCTAssertEqual(a.espera("i"), 2)
+    }
+
+    /// 13/11/2026, 13:09Z: o app abriu, o connect() levou didFailToConnect e o Mac esperou 30 s. Connect que nem abriu o
+    /// enlace tem teto menor que os 15 s do pareamento.
+    func testConnectQueNaoAbriuNaoPassaDoTetoCurto() {
+        var a = AgendaDoMac()
+        for _ in 0..<8 {
+            a.conectando("i")
+            a.terminou("i", duracao: nil, agora: t0)
+        }
+        XCTAssertEqual(a.espera("i"), AgendaDoMac.esperaMaximaSemAbrir)
+        XCTAssertLessThan(AgendaDoMac.esperaMaximaSemAbrir, 15)
+        XCTAssertTrue(a.podeConectar("i", agora: t0.addingTimeInterval(AgendaDoMac.esperaMaximaSemAbrir)))
+    }
+
+    /// Sessões curtas seguidas empurram a espera para o teto. O iPhone some (app fechado) e volta: começa do zero.
+    func testIphoneQueVoltaDepoisDeSumirZeraAEspera() {
+        var a = AgendaDoMac()
+        for _ in 0..<5 {
+            a.conectando("i")
+            a.terminou("i", duracao: 3, agora: t0)
+        }
+        XCTAssertEqual(a.espera("i"), AgendaDoMac.esperaMaxima)
+        XCTAssertFalse(a.podeConectar("i", agora: t0.addingTimeInterval(10)))
+        // Anunciando sem parar: a espera vale.
+        a.anunciou("i", agora: t0.addingTimeInterval(5))
+        XCTAssertFalse(a.podeConectar("i", agora: t0.addingTimeInterval(10)))
+        // Sumiu por mais que o silêncio e voltou.
+        a.anunciou("i", agora: t0.addingTimeInterval(5 + AgendaDoMac.silencioQueZera))
+        XCTAssertTrue(a.podeConectar("i", agora: t0.addingTimeInterval(5 + AgendaDoMac.silencioQueZera)))
+        a.conectando("i")
+        a.terminou("i", duracao: 1, agora: t0.addingTimeInterval(20))
+        XCTAssertEqual(a.espera("i"), 2, "recomeça do mínimo")
+    }
+
+    /// O tempo de enlace aberto (iPhone não anuncia conectado) não conta como silêncio.
+    func testSessaoLongaNaoContaComoSilencio() {
+        var a = AgendaDoMac()
+        a.anunciou("i", agora: t0)
+        a.conectando("i")
+        a.terminou("i", duracao: 3, agora: t0.addingTimeInterval(60))
+        a.conectando("i")
+        a.terminou("i", duracao: 3, agora: t0.addingTimeInterval(62))
+        a.anunciou("i", agora: t0.addingTimeInterval(64))
+        XCTAssertEqual(a.espera("i"), 4, "continua dobrando")
+    }
+
+    /// Serviço em dobro no iPhone: cada enlace que abriu sem receber pedido passa para o próximo serviço, e um que recebeu volta ao primeiro.
+    func testServicoEmDobroTentaOOutroDepoisDeUmEnlaceSemPedido() {
+        var a = AgendaDoMac()
+        XCTAssertEqual(a.indiceDoServico("i", de: 2), 0)
+        a.semPedido("i", true)
+        XCTAssertEqual(a.indiceDoServico("i", de: 2), 1)
+        a.semPedido("i", true)
+        XCTAssertEqual(a.indiceDoServico("i", de: 2), 0)
+        a.semPedido("i", true)
+        a.semPedido("i", false)
+        XCTAssertEqual(a.indiceDoServico("i", de: 2), 0)
+        a.semPedido("i", true)
+        XCTAssertEqual(a.indiceDoServico("i", de: 1), 0, "um serviço só: sempre o primeiro")
     }
 }
 

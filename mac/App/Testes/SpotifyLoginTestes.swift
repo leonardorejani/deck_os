@@ -63,13 +63,44 @@ final class SpotifyLoginTestes: XCTestCase {
     }
 
     func testTextosDaSecaoNaoTemTravessaoNemPontoEVirgula() {
-        let todos = [SpotifyLogica.passos, SpotifyLogica.apoioDoCampo, SpotifyLogica.apoioDoEndereco, SpotifyLogica.avancado, SpotifyLogica.apoioDoAvancado]
+        let todos = SpotifyLogica.passos.flatMap { [$0.titulo, $0.apoio ?? ""] }
+            + [SpotifyLogica.apoioDoCampo, SpotifyLogica.apoioDoEndereco, SpotifyLogica.tituloDoBloco, SpotifyLogica.resumoDoBloco, SpotifyLogica.detalheDoBloco,
+               SpotifyLogica.avisoDeCadastro, SpotifyLogica.tituloDoLimite, SpotifyLogica.apoioDoLimite]
             + [SituacaoSpotify.semChave, .pronto, .conectando, .conectado].map { SpotifyLogica.apoioDoLogin($0, erro: nil) }
         for t in todos {
             XCTAssertFalse(t.contains("—") || t.contains("–") || t.contains(";"), t)
         }
-        XCTAssertTrue(SpotifyLogica.passos.contains("Web API"))
+        XCTAssertTrue(SpotifyLogica.passos.contains { $0.titulo.contains("Web API") })
+        XCTAssertEqual(SpotifyLogica.passos.count, 7)
+        XCTAssertTrue(SpotifyLogica.resumoDoBloco.contains("5 contas"))
         XCTAssertEqual(SpotifyLogica.enderecoDoRetorno, "http://127.0.0.1:4778/retorno")
+    }
+
+    func testNomeDaChaveEmUsoELinhaDeLimiteSoComAChaveDoDeck() {
+        XCTAssertEqual(SpotifyLogica.nomeDaChave(propria: false), "Chave do Deck")
+        XCTAssertEqual(SpotifyLogica.nomeDaChave(propria: true), "Sua chave")
+        XCTAssertTrue(SpotifyLogica.mostrarAvisoDeLimite(limitado: true, chaveDoDeckEmUso: true))
+        XCTAssertFalse(SpotifyLogica.mostrarAvisoDeLimite(limitado: true, chaveDoDeckEmUso: false))
+        XCTAssertFalse(SpotifyLogica.mostrarAvisoDeLimite(limitado: false, chaveDoDeckEmUso: true))
+    }
+
+    func testSpotifyLimitadoComChaveDoDeckLigaOAvisoENaoComChavePropria() throws {
+        let t = TransporteDeMentira { _ in RespostaWeb(status: 429, corpo: Data(), esperar: 600) }
+        let a = ArmazemSpotifyMemoria(DadosSpotify(clientId: nil, acesso: "A", renovacao: "R", expiraEm: Date().timeIntervalSince1970 + 90_000))
+        let conta = ContaSpotify(armazem: a, transporte: t, embutida: "fedcba9876543210fedcba9876543210")
+        let m = ModeloSpotify(conta: conta)
+        XCTAssertFalse(m.avisoDeLimite)
+        _ = conta.curtida("spotify:track:x")
+        m.atualizar()
+        XCTAssertTrue(m.avisoDeLimite)
+        XCTAssertEqual(m.nomeDaChaveEmUso, "Chave do Deck")
+        m.chave = Self.chave
+        m.guardarChave()
+        m.atualizar()
+        XCTAssertEqual(m.nomeDaChaveEmUso, "Sua chave")
+        XCTAssertFalse(m.avisoDeLimite, "a chave própria tem o limite dela")
+        m.usarChaveDoDeck()
+        XCTAssertEqual(m.nomeDaChaveEmUso, "Chave do Deck")
     }
 
     func testChaveInvalidaNaoAbreNavegador() async {

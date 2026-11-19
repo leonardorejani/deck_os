@@ -18,6 +18,7 @@
 <link rel="stylesheet" href="tatile/forma.css">
 <link rel="stylesheet" href="tatile/movimento.css">
 <link rel="stylesheet" href="deck.css">
+<link rel="stylesheet" href="tema-b.css">
 </head>
 <body>
 
@@ -32,7 +33,7 @@
         <span class="dica-off">Confira se ele está ligado e no mesmo Wi-Fi.</span>
       </div></div>
       <div class="tela-offline acesso" role="status" aria-live="polite"><div>
-        <strong>Deck não pareado</strong>
+        <strong id="acesso-titulo">Deck não pareado</strong>
         <span class="dica-off">Abra o Deck no Mac e leia o QR de novo.</span>
         <button class="btn secundario" id="b-digitar" hidden>Digitar o código do Mac</button>
       </div></div>
@@ -40,8 +41,22 @@
         <div class="pa-caixa"><h2 id="pa-titulo"></h2><div id="pa-corpo"></div></div>
       </section>
       <div class="aviso" id="aviso" role="status" aria-live="polite"><span id="aviso-txt"></span><button id="aviso-acao" hidden>Desfazer</button></div>
+      <section class="aprovacao" id="aprovacao" role="alertdialog" aria-modal="true" aria-labelledby="ap-titulo" hidden></section>
+      <div class="cartao-regra" id="cartao-regra" role="status" aria-live="polite" aria-hidden="true">
+        <svg class="cr-anel" viewBox="0 0 44 44" aria-hidden="true"><circle cx="22" cy="22" r="19"/><circle class="cr-volta" id="cr-volta" cx="22" cy="22" r="19" pathLength="100"/></svg>
+        <span class="cr-texto" id="cr-texto"></span>
+        <button class="btn secundario pequeno" id="cr-ficar" tabindex="-1">Ficar</button><button class="btn primario pequeno" id="cr-ir" tabindex="-1">Ir agora</button>
+      </div>
       <div class="lista-perfis" id="lista-perfis" role="dialog" aria-label="Menu" hidden></div>
       <div class="veu" id="veu"></div>
+      <section class="cortina" id="cortina" role="dialog" aria-label="Controles rápidos" inert>
+        <div class="cx-fundo" id="cx-fundo"></div>
+        <div class="cx-painel" id="cx-painel">
+          <div class="cx-cartoes" id="cx-corpo" aria-live="polite"></div>
+          <div class="ctl-cartao cx-midia" id="cx-midia" hidden></div>
+          <span class="cx-alca" aria-hidden="true"></span>
+        </div>
+      </section>
       <section class="relogio-cheio" id="f-relogio" role="dialog" aria-modal="true" aria-label="Relógio. Toque para voltar" tabindex="-1"></section>
 
       <section class="folha cheia editor" id="f-editor" role="dialog" aria-modal="true" aria-labelledby="ed-titulo">
@@ -62,9 +77,8 @@
       </section>
 
       <section class="folha cheia" id="f-whats" role="dialog" aria-modal="true" aria-labelledby="wa-titulo">
-        <header><h2 id="wa-titulo"></h2>
-          <div class="segmentos" id="wa-filtro"><button data-f="todas">Todas</button><button data-f="contatos">Contatos</button><button data-f="grupos">Grupos</button><button data-f="arquivadas" hidden>Arquivadas</button></div>
-          <button class="btn secundario pequeno" id="wa-abrir">Abrir no Mac</button><button class="fechar" data-fechar aria-label="Fechar"></button></header>
+        <header><h2 id="wa-titulo" class="so-leitor"></h2>
+          <div class="segmentos" id="wa-filtro"><button data-f="todas">Todas<span class="selo-aba" hidden></span></button><button data-f="contatos">Contatos<span class="selo-aba" hidden></span></button><button data-f="grupos">Grupos<span class="selo-aba" hidden></span></button><button data-f="arquivadas" hidden>Arquivadas<span class="selo-aba" hidden></span></button></div><button class="fechar" data-fechar aria-label="Fechar"></button></header>
         <div class="corpo" id="wa-lista"></div>
       </section>
 
@@ -79,16 +93,46 @@
         <div class="corpo" id="ct-corpo" aria-live="polite"></div>
       </section>
 
+      <section class="folha cheia escrever" id="f-escrever" role="dialog" aria-modal="true" aria-labelledby="es-titulo">
+        <header><h2 id="es-titulo">Escrever no Mac</h2><button class="btn primario" id="es-enviar" disabled>Enviar</button><button class="fechar" data-fechar aria-label="Fechar"></button></header>
+        <div class="corpo">
+          <textarea id="es-texto" class="es-texto" aria-label="Texto para colar no Mac" placeholder="Escreva ou dite. O texto vai para o app que estiver em foco no Mac." autocomplete="off" autocapitalize="sentences" enterkeyhint="enter"></textarea>
+          <p class="es-msg" id="es-msg" role="status" aria-live="polite"></p>
+        </div>
+      </section>
+
+      <section class="folha cheia" id="f-meet" role="dialog" aria-modal="true" aria-labelledby="mt-titulo">
+        <header><h2 id="mt-titulo">Google Meet</h2><button class="fechar" data-fechar aria-label="Fechar"></button></header>
+        <div class="corpo" id="mt-corpo" aria-live="polite"></div>
+      </section>
+
+      <section class="folha cheia" id="f-github" role="dialog" aria-modal="true" aria-labelledby="gh-titulo">
+        <header><h2 id="gh-titulo">GitHub</h2><button class="fechar" data-fechar aria-label="Fechar"></button></header>
+        <div class="corpo" id="gh-corpo" aria-live="polite"></div>
+      </section>
+
+      <section class="folha cheia" id="f-valores" role="dialog" aria-modal="true" aria-labelledby="vl-titulo">
+        <header><h2 id="vl-titulo">Valores</h2><button class="fechar" data-fechar aria-label="Fechar"></button></header>
+        <div class="corpo" id="vl-corpo" aria-live="polite"></div>
+      </section>
+
       <section class="folha cheia" id="f-monitor" role="dialog" aria-modal="true" aria-labelledby="mn-titulo">
         <header><h2 id="mn-titulo">Monitor de Atividade</h2><button class="fechar" data-fechar aria-label="Fechar"></button></header>
         <div class="corpo" id="mn-corpo" aria-live="off"></div>
+      </section>
+
+      <section class="folha cheia" id="f-uso" role="dialog" aria-modal="true" aria-labelledby="us-titulo">
+        <header><h2 id="us-titulo">Uso das IAs</h2>
+          <div class="segmentos" id="us-filtro"><button type="button" data-p="dia" aria-pressed="false">Dia</button><button type="button" data-p="semana" aria-pressed="true">Semana</button><button type="button" data-p="mes" aria-pressed="false">Mês</button></div>
+          <button class="fechar" data-fechar aria-label="Fechar"></button></header>
+        <div class="corpo" id="us-corpo" aria-live="off" aria-busy="true"></div>
       </section>
 
       <section class="folha cheia player-cheio" id="f-player" role="dialog" aria-modal="true" aria-label="Tocando agora">
         <button class="fechar fechar-cal" data-fechar aria-label="Fechar"></button>
         <div class="pc-corpo" id="pc-corpo"></div>
         <div class="pc-lista" id="pc-lista" hidden>
-          <header><h2 id="pc-lista-titulo"></h2><button class="btn secundario" data-pc-voltar>Voltar</button></header>
+          <header><h2 id="pc-lista-titulo"></h2><div class="abas" id="pc-lista-abas" role="tablist" aria-label="Fila" hidden><button role="tab" data-aba="fila" aria-selected="true">Fila</button><button role="tab" data-aba="recentes" aria-selected="false">Tocado recentemente</button></div><button class="btn secundario" data-pc-voltar>Voltar</button></header>
           <div class="pc-lista-topo" id="pc-lista-topo" hidden></div>
           <div class="corpo" id="pc-lista-corpo"></div>
         </div>
@@ -104,15 +148,15 @@
             <div class="sb-grade" id="ca-grade"></div>
           </div>
           </div>
-          <div class="lista-cal" id="ca-lista"></div>
+          <div class="lista-janela"><div class="lista-cal" id="ca-lista"></div></div>
           <button class="puxa-novo" id="ca-puxa" data-novo aria-label="Novo compromisso"><span aria-hidden="true"></span></button>
           <form class="novo-comp" id="ca-form" hidden novalidate aria-label="Novo compromisso">
             <header><h3>Novo compromisso</h3></header>
             <div class="nc-corpo">
               <div class="campo nc-titulo"><label for="nc-titulo">Título</label><input id="nc-titulo" maxlength="200" autocomplete="off" enterkeyhint="done"></div>
-              <div class="campo nc-dia"><label for="nc-dia">Dia</label><input id="nc-dia" type="date"></div>
-              <div class="campo nc-ini"><label for="nc-inicio">Início</label><input id="nc-inicio" type="time"></div>
-              <div class="campo nc-fim"><label for="nc-fim">Fim</label><input id="nc-fim" type="time"></div>
+              <div class="campo nc-dia"><span class="rotulo" id="nc-dia-rot">Dia</span><span class="nc-data"><button type="button" class="nc-vis" data-de="nc-dia" data-sel="dia" aria-labelledby="nc-dia-rot nc-dia-val"><span id="nc-dia-val" class="nc-val"></span></button><input id="nc-dia" type="date" tabindex="-1" aria-hidden="true"></span></div>
+              <div class="campo nc-ini"><span class="rotulo" id="nc-inicio-rot">Início</span><span class="nc-data"><button type="button" class="nc-vis" data-de="nc-inicio" data-sel="inicio" aria-labelledby="nc-inicio-rot nc-inicio-val"><span id="nc-inicio-val" class="nc-val"></span></button><input id="nc-inicio" type="time" tabindex="-1" aria-hidden="true"></span></div>
+              <div class="campo nc-fim"><span class="rotulo" id="nc-fim-rot">Fim</span><span class="nc-data"><button type="button" class="nc-vis" data-de="nc-fim" data-sel="fim" aria-labelledby="nc-fim-rot nc-fim-val"><span id="nc-fim-val" class="nc-val"></span></button><input id="nc-fim" type="time" tabindex="-1" aria-hidden="true"></span></div>
               <div class="campo nc-onde"><label for="nc-destino">Onde salvar</label><select id="nc-destino"></select></div>
               <div class="campo nc-alerta"><label for="nc-alerta">Alerta</label><select id="nc-alerta"></select></div>
               <label class="nc-check nc-todo"><input type="checkbox" id="nc-todo"><span>Dia todo</span></label>
@@ -120,6 +164,14 @@
             </div>
             <footer><p class="nc-msg" id="nc-msg" role="status" aria-live="polite"></p><button type="button" class="btn secundario" data-nc-cancelar>Cancelar</button><button type="submit" class="btn primario" id="nc-salvar">Salvar</button></footer>
           </form>
+        </div>
+        <div class="seletor" id="ca-sel" hidden role="dialog" aria-modal="true" aria-labelledby="sel-titulo">
+          <div class="sel-lado">
+            <header><h3 id="sel-titulo"></h3><button type="button" class="btn primario" data-sel-ok>Pronto</button></header>
+            <p class="sel-valor" id="sel-valor" aria-live="polite"></p>
+            <div class="sel-extra" id="sel-extra"></div>
+          </div>
+          <div class="sel-meio" id="sel-meio"></div>
         </div>
       </section>
     </div>
@@ -131,8 +183,15 @@
 <script src="paineis.js"></script>
 <script src="player.js"></script>
 <script src="controles.js"></script>
+<script src="cortina.js"></script>
+<script src="meet.js"></script>
+<script src="aprovacao.js"></script>
+<script src="externos.js"></script>
 <script src="monitor.js"></script>
+<script src="uso.js"></script>
+<script src="regras.js"></script>
 <script src="apps.js"></script>
+<script src="escrever.js"></script>
 <script src="deck.js"></script>
 <script src="pwa.js"></script>
 <script src="pareamento.js"></script>

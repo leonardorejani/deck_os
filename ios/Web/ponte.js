@@ -70,27 +70,35 @@
     transferir: id => pedir('POST', '/api/spotify/dispositivo', { id: String(id) }),
     curtir: curtir => pedir('POST', '/api/spotify/curtir', { v: curtir ? '1' : '0' }),
     fila: () => pedir('GET', '/api/spotify/fila'),
+    recentes: () => pedir('GET', '/api/spotify/recentes'),
+    pularFila: (n, uri, ctx) => pedir('POST', '/api/spotify/pular', uri ? { n: String(n), uri: String(uri), ...(ctx ? { ctx: String(ctx) } : {}) } : { n: String(n) }),
     repetirModo: modo => pedir('POST', '/api/spotify/repetir', { modo: String(modo) }),
     config: () => pedir('GET', '/api/config'),
     gravarConfig: config => pedir('PUT', '/api/config', undefined, config),
-    whatsapp: () => pedir('GET', '/api/whatsapp'),
+    whatsapp: versao => pedir('GET', '/api/whatsapp', versao != null ? { v: String(versao) } : undefined, undefined, tempoLimite * 5), // o Bluetooth leva uns 25 KB/s: a lista de uma conversa cheia passa dos 5 s
     whatsappFoto: arquivo => pedir('GET', '/api/whatsapp/foto/' + encodeURIComponent(arquivo)),
     whatsappMidia: (chat, id) => pedir('GET', '/api/whatsapp/midia', { chat: String(chat), id: String(id) }, undefined, 45000), // o Mac baixa da internet antes de responder
-    abrirConversa: id => pedir('POST', '/api/whatsapp/abrir', undefined, { id }),
+    abrirConversa: id => pedir('POST', '/api/whatsapp/abrir', undefined, { id }, tempoLimite * 6), // o Mac traz a aba, acha a busca e digita: passa de 5 s (o mesmo de painel/canal.js)
     agenda: (de, dias) => pedir('GET', '/api/agenda', { de: String(de), dias: String(dias) }),
     sessoes: () => pedir('GET', '/api/sessoes'),
+    aprovar: (id, decisao) => pedir('POST', '/api/aprovacoes/' + encodeURIComponent(id), undefined, { decisao }),
+    usoDetalhe: periodo => pedir('GET', '/api/uso/detalhe', { periodo: String(periodo) }),
     abrirSessao: id => pedir('POST', '/api/sessoes/' + encodeURIComponent(id) + '/abrir'),
     entrarNaReuniao: link => pedir('POST', '/api/reuniao/entrar', undefined, { link }),
     controles: () => pedir('GET', '/api/controles'),
     controle: (item, v) => pedir('POST', '/api/controles/' + encodeURIComponent(item), { v: String(v) }),
+    meet: () => pedir('GET', '/api/meet'),
+    meetAcao: acao => pedir('POST', '/api/meet/' + encodeURIComponent(acao), undefined, undefined, 20000),
     agendaDestinos: pedirAcesso => pedir('GET', '/api/agenda/destinos', pedirAcesso ? { pedir: '1' } : undefined),
     criarCompromisso: dados => pedir('POST', '/api/agenda/criar', undefined, dados, 15000),
+    abrirGitHub: id => pedir('POST', '/api/github/abrir', undefined, { id }),
+    colar: texto => pedir('POST', '/api/colar', undefined, { texto }, 30000), // texto longo pelo Bluetooth (uns 25 KB/s) passa de 5 s
     apps: () => pedir('GET', '/api/apps'),
     acoesDoApp: bundle => pedir('GET', '/api/apps/' + encodeURIComponent(bundle) + '/acoes', undefined, undefined, 15000), // ler as contas do Mail pode levar uns 8 s
     // o ícone de um app do Mac (editor de tecla): também numa <img>, pelo mesmo esquema. O app do iPhone guarda por um dia
     appIconeUrl: bundle => `deckcapa://apps/${encodeURIComponent(bundle)}/icone?codigo=${encodeURIComponent(codigo || '')}`,
     // <img> não manda cabeçalho: o Swift atende deckcapa:// com o canal em uso, e o capaId troca a imagem só quando ela muda
-    capaUrl: capaId => `deckcapa://capa/?codigo=${encodeURIComponent(codigo || '')}&v=${encodeURIComponent(capaId || '')}`,
+    capaUrl: (capaId, grande) => `deckcapa://capa/?codigo=${encodeURIComponent(codigo || '')}&v=${encodeURIComponent(capaId || '')}${grande ? '&tam=grande' : ''}`,
     /* Extras do app nativo. A vibração leve do toque de tecla o Swift já faz em botao(), antes de o Mac responder. */
     vibrar: () => { ponte.postMessage({ op: 'vibrar' }) },
     // chamado pelo Swift: um código novo (pareamento feito ou rodízio vindo pela capa)

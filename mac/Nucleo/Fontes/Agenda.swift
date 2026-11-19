@@ -16,10 +16,12 @@ struct EventoBruto: Equatable, Sendable {
     var local: String?
     /// Link de reunião já achado no evento (endereço, local ou notas). Ver `Reuniao.achar`.
     var link: String? = nil
+    /// true quando veio do app Lembretes (a cor é a da lista).
+    var lembrete: Bool = false
 
     static func == (a: EventoBruto, b: EventoBruto) -> Bool {
         a.titulo == b.titulo && a.inicio == b.inicio && a.fim == b.fim && a.diaTodo == b.diaTodo
-            && a.calendario == b.calendario && a.cor == b.cor && a.local == b.local && a.link == b.link
+            && a.calendario == b.calendario && a.cor == b.cor && a.local == b.local && a.link == b.link && a.lembrete == b.lembrete
     }
 }
 
@@ -35,7 +37,7 @@ enum Agenda {
         if diaTodo { c.hour = 0; c.minute = 0 } else if c.minute == nil { c.minute = 0 }
         guard let inicio = calendario.date(from: c) else { return nil }
         let fim = diaTodo ? inicio.addingTimeInterval(24 * 3600 - 1) : inicio
-        return EventoBruto(titulo: titulo, inicio: inicio, fim: fim, diaTodo: diaTodo, calendario: lista, cor: cor, local: nil)
+        return EventoBruto(titulo: titulo, inicio: inicio, fim: fim, diaTodo: diaTodo, calendario: lista, cor: cor, local: nil, lembrete: true)
     }
 
     /// Eventos do Calendário e lembretes numa lista só, na ordem do início.
@@ -47,7 +49,8 @@ enum Agenda {
         let local = e.local?.trimmingCharacters(in: .whitespacesAndNewlines)
         return Evento(titulo: e.titulo, inicio: Datas.iso(e.inicio, fuso: fuso), diaTodo: e.diaTodo,
                       calendario: e.calendario, cor: Cor.hex(r: e.cor.r, g: e.cor.g, b: e.cor.b),
-                      local: (local?.isEmpty ?? true) ? nil : local, link: e.link, fim: Datas.iso(e.fim, fuso: fuso))
+                      local: (local?.isEmpty ?? true) ? nil : local, link: e.link, fim: Datas.iso(e.fim, fuso: fuso),
+                      lembrete: e.lembrete ? true : nil)
     }
 
     /// O próximo é o primeiro que ainda não terminou, na ordem do início.

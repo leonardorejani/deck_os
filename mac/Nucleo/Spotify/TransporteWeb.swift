@@ -13,6 +13,8 @@ struct RequisicaoWeb: Equatable, Sendable {
 struct RespostaWeb: Equatable, Sendable {
     var status: Int
     var corpo: Data
+    /// Segundos que o Spotify pediu para esperar (cabeçalho Retry-After, no 429). nil quando não veio.
+    var esperar: TimeInterval? = nil
 }
 
 /// Tudo que sai para a internet passa por aqui, para os testes trocarem por respostas falsas da API.
@@ -33,7 +35,7 @@ struct TransporteUrlSession: TransporteWeb {
         let caixa = Caixa()
         let sem = DispatchSemaphore(value: 0)
         URLSession.shared.dataTask(with: req) { d, resp, _ in
-            if let http = resp as? HTTPURLResponse { caixa.resposta = RespostaWeb(status: http.statusCode, corpo: d ?? Data()) }
+            if let http = resp as? HTTPURLResponse { caixa.resposta = RespostaWeb(status: http.statusCode, corpo: d ?? Data(), esperar: http.value(forHTTPHeaderField: "Retry-After").flatMap { TimeInterval($0.trimmingCharacters(in: .whitespaces)) }) }
             sem.signal()
         }.resume()
         _ = sem.wait(timeout: .now() + 10)

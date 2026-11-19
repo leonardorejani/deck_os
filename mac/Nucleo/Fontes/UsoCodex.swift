@@ -62,6 +62,49 @@ enum UsoCodex {
         return nil
     }
 
+
+    /// Uma janela de limite do Codex: a curta (5 horas) e a semanal vêm no mesmo evento, em `primary` e `secondary`.
+    struct JanelaCodex: Equatable, Sendable {
+        var minutos: Int
+        var percentual: Int
+        var renova: Date
+        var medidoEm: Date?
+    }
+
+    /// As janelas do evento mais novo que traz `rate_limits`. A semanal aqui bate com a de `parse`.
+    static func parseJanelas(_ texto: String) -> [JanelaCodex] {
+        for linha in texto.split(separator: "\n", omittingEmptySubsequences: true).reversed() {
+            guard linha.contains("rate_limits"),
+                  let obj = (try? JSONSerialization.jsonObject(with: Data(linha.utf8))) as? [String: Any],
+                  let payload = obj["payload"] as? [String: Any],
+                  let limites = payload["rate_limits"] as? [String: Any] else { continue }
+            let medido = (obj["timestamp"] as? String).flatMap(Datas.ler)
+            var saida: [JanelaCodex] = []
+            for chave in ["primary", "secondary"] {
+                guard let j = limites[chave] as? [String: Any], let min = numero(j["window_minutes"]), min > 0,
+                      let usado = numero(j["used_percent"]), let reseta = numero(j["resets_at"]).flatMap(Numero.epoch) else { continue }
+                saida.append(JanelaCodex(minutos: Int(min), percentual: Numero.percentual(usado), renova: reseta, medidoEm: medido))
+            }
+            if !saida.isEmpty { return saida.sorted { $0.minutos < $1.minutos } }
+        }
+        return []
+    }
+
+    /// Mesma varredura de `lerJanela`, devolvendo todas as janelas do evento mais novo.
+    static func lerJanelas(raiz: URL, maxArquivos: Int = 30) -> [JanelaCodex] {
+        let fm = FileManager.default
+        guard let it = fm.enumerator(at: raiz, includingPropertiesForKeys: [.contentModificationDateKey], options: [.skipsHiddenFiles]) else { return [] }
+        var arquivos: [(URL, Date)] = []
+        for case let url as URL in it where url.pathExtension == "jsonl" {
+            let data = (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+            arquivos.append((url, data))
+        }
+        for (url, _) in arquivos.sorted(by: { $0.1 > $1.1 }).prefix(maxArquivos) {
+            if let t = cauda(url) { let j = parseJanelas(t); if !j.isEmpty { return j } }
+        }
+        return []
+    }
+
     static func ler(raiz: URL, conta: ContaIA, agora: Date) -> Leitura<UsoConta> {
         let vazio = UsoConta(id: conta.id, nome: conta.nome, conta: conta.conta, semana: nil, renova: nil)
         guard let j = lerJanela(raiz: raiz) else {

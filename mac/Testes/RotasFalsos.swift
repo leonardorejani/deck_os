@@ -33,6 +33,8 @@ final class ArmazemFalso: ArmazemDeConfig, @unchecked Sendable {
 struct PaineisFalsos: ProvedorPaineis {
     let registro: Registro
     var temCapa = true
+    var versaoZap: Int? = nil
+    func versaoWhatsApp() -> Int? { versaoZap }
     func estado() -> Estado {
         Estado(agora: "2026-11-10T10:00:00Z", nomeMac: "Mac", perfilAtivo: "geral", comp: "a", blocos: Blocos(),
                spotify: nil, uso: [], sessoes: [], whatsapp: nil, agenda: nil, acesas: ["acordado"], selos: [:], avisos: [])
@@ -96,6 +98,18 @@ struct SpotifyFalso: ControleSpotify {
         guard conectado else { return .failure(.naoConectado) }
         return .success(FilaSpotify(atual: ItemDaFila(faixa: "Agora", artista: "Coral"), proximas: [ItemDaFila(faixa: "Depois", artista: "Ana")]))
     }
+    func recentes() -> Result<RecentesSpotify, ErroSpotify> {
+        guard conectado else { return .failure(.naoConectado) }
+        return .success(RecentesSpotify(itens: [ItemDaFila(faixa: "Ontem", artista: "Beto")]))
+    }
+    func pularFila(posicao: Int, uri: String?) -> ErroSpotify? {
+        guard conectado else { return .naoConectado }
+        registro.anotar("pularFila \(posicao) \(uri ?? "-")"); return nil
+    }
+    func pularFila(posicao: Int, uri: String?, contexto: String?) -> ErroSpotify? {
+        guard conectado else { return .naoConectado }
+        registro.anotar("pularFila \(posicao) \(uri ?? "-") ctx=\(contexto ?? "-")"); return nil
+    }
     func repetirModo(_ modo: String) -> ErroSpotify? {
         guard conectado else { return .naoConectado }
         registro.anotar("repetirModo \(modo)"); return nil
@@ -115,7 +129,7 @@ struct Cenario {
     static let codigo = "abcdefghjkmnpqrstuvw"
 
     init(codigoPareamento: String = "123456", agora: @escaping @Sendable () -> Date = { Date() },
-         rodizio: Rodizio = Rodizio(), comCA: Bool = true, spotifyConectado: Bool = true) throws {
+         rodizio: Rodizio = Rodizio(), comCA: Bool = true, spotifyConectado: Bool = true, versaoZap: Int? = nil) throws {
         let fm = FileManager.default
         let base = fm.temporaryDirectory.appendingPathComponent("deck-rotas-\(UUID().uuidString)")
         raiz = base.appendingPathComponent("pagina")
@@ -136,7 +150,7 @@ struct Cenario {
         armazem = ArmazemFalso(configDeTeste())
         pareamento = Pareamento(agora: agora, sorteio: { codigoPareamento })
         pareamento.gerar()
-        roteador = Roteador(paineis: PaineisFalsos(registro: registro), teclas: TeclasFalsas(registro: registro),
+        roteador = Roteador(paineis: PaineisFalsos(registro: registro, versaoZap: versaoZap), teclas: TeclasFalsas(registro: registro),
                             spotify: SpotifyFalso(registro: registro, conectado: spotifyConectado), config: armazem, pareamento: pareamento,
                             pagina: ArquivosPagina(raiz: raiz), rodizio: rodizio, certificadoCA: comCA ? ca : nil)
     }

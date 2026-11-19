@@ -12,6 +12,8 @@ bash scripts/teste/abrir-deck.test.sh | tail -1
 bash scripts/teste/assinatura.test.sh | tail -1
 # a bancada tem dados, porta e Chaveiro próprios e nunca encosta nos do Deck de verdade
 bash scripts/teste/bancada.test.sh | tail -1
+# repo público: sem dado real, sem binário versionado, uma versão só (arquivo VERSAO)
+bash scripts/teste/seguranca-build.test.sh | tail -1
 # auditores da tatile (design system do autor): só rodam onde a skill está instalada
 if [ -d ~/.claude/skills/tatile ]; then
   node ~/.claude/skills/tatile/auditor/auditar.mjs prototipo | tail -1
@@ -40,6 +42,8 @@ swift test --package-path ios/Pacote 2>&1 | grep -E "error:|failed|Executed [0-9
 node --check ios/Web/ponte.js
 node --check ios/Web/casca.js
 node ios/scripts/testar-ponte.js
+# as telas de pareamento do app: progresso na hora, toque duplo, falha com "Tentar de novo"
+node ios/scripts/testar-casca.js
 # o app do iPhone empacota o painel/ deste repo (sem os testes), nunca o de outra worktree
 bash ios/scripts/empacotar-painel.sh >/dev/null && [ -f ios/Pagina/canal.js ] && [ ! -d ios/Pagina/teste ]
 echo "verificar: ok"

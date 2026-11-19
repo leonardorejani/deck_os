@@ -69,17 +69,26 @@ struct Fontes: Sendable {
     var capa: @Sendable () -> Data?
     var agenda: @Sendable (Date) -> Leitura<ResumoAgenda?>
     var acesas: @Sendable ([Tecla]) -> [String]
+    /// Muda quando uma tecla de comando começa ou termina de rodar. É parte da chave do cache das acesas: a tecla acende na hora
+    /// depois de ligar ou desligar, sem esperar o prazo. Fonte de fora (teste antigo) não precisa trazer.
+    var versaoTeclas: @Sendable () -> Int = { 0 }
     /// O monitor do Mac, só dos itens que a pessoa deixou ligados. Fonte de fora (teste antigo) não precisa trazer.
     var monitor: @Sendable (ConfigMonitor, Date) -> Leitura<EstadoMonitor?> = { _, _ in Leitura(valor: nil, aviso: nil) }
     /// O microfone e a câmera da reunião, por id das teclas que controlam isso. Só é chamada com tecla dessas no perfil.
     var reuniao: @Sendable ([Tecla]) -> Leitura<[String: EstadoDeReuniao]> = { _ in Leitura(valor: [:], aviso: nil) }
+    /// As teclas de comando que estão rodando soltas agora (ou falharam há pouco). Fonte de fora (teste antigo) não precisa trazer.
+    var andamento: @Sendable () -> [String: AndamentoDeTecla] = { [:] }
+    /// Os avisos e valores que chegaram de fora. Fonte de fora (teste antigo) não precisa trazer.
+    var externos: @Sendable (Date) -> (avisos: [AvisoDeFora], valores: [ValorDeFora]) = { _ in ([], []) }
+    /// PRs do GitHub pelo gh do Mac. Só é chamada com a tecla GitHub no perfil e o iPhone pedindo o estado.
+    var github: @Sendable (Date) -> ResumoGitHub? = { _ in nil }
 
     /// As fontes de verdade deste Mac. `casa` é a pasta do usuário.
     /// `origemWhatsApp` é quem decide entre o banco do app e o WhatsApp Web: o roteador passa o mesmo
     /// que usa para abrir o WhatsApp, e sem ele vale o automático.
     static func vivas(executor: any Executor = ExecutorShell(), casa: String = NSHomeDirectory(),
                       origemWhatsApp: OrigemWhatsApp? = nil, ponteQR: PonteWhatsAppQR? = nil, complementoSpotify: ComplementoSpotify? = nil,
-                      spotifyAberto: (@Sendable () -> Bool)? = nil) -> Fontes {
+                      spotifyAberto: (@Sendable () -> Bool)? = nil, gitHub: FonteGitHub? = nil, avisos: ArmazemDeAvisos? = nil) -> Fontes {
         let base = URL(fileURLWithPath: casa)
         let jobs = base.appendingPathComponent(".claude/jobs")
         let medicaoClaude = base.appendingPathComponent(".config/claude-account/measure.json")
@@ -93,6 +102,7 @@ struct Fontes: Sendable {
         let spotify = FonteSpotify(executor: executor, aberto: aberto)
         let agenda = FonteAgenda.viva()
         let monitor = FonteMonitor()
+        let gitHub = gitHub ?? FonteGitHub(executor: executor)
         return Fontes(
             sessoes: { FonteSessoes.ler(raiz: jobs) },
             uso: { contas, agora in FonteUso.ler(contas: contas, claude: medicaoClaude, codex: sessoesCodex, agora: agora) },
@@ -108,8 +118,12 @@ struct Fontes: Sendable {
             capa: { spotify.capa() },
             agenda: { agenda.ler($0) },
             acesas: { TeclasAcesas.ler($0, executor: executor) },
+            versaoTeclas: { ComandosEmAndamento.compartilhado.versao },
             monitor: { c, agora in Leitura(valor: monitor.ler(c, agora: agora), aviso: nil) },
-            reuniao: { LeitorDeReuniao(executor: executor).ler($0) }
+            reuniao: { LeitorDeReuniao(executor: executor).ler($0) },
+            andamento: { ComandosEmAndamento.compartilhado.foto() },
+            externos: { avisos?.foto(agora: $0) ?? ([], []) },
+            github: { gitHub.ler(agora: $0) }
         )
     }
 }
@@ -125,6 +139,13 @@ final class Agregador: @unchecked Sendable {
     private let cacheMonitor = Cache<ConfigMonitor, Leitura<EstadoMonitor?>>(validade: 3)
     /// Curto: a tecla tem que acompanhar o toque. A leitura mexe com o navegador, então não vai a cada pedido de 1 s.
     private let cacheReuniao = Cache<[Tecla], Leitura<[String: EstadoDeReuniao]>>(validade: 1.5)
+    /// O GitHub é rede e o gh leva alguns segundos: lê no máximo a cada poucos minutos, e só com o iPhone pedindo o estado.
+    static let validadeDoGitHub: TimeInterval = 180
+    private let cacheGitHub = Cache<Int, ResumoGitHub?>(validade: Agregador.validadeDoGitHub)
+
+    /// Conferir o estado das teclas custa um processo (e, nas de liga e desliga, um shell de perfil) por tecla: a cada pedido de 1 s seria o dia todo.
+    struct ChaveAcesas: Equatable, Sendable { var teclas: [Tecla]; var versao: Int }
+    private let cacheAcesas = Cache<ChaveAcesas, [String]>(validade: 2.5)
 
     /// Quanto o estado espera pelas fontes. Passou disso, a fonte que não respondeu entra com o
     /// último valor que deu certo (ou vazia), e o iPhone não fica sem painel por causa de uma só.
@@ -152,6 +173,7 @@ final class Agregador: @unchecked Sendable {
         private var selo: Int?
         private var monitor: Leitura<EstadoMonitor?>?
         private var reuniao: Leitura<[String: EstadoDeReuniao]>?
+        private var github: ResumoGitHub??
         func gravar(_ f: (Colheita) -> Void) { trava.lock(); f(self); trava.unlock() }
         func guardar(sessoes v: Leitura<[Sessao]>) { gravar { $0.sessoes = v } }
         func guardar(uso v: Leitura<[UsoConta]>) { gravar { $0.uso = v } }
@@ -162,12 +184,19 @@ final class Agregador: @unchecked Sendable {
         func guardar(selo v: Int?) { gravar { $0.selo = v } }
         func guardar(monitor v: Leitura<EstadoMonitor?>) { gravar { $0.monitor = v } }
         func guardar(reuniao v: Leitura<[String: EstadoDeReuniao]>) { gravar { $0.reuniao = v } }
+        func guardar(github v: ResumoGitHub?) { gravar { $0.github = .some(v) } }
+        func fotoGitHub() -> ResumoGitHub?? { trava.lock(); defer { trava.unlock() }; return github }
         /// Cópia do que já chegou. Fonte lenta ainda escreve depois do limite, então ninguém lê o
         /// objeto vivo: cada campo nil é uma fonte que não respondeu a tempo.
         func foto() -> (Leitura<[Sessao]>?, Leitura<[UsoConta]>?, Leitura<WhatsAppDados?>?, Leitura<EstadoSpotify?>?, Leitura<ResumoAgenda?>?, [String]?, Int?, Leitura<EstadoMonitor?>?, Leitura<[String: EstadoDeReuniao]>?) {
             trava.lock(); defer { trava.unlock() }
             return (sessoes, uso, whatsapp, spotify, agenda, acesas, selo, monitor, reuniao)
         }
+    }
+
+    /// O uso das contas, do mesmo cache do estado (para o detalhe do uso, que não refaz a leitura).
+    func uso(config: Config, agora: Date = Date()) -> Leitura<[UsoConta]> {
+        cacheUso.obterAgil(chave: config.contas, agora: agora, padrao: Leitura(valor: [], aviso: nil), paciencia: paciencia) { self.fontes.uso(config.contas, agora) }
     }
 
     func estado(config: Config, agora: Date = Date()) -> Estado {
@@ -205,11 +234,16 @@ final class Agregador: @unchecked Sendable {
         if b.monitor, config.monitor.algum {
             em { c.guardar(monitor: self.cacheMonitor.obterAgil(chave: config.monitor, agora: agora, padrao: Leitura(valor: nil, aviso: nil), paciencia: p) { self.fontes.monitor(config.monitor, agora) }) }
         }
-        em { c.guardar(acesas: self.fontes.acesas(teclas)) }
+        em { c.guardar(acesas: self.cacheAcesas.obterAgil(chave: ChaveAcesas(teclas: teclas, versao: self.fontes.versaoTeclas()), agora: agora, padrao: [], paciencia: p) { self.fontes.acesas(teclas) }) }
         // Só lê quando o perfil tem tecla de microfone ou de câmera da reunião: sem ela o Mac nem encosta no navegador.
         let teclasDeReuniao = teclas.filter { LeitorDeReuniao.item(da: $0) != nil }
         if !teclasDeReuniao.isEmpty {
             em { c.guardar(reuniao: self.cacheReuniao.obterAgil(chave: teclasDeReuniao, agora: agora, padrao: Leitura(valor: [:], aviso: nil), paciencia: p) { self.fontes.reuniao(teclasDeReuniao) }) }
+        }
+        // O GitHub só lê com a tecla GitHub no perfil ativo: sem ela o Mac nem chama o gh.
+        let temGitHub = teclas.contains { TeclasDeFora.ehGitHub($0) }
+        if temGitHub {
+            em { c.guardar(github: self.cacheGitHub.obterAgil(chave: 0, agora: agora, padrao: nil, paciencia: p) { self.fontes.github(agora) }) }
         }
         _ = grupo.wait(timeout: .now() + limite)
 
@@ -220,7 +254,7 @@ final class Agregador: @unchecked Sendable {
         let leituraWhats = fw ?? cacheWhatsApp.ultimo() ?? vazioWhats
         let leituraSpotify = fp ?? cacheSpotify.ultimo() ?? vazioSpotify
         let leituraAgenda = fa ?? cacheAgenda.ultimo() ?? vazioAgenda
-        let acesas = fz ?? []
+        let acesas = fz ?? cacheAcesas.ultimo() ?? []
 
         var avisos: [Aviso] = []
         func avisar(_ a: Aviso?) { if let a, !avisos.contains(a) { avisos.append(a) } }
@@ -243,8 +277,23 @@ final class Agregador: @unchecked Sendable {
             }
         }
 
+        let externos = fontes.externos(agora)
+        var resumoGitHub: ResumoGitHub?
+        if temGitHub {
+            if let lido = c.fotoGitHub() { resumoGitHub = lido } else if let ultimo = cacheGitHub.ultimo() { resumoGitHub = ultimo }
+        }
+        let temValores = teclas.contains { TeclasDeFora.ehValores($0) }
+
         var selos: [String: String] = [:]
         for t in teclas where t.tipo == "app" {
+            if TeclasDeFora.ehGitHub(t) {
+                if let n = resumoGitHub?.total, n > 0 { selos[t.id] = n > 99 ? "99+" : String(n) }
+                continue
+            }
+            if TeclasDeFora.ehValores(t) {
+                if !externos.valores.isEmpty { selos[t.id] = String(externos.valores.count) }
+                continue
+            }
             let app = t.valor.lowercased()
             if app == "whatsapp", let w = resumoWhats, w.total > 0 {
                 selos[t.id] = w.total > 99 ? "99+" : String(w.total)
@@ -253,12 +302,21 @@ final class Agregador: @unchecked Sendable {
             }
         }
 
+        let idsDasTeclas = Set(teclas.map(\.id))
+        let andamentoDasTeclas = fontes.andamento().filter { idsDasTeclas.contains($0.key) }
+
         return Estado(
             agora: Datas.iso(agora), nomeMac: config.nomeMac, perfilAtivo: config.perfilAtivo, comp: config.comp, blocos: b,
-            spotify: leituraSpotify.valor, uso: leituraUso.valor, sessoes: FonteSessoes.semContexto(leituraSessoes.valor), whatsapp: resumoWhats,
+            spotify: leituraSpotify.valor, uso: leituraUso.valor, sessoes: FonteSessoes.semContexto(FonteSessoes.esperando(leituraSessoes.valor)), whatsapp: resumoWhats,
             agenda: leituraAgenda.valor, acesas: acesas, selos: selos, avisos: avisos,
             monitor: b.monitor && config.monitor.algum ? (fm ?? cacheMonitor.ultimo())?.valor : nil,
-            reuniao: leituraReuniao?.valor
+            reuniao: leituraReuniao?.valor,
+            andamento: andamentoDasTeclas.isEmpty ? nil : andamentoDasTeclas,
+            configVersao: config.carimbo,
+            outrasSessoes: b.sessoes ? FonteSessoes.outras(leituraSessoes.valor).nilSeVazio : nil,
+            avisosDeFora: externos.avisos.isEmpty ? nil : externos.avisos,
+            valoresDeFora: temValores ? externos.valores : nil,
+            github: resumoGitHub
         )
     }
 
@@ -270,4 +328,8 @@ final class Agregador: @unchecked Sendable {
         cacheSessoes.obter(chave: 0, agora: agora) { fontes.sessoes() }.valor
     }
     func capa() -> Data? { fontes.capa() }
+}
+
+private extension Array {
+    var nilSeVazio: [Element]? { isEmpty ? nil : self }
 }

@@ -51,8 +51,18 @@ final class ModeloApp: ObservableObject {
     /// O WhatsApp por QR (ajudante de leitura). Desligado até a pessoa escolher a origem QR nos Ajustes.
     let whatsappQR: ModeloWhatsAppQR
     let abrirComMac: AbrirComMac
+    /// Os pedidos de permissão do Claude Code esperando Permitir ou Negar no iPhone (Nucleo/Aprovacoes.swift).
+    let aprovacoes = Aprovacoes()
+    /// O gancho de aprovação está no settings.json do Claude Code? (Ajustes > Este Mac)
+    @Published private(set) var ganchoDoClaude: GanchoInstalador.Situacao = .naoInstalado
+    /// O settings.json do Claude Code e a pasta do segredo do gancho. Teste e fotos usam uma pasta de mentira: nunca o arquivo real do dono.
+    var arquivoDoClaude: URL = AmbienteDeTeste.ativo ? ModeloApp.pastaDeMentira().appendingPathComponent("settings.json") : GanchoInstalador.arquivoPadrao
+    var pastaDoGancho: URL = AmbienteDeTeste.ativo ? ModeloApp.pastaDeMentira() : Variante.atual.pastaDeDados()
+    private var servidorDoGancho: ServidorDoGancho?
     /// Compartilhado com o roteador: a trava dele evita duas trocas do código ao mesmo tempo.
     let rodizio = Rodizio()
+    /// As regras automáticas: o servidor avalia e o botão Testar dos Ajustes dispara pela mesma instância.
+    let vigiaDeRegras = VigiaDeRegras()
     private var tarefaDoRodizio: Task<Void, Never>?
 
     let decisao = PonteDeDecisao()
@@ -81,6 +91,13 @@ final class ModeloApp: ObservableObject {
     private let arquivoConfig: URL?
     private var vigia: VigiaConfig?
     private var servidorHttps: ServidorHttps?
+    /// Avisos e valores que scripts deste Mac mandam pela porta de fora. A mesma memória alimenta o estado do iPhone.
+    let avisosDeFora = ArmazemDeAvisos(primeiroId: Int(Date().timeIntervalSince1970 * 1000))
+    /// A chave da porta de fora. Nos testes mora numa pasta temporária: nunca grava na pasta do Deck de verdade.
+    let chaveDeFora = ChaveDeAvisos(pasta: AmbienteDeTeste.ativo ? FileManager.default.temporaryDirectory.appendingPathComponent("deck-teste-chave-de-fora") : Variante.atual.pastaDeDados())
+    /// A porta em que a porta de fora abriu (nil: ainda não, ou não abriu).
+    @Published private(set) var portaDeFora: Int?
+    private var servidorDeFora: ServidorDeFora?
     /// Quem relê os acessos recusados quando o app volta para a frente (Ajustes/AcessosVerificador.swift).
     var vigiaDeAcessos: AnyObject?
 
@@ -129,12 +146,17 @@ final class ModeloApp: ObservableObject {
         self.defaults = defaults
         // Hospedeiro de teste: login do Spotify na memória, nunca o Chaveiro do dono. Log só no app de verdade.
         let testando = AmbienteDeTeste.ativo
-        let armazemSpotify: ArmazemSpotify = testando ? ArmazemSpotifyMemoria() : ArmazemSpotifyChaveiro()
-        self.spotify = ModeloSpotify(conta: ContaSpotify(armazem: armazemSpotify, transporte: TransporteUrlSession()))
+        // O Chaveiro só é lido em segundo plano e uma vez (cache): a partida nunca espera a senha dele. O fim da espera do 429
+        // fica num arquivo comum, que não é segredo.
+        let armazemSpotify: ArmazemSpotify = testando ? ArmazemSpotifyMemoria() : ArmazemSpotifyEmCache(ArmazemSpotifyChaveiro())
+        let limiteSpotify: ArmazemDoLimite = testando ? LimiteEmMemoria() : LimiteEmArquivo.padrao()
+        self.spotify = ModeloSpotify(conta: ContaSpotify(armazem: armazemSpotify, limite: limiteSpotify, transporte: TransporteUrlSession()),
+                                     lerNaPartida: testando)
         self.renovacao = RenovacaoDoApp.ler(defaults)
         if !testando {
             self.registrar = { LogDoDeck.padrao.escrever($0) }
             self.spotify.registrar = { LogDoDeck.padrao.escrever($0) }
+            self.spotify.conta.registrar = { LogDoDeck.padrao.escrever($0) }
         }
         // Hospedeiro de teste não abre o ajudante do WhatsApp (nem a sessão do dono).
         self.whatsappQR = testando ? ModeloWhatsAppQR.semAjudante() : ModeloWhatsAppQR.padrao()
@@ -165,6 +187,11 @@ final class ModeloApp: ObservableObject {
         vigia?.parar()
         servidorHttps?.parar()
         servidorHttps = nil
+        servidorDeFora?.parar()
+        servidorDeFora = nil
+        portaDeFora = nil
+        servidorDoGancho?.parar()
+        servidorDoGancho = nil
         // Fecha o ajudante com o app, sem apagar a sessão.
         whatsappQR.ponte.desligar()
         portaDoCabo?.parar(); portaDoCabo = nil
@@ -301,11 +328,13 @@ final class ModeloApp: ObservableObject {
             avisar("Não achei a página do iPhone dentro do app.", falha: true)
             return
         }
-        let roteador = Ligacao.roteador(armazem: armazem, pareamento: pareamento, pagina: ArquivosPagina(raiz: pasta),
+        var roteador = Ligacao.roteador(armazem: armazem, pareamento: pareamento, pagina: ArquivosPagina(raiz: pasta),
                                         rodizio: rodizio, certificadoCA: GeradorCertificado().arquivos.ca, contaSpotify: spotify.conta,
-                                        usoMedido: ModeloApp.usoMedidoPorToken(), ponteQR: whatsappQR.ponte)
-        // A bancada não tem iPhone: nada de cabo nem Bluetooth.
-        if Variante.atual.ligaIphone { ligarNativo(roteador: roteador) }
+                                        usoMedido: ModeloApp.usoMedidoPorToken(), ponteQR: whatsappQR.ponte, avisosDeFora: avisosDeFora, aprovacoes: aprovacoes, regras: vigiaDeRegras, registrar: registrar)
+        subirPortaDeFora()
+        roteador.aoInformarInstalacao = { [weak self] i in Task { @MainActor in self?.instalacaoInformada(i) } }
+        // A bancada não tem iPhone: nada de cabo, Bluetooth nem gancho de aprovação.
+        if Variante.atual.ligaIphone { ligarNativo(roteador: roteador); subirGancho() }
         let portaInicial = Variante.atual.portaFixa ?? config.porta
         // Cada resposta da API pelo Wi-Fi diz que o iPhone está falando agora (a mesma fonte do cabo e do Bluetooth).
         let atendeu: @Sendable (String, Int) -> Void = { [weak self] caminho, status in
@@ -315,6 +344,60 @@ final class ModeloApp: ObservableObject {
             let resultado = Result { try ModeloApp.abrirPorta(roteador: roteador, a: portaInicial, aoAtender: atendeu) }
             await self?.servidorPronto(resultado)
         }
+    }
+
+    /// A porta de fora (loopback, sem TLS). Se não abrir, o resto do Deck segue: só os avisos de fora ficam sem porta.
+    private func subirPortaDeFora() {
+        guard !AmbienteDeTeste.ativo, servidorDeFora == nil else { return }
+        let roteador = RoteadorDeFora(armazem: avisosDeFora, chave: { [chave = chaveDeFora] in chave.atual() })
+        let preferida = UInt16(Variante.atual.portaDeFora)
+        Task.detached(priority: .utility) { [weak self] in
+            let r = Result { try ServidorDeFora.ligar(roteador: roteador, preferida: preferida) }
+            await self?.portaDeForaPronta(r)
+        }
+    }
+
+    private func portaDeForaPronta(_ r: Result<ServidorDeFora, Error>) {
+        switch r {
+        case .success(let s): servidorDeFora = s; portaDeFora = Int(s.porta)
+        case .failure(let e): registrar("Porta de avisos de fora não abriu: \(e)")
+        }
+    }
+
+    // MARK: Aprovar pedidos do Claude pelo iPhone
+
+    /// O servidor local do gancho (só no loopback, porta própria). Falhar aqui não derruba nada: sem ele o gancho fica mudo e o terminal pergunta.
+    private func subirGancho() {
+        guard !AmbienteDeTeste.ativo, let segredo = SegredoDoGancho.garantir(pasta: pastaDoGancho) else { return }
+        let servidor = ServidorDoGancho(tratador: TratadorDoGancho(aprovacoes: aprovacoes, segredo: segredo), porta: UInt16(Variante.atual.portaDoGancho))
+        let log = registrar
+        Task.detached { [weak self] in
+            do { try servidor.iniciar(); await self?.guardarGancho(servidor) }
+            catch { log("deck: o gancho de aprovação não abriu: \(error)") }
+        }
+    }
+
+    private func guardarGancho(_ s: ServidorDoGancho) { servidorDoGancho = s }
+
+    func lerGancho() { ganchoDoClaude = GanchoInstalador.situacao(arquivo: arquivoDoClaude) }
+
+    /// Liga ou desliga o gancho no settings.json do Claude Code. Formato estranho no arquivo: recusa e conta, sem mexer em nada.
+    func definirGancho(_ ligado: Bool) {
+        guard let _ = SegredoDoGancho.garantir(pasta: pastaDoGancho) else {
+            avisar("Não consegui criar o segredo do gancho.", falha: true)
+            return
+        }
+        if let erro = GanchoInstalador.aplicar(instalar: ligado, arquivo: arquivoDoClaude, porta: Variante.atual.portaDoGancho,
+                                                cabecalho: SegredoDoGancho.arquivo(pasta: pastaDoGancho)) {
+            avisar(erro, falha: true)
+        } else {
+            avisar(ligado ? "Pedidos do Claude Code agora chegam no iPhone." : "Pedidos do Claude Code voltaram só para o terminal.")
+        }
+        lerGancho()
+    }
+
+    nonisolated static func pastaDeMentira() -> URL {
+        FileManager.default.temporaryDirectory.appendingPathComponent("deck-teste-claude", isDirectory: true)
     }
 
     private func servidorPronto(_ r: Result<(ServidorHttps, Int), Error>) {
@@ -367,6 +450,12 @@ final class ModeloApp: ObservableObject {
         }
         config = nova
         marcarSalvo()
+    }
+
+    /// O botão Testar de uma regra: o iPhone mostra o cartão de contagem como se ela tivesse disparado, por 15 s.
+    func testarRegra(_ id: String) {
+        vigiaDeRegras.testar(id, agora: agora)
+        avisar(Regra.avisoDoTeste(iphoneAoVivo: iphoneAoVivo))
     }
 
     func usarComposicao(_ c: String) { gravar { $0.comp = c } }

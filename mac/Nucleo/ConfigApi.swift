@@ -13,12 +13,14 @@ struct ConfigPublica: Codable, Equatable, Sendable {
     var controles: ConfigControles
     var nomeMac: String
     var porta: Int
+    var regras: [Regra]
+    var regrasPausadas: Bool
 }
 
 extension Config {
     var publica: ConfigPublica {
         ConfigPublica(versao: versao, perfis: perfis, perfilAtivo: perfilAtivo, comp: comp, contas: contas,
-                      blocos: blocos, whatsapp: whatsapp, monitor: monitor, controles: controles, nomeMac: nomeMac, porta: porta)
+                      blocos: blocos, whatsapp: whatsapp, monitor: monitor, controles: controles, nomeMac: nomeMac, porta: porta, regras: regras, regrasPausadas: regrasPausadas)
     }
 
     /// Lê o corpo do PUT /api/config. Corpo sem alguma das chaves de uma config completa é recusado:
@@ -41,10 +43,17 @@ extension Config {
         if json["whatsapp"] == nil { completa.whatsapp = atual.whatsapp }
         // Mesmo caso do monitor (12/11/2026): painel velho não conhece a chave, e o padrão não apaga a escolha.
         if json["monitor"] == nil { completa.monitor = atual.monitor }
+        // E para a chave do monitor dentro de `blocos`: painel velho manda o `false` antigo e não sabe da escolha.
+        if (json["blocos"] as? [String: Any])?["monitorEscolhido"] == nil {
+            completa.blocos.monitor = atual.blocos.monitor; completa.blocos.monitorEscolhido = atual.blocos.monitorEscolhido
+        }
         // E para as barras dos Controles do Mac (12/11/2026).
         if json["controles"] == nil { completa.controles = atual.controles }
         // Idem para o lugar padrão da agenda: painel velho não manda a chave e não pode apagar a escolha.
         if json["agendaPadrao"] == nil { completa.agendaPadrao = atual.agendaPadrao }
+        // E para as regras automáticas (19/11/2026): painel velho não manda as chaves e o padrão não apaga a lista.
+        if json["regras"] == nil { completa.regras = atual.regras }
+        if json["regrasPausadas"] == nil { completa.regrasPausadas = atual.regrasPausadas }
         return aplicar(recebida: completa, sobre: atual)
     }
 

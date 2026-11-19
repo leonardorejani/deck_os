@@ -19,6 +19,8 @@ final class ModeloSpotify: ObservableObject {
     @Published private(set) var erro: String?
     /// "Avançado: usar a minha própria chave" aberto. Abre sozinho quando o Spotify recusa a conta na chave do Deck.
     @Published var avancadoAberto = false
+    /// O Spotify mandou esperar (limite de leituras) e a espera ainda não passou. Relido em `atualizar()`.
+    @Published private(set) var limitado = false
     /// Quem mostra o aviso curto na janela (ModeloApp.avisar).
     var avisar: (String, Bool) -> Void = { _, _ in }
     /// Escreve no deck.log cada passo do login (nunca o código, o state nem os tokens).
@@ -30,12 +32,26 @@ final class ModeloSpotify: ObservableObject {
     var esperaMaxima: TimeInterval = 180
     private var espera: EsperaDoRetorno?
 
-    init(conta: ContaSpotify) {
+    /// `lerNaPartida: false` (o app de verdade): nada aqui toca no Chaveiro ao nascer. O que está guardado lá chega por
+    /// `atualizar()`, em segundo plano, na primeira vez que uma tela precisa. Ler o Chaveiro na linha principal faz o macOS
+    /// pedir a senha e o app inteiro espera a resposta.
+    init(conta: ContaSpotify, lerNaPartida: Bool = true) {
         self.conta = conta
-        self.conectado = conta.conectado
-        self.chave = conta.chavePropria ?? ""
-        self.nome = conta.nome
+        if lerNaPartida {
+            self.conectado = conta.conectado
+            self.chave = conta.chavePropria ?? ""
+            self.nome = conta.nome
+            self.usaChavePropria = conta.chavePropria != nil
+            self.carregado = true
+        } else {
+            self.conectado = false
+            self.chave = ""
+            self.nome = nil
+            self.usaChavePropria = false
+        }
     }
+
+    private var carregado = false
 
     var chaveValida: Bool { ContaSpotify.chaveValida(chave.trimmingCharacters(in: .whitespacesAndNewlines)) }
 
@@ -43,7 +59,7 @@ final class ModeloSpotify: ObservableObject {
     var temChaveEmbutida: Bool { conta.temChaveEmbutida }
 
     /// A pessoa colou a própria chave (que vale no lugar da do Deck).
-    var usaChavePropria: Bool { conta.chavePropria != nil }
+    @Published private(set) var usaChavePropria = false
 
     /// Pronto para conectar: chave colada inteira, ou campo vazio com a chave do Deck.
     private var temChave: Bool {
@@ -52,12 +68,39 @@ final class ModeloSpotify: ObservableObject {
 
     var situacao: SituacaoSpotify { SpotifyLogica.situacao(chaveValida: temChave, conectado: conectado, conectando: conectando) }
 
+    /// O aviso de limite com a chave do Deck, com a sugestão da chave própria.
+    var avisoDeLimite: Bool { SpotifyLogica.mostrarAvisoDeLimite(limitado: limitado, chaveDoDeckEmUso: temChaveEmbutida && !usaChavePropria) }
+    /// O Spotify recusou esta conta na chave do Deck.
+    var contaNaoLiberada: Bool { erro == SpotifyLogica.avisoDeCadastro }
+    var nomeDaChaveEmUso: String { SpotifyLogica.nomeDaChave(propria: usaChavePropria) }
+
     func atualizar() {
+        guard carregado else { carregarEmSegundoPlano(); return }
+        limitado = conta.limiteRestante() != nil
         conectado = conta.conectado
         nome = conta.nome
         if conectado, nome == nil { buscarNome() }
         // O Spotify recusou esta conta na chave do Deck (numa chamada do player): mostra o passo a passo da chave própria.
         if conta.precisaChavePropria, !conectado { pedirChavePropria() }
+    }
+
+    private var carregando = false
+
+    /// A primeira leitura do Chaveiro, fora da linha principal. As telas mostram "desconectado" até ela voltar.
+    private func carregarEmSegundoPlano() {
+        guard !carregando else { return }
+        carregando = true
+        let conta = self.conta
+        Task {
+            let lido = await Task.detached { (conta.conectado, conta.chavePropria, conta.nome) }.value
+            carregando = false
+            carregado = true
+            conectado = lido.0
+            usaChavePropria = lido.1 != nil
+            if chave.isEmpty { chave = lido.1 ?? "" }
+            nome = lido.2
+            atualizar()
+        }
     }
 
     private func buscarNome() {
@@ -80,6 +123,7 @@ final class ModeloSpotify: ObservableObject {
         guard ContaSpotify.chaveValida(c), c != conta.clientId else { return }
         _ = conta.definirClientId(c)
         conectado = conta.conectado
+        usaChavePropria = conta.chavePropria != nil
     }
 
     func conectar() async {
@@ -149,6 +193,7 @@ final class ModeloSpotify: ObservableObject {
     /// "Voltar para a chave do Deck": apaga a chave colada e o login que ela fez.
     func usarChaveDoDeck() {
         conta.usarChaveDoDeck()
+        usaChavePropria = false
         chave = ""
         nome = nil
         conectado = conta.conectado
@@ -234,16 +279,30 @@ enum SpotifyLogica {
         }
     }
 
-    static let avancado = "Avançado: usar a minha própria chave do app"
-    static let apoioDoAvancado = "O app do Deck no Spotify é de desenvolvimento: aceita só as contas que o dono adicionou, até 25. Quem não estiver na lista usa a própria chave, criada de graça no site do Spotify"
+    static let tituloDoBloco = "Usar a sua própria chave (recomendado se o Deck não é só seu)"
+    static let resumoDoBloco = "A chave que vem no Deck está em modo de desenvolvimento do Spotify: só 5 contas cadastradas pelo dono do Deck conseguem entrar com ela, e o limite de leituras é dividido entre todo mundo que usa a mesma chave. Com a sua própria chave você tem o seu limite e não depende de cadastro. É grátis e leva poucos minutos."
+    static let detalheDoBloco = "Conta que não foi cadastrada pelo dono do Deck é recusada no login com a chave do Deck, e aí só a sua chave resolve. Quando o Spotify limita as leituras, o painel do iPhone para de atualizar aparelhos e fila por um tempo, e a chave do Deck divide esse limite com todo mundo. Tocar, pausar, pular, volume e capa funcionam sem login. Para controlar a reprodução (aparelhos, curtir, fila e repetir a música) é preciso o Spotify Premium, também na conta que cria o app. A chave não é senha e fica guardada só neste Mac."
     static let apoioDoEndereco = "Em Redirect URIs, no app do Spotify, cole exatamente este endereço"
 
-    static let passos = """
-        Como criar a chave, uma vez só (leva uns 2 minutos):
-        1. Entre em developer.spotify.com/dashboard com a sua conta do Spotify e clique em Create app.
-        2. Dê qualquer nome e descrição. Em Redirect URIs, cole o endereço acima e clique em Add.
-        3. Em Which API/SDKs are you planning to use, marque Web API. Aceite os termos e clique em Save.
-        4. Abra Settings, copie o Client ID e cole no campo da chave. Depois clique em Conectar.
-        Tocar, pausar, pular, volume e capa funcionam sem login. O login só libera aparelhos, curtir, fila e repetir a música, e isso pede o Spotify Premium (na conta que cria o app também).
-        """
+    static let nomeDaChaveDoDeck = "Chave do Deck"
+    static let nomeDaChaveDaPessoa = "Sua chave"
+    static func nomeDaChave(propria: Bool) -> String { propria ? nomeDaChaveDaPessoa : nomeDaChaveDoDeck }
+
+    static let avisoDeCadastro = ErroSpotify.semCadastro.texto
+    static let tituloDoLimite = "O Spotify limitou as leituras da chave do Deck"
+    static let apoioDoLimite = "O limite é dividido entre todo mundo que usa essa chave e passa sozinho depois de um tempo. Com a sua própria chave o limite é só seu"
+
+    /// A linha do limite só aparece com a chave do Deck: com chave própria o limite é da própria pessoa.
+    static func mostrarAvisoDeLimite(limitado: Bool, chaveDoDeckEmUso: Bool) -> Bool { limitado && chaveDoDeckEmUso }
+
+    /// O passo a passo, na ordem. O 1, o 4, o 6 e o 7 ganham botão ou campo na tela.
+    static let passos: [(titulo: String, apoio: String?)] = [
+        ("1. Abra o painel de desenvolvedor do Spotify", "Entre com a sua conta do Spotify. O painel abre no navegador só quando você clicar"),
+        ("2. Crie um app", "Clique em Create app. Nome e descrição podem ser qualquer coisa"),
+        ("3. Marque Web API", "Em Which API/SDKs are you planning to use, marque Web API"),
+        ("4. Cole o endereço de retorno", "Em Redirect URIs, cole este endereço exato e clique em Add"),
+        ("5. Salve", "Aceite os termos e clique em Save"),
+        ("6. Copie o Client ID e cole aqui", "No app criado, abra Settings e copie o Client ID"),
+        ("7. Toque em Conectar", nil),
+    ]
 }

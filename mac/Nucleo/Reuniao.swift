@@ -174,7 +174,32 @@ extension ExecutorAcoes {
             }
         }
         if let n = semPermissao { return CatalogoDeAcoes.motivo(SaidaShell(status: 1, saida: "-1743"), app: n.nome) }
-        return "Não achei uma reunião do Meet aberta no navegador. Entre na sala e tente de novo"
+        return Self.erroSemSalaDoMeet
+    }
+
+    static let erroSemSalaDoMeet = "Não achei uma reunião do Meet aberta no navegador. Entre na sala e tente de novo"
+
+    /// Aperta o botão do Meet pela Acessibilidade, sem trazer o navegador para a frente nem teclar nada. Só vale com a
+    /// aba da reunião na frente da janela dela. Devolve se apertou: senão quem chama cai no atalho de teclado.
+    func apertarNoMeet(_ alvo: ControleDeReuniao.Alvo, _ pedido: BotaoDoMeet.Pedido) -> Bool {
+        guard let ax else { return false }
+        let navegadores: [NavegadorWeb]
+        switch alvo {
+        case .meet(let n): navegadores = [n]
+        case .meetNoNavegador: navegadores = NavegadorWeb.todos
+        case .zoom, .teams: return false
+        }
+        for n in navegadores {
+            guard case .sala(let sala) = LeitorDeMeetAX.ler(n, executor: shell, ax: ax, confiavel: temAcessibilidade()) else { continue }
+            if LeitorDeMeetAX.apertar(sala, pedido, executor: shell, ax: ax) { return true }
+            // Reunião só com a aba (atrás de outra, sem janela flutuante): a pessoa agiu, então seleciona a aba pela
+            // Acessibilidade (sem Automação) e aperta o botão que aparece.
+            guard sala.somenteAba, LeitorDeMeetAX.trazerAba(sala, ax: ax) else { continue }
+            _ = shell.rodar(Self.esperaDoFoco)
+            guard case .sala(let agora) = LeitorDeMeetAX.ler(n, executor: shell, ax: ax, confiavel: temAcessibilidade()), !agora.somenteAba else { continue }
+            if LeitorDeMeetAX.apertar(agora, pedido, executor: shell, ax: ax) { return true }
+        }
+        return false
     }
 
     /// Folga entre trazer o app para a frente e apertar o atalho: sem ela a tecla cai no app que estava na frente.
@@ -186,6 +211,7 @@ extension ExecutorAcoes {
         }
         guard let combinacao = Teclas.ler(ControleDeReuniao.atalho(alvo, item)) else { return "Não entendi o atalho da reunião" }
         guard temAcessibilidade() else { return Self.erroAcessibilidade }
+        if apertarNoMeet(alvo, item == .microfone ? .microfone : .camera) { return nil }
         switch alvo {
         case .meet(let navegador):
             let r = shell.rodar(ControleDeReuniao.comandoBusca(navegador))

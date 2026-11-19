@@ -36,26 +36,46 @@
     const t = [1, 2, 3, 4, 5, 6, 7, 8, 9].map(d => `<button class="btn secundario" data-dig="${d}">${d}</button>`);
     return `<div class="teclado-num">${t.join('')}<span></span><button class="btn secundario" data-dig="0">0</button><button class="btn secundario texto" data-apagar>Apagar</button></div>`;
   };
+  // O Mac tocado vira o botão de progresso ("Procurando o Mac...") e o resto da lista fica parado: toque duplo não faz nada.
+  const ROT_PROGRESSO = { procurandoMac: 'Procurando o Mac...', pareando: 'Pareando...' };
+  const emCurso = () => !!estado.progresso;
   function macLinha(m) {
     const sinal = m.perto ? 'Perto, sinal forte' : 'Longe, sinal fraco';
-    return `<button class="mac-linha" ${m.perto ? `data-escolher="${esc(m.id)}"` : 'aria-disabled="true"'}><span class="ic">${IC.mac}</span><span><b>${esc(m.nome)}</b><small>${sinal}</small></span><span class="acao">${m.perto ? 'Parear' : ''}</span></button>`;
+    const meu = emCurso() && estado.alvoId === m.id;
+    const acao = meu
+      ? `<span class="acao em-curso"><span class="girando" aria-hidden="true"></span>${ROT_PROGRESSO[estado.progresso]}</span>`
+      : `<span class="acao">${m.perto ? 'Parear' : ''}</span>`;
+    const ativo = m.perto && !emCurso();
+    return `<button class="mac-linha${meu ? ' em-curso' : emCurso() ? ' parada' : ''}" ${ativo ? `data-escolher="${esc(m.id)}"` : 'aria-disabled="true"'}${meu ? ' aria-busy="true"' : ''}><span class="ic">${IC.mac}</span><span><b>${esc(m.nome)}</b><small>${sinal}</small></span>${acao}</button>`;
+  }
+  // Pareamento que não deu certo: o motivo e "Tentar de novo" no mesmo Mac (ou procurar de novo se ele sumiu da lista).
+  function falhaDoPareio() {
+    return `<div class="falha-par" role="alert">${T('Não consegui parear')}<span class="dica-off">${esc(estado.falha)}</span>` +
+      `<div class="botoes-n">${botao('Procurar de novo', 'procurar', 'secundario')}${botao('Tentar de novo', 'tentarDeNovo', 'primario')}</div></div>`;
   }
 
   function telaPareio() {
     const { etapa, macs, codigo, nomeMac, via } = estado;
-    if (etapa === 'pronto') return T('Pronto') + pilula(nomeMac, { led: true, ic: icVia(via) }) +
+    if (etapa === 'pronto') return T('Pareado') + pilula(nomeMac, { led: true, ic: icVia(via) }) +
       D(via === 'cabo' ? 'Conectado pelo cabo. Se ele sair, o Deck troca para o Bluetooth.' : 'Conectado por Bluetooth. Plugue o cabo e o Deck troca sozinho.') +
       botao('Abrir o painel', 'abrirPainel', 'primario');
     if (etapa === 'vazio') return T('Conecte o iPhone ao Mac') + pilula('Nenhum Mac pareado', { ic: IC.bt }) +
       D('Abra o Deck no Mac e deixe o Bluetooth ligado.') + botao('Procurar por perto', 'procurar', 'primario');
-    if (etapa === 'procurando') return T('Macs por perto') +
-      (macs.length ? `<div class="macs">${macs.map(macLinha).join('')}</div>` : '') +
-      `<span class="dica-off linha-gira"><span class="girando" aria-hidden="true"></span>Procurando</span>` + link('Conectar pelo cabo com código', 'cabo');
-    if (etapa === 'confirmar') return T('Os códigos são iguais?') + `<span class="codigo-n">${esc(codigo)}</span>` + D('O mesmo código aparece no ' + esc(nomeMac) + '.') +
-      `<div class="botoes-n">${botao('Não são iguais', 'recusar', 'secundario')}${botao('São iguais', 'confirmar', 'primario')}</div>`;
+    if (etapa === 'procurando') {
+      if (estado.falha && !emCurso()) return falhaDoPareio();
+      return T('Macs por perto') +
+        (macs.length ? `<div class="macs">${macs.map(macLinha).join('')}</div>` : '') +
+        (emCurso() ? '' : `<span class="dica-off linha-gira"><span class="girando" aria-hidden="true"></span>Procurando</span>` + link('Conectar pelo cabo com código', 'cabo'));
+    }
+    if (etapa === 'confirmar') {
+      const pareando = estado.progresso === 'pareando';
+      return T('Os códigos são iguais?') + `<span class="codigo-n">${esc(codigo)}</span>` + D('O mesmo código aparece no ' + esc(nomeMac) + '.') +
+        `<div class="botoes-n">${botao('Não são iguais', 'recusar', 'secundario', pareando ? 'disabled' : '')}` +
+        `${botao(pareando ? `<span class="girando" aria-hidden="true"></span>${ROT_PROGRESSO.pareando}` : 'São iguais', 'confirmar', 'primario', pareando ? 'disabled aria-busy="true"' : '')}</div>`;
+    }
     if (etapa === 'cabo') return T('Procurando o Mac no cabo') + pilula('Mac com Deck no cabo', { girando: true, ic: IC.cabo }) +
       D('Plugue o cabo e deixe o iPhone desbloqueado. Se ele perguntar, toque em Confiar.') + link('Voltar para o Bluetooth', 'voltarParaBluetooth');
-    return `<div class="par-duas"><div class="par-esq">${T('Digite o código que aparece no Mac')}${pilula(nomeMac)}${slots()}${link('Voltar', 'voltar')}</div>${teclado()}</div>`;
+    return `<div class="par-duas"><div class="par-esq">${T('Digite o código que aparece no Mac')}${pilula(nomeMac)}${slots()}${estado.progresso ? `<span class="dica-off linha-gira"><span class="girando" aria-hidden="true"></span>${ROT_PROGRESSO.pareando}</span>` : link('Voltar', 'voltar')}</div>${teclado()}</div>`;
   }
 
   /* ---------- pintar ---------- */
@@ -81,9 +101,22 @@
 
   async function acao(nome, extra) {
     let r;
-    try { r = await falar({ op: 'acao', acao: nome, ...extra }) } catch { return }
+    try { r = await falar({ op: 'acao', acao: nome, ...extra }) } catch { if (emCurso()) { estado = { ...estado, progresso: null }; pintar() } return }
     if (r.estado) aplicar(r.estado);
-    if (r.erro) { dig = ''; pintar(); avisar(r.erro) }
+    // Falha de pareamento já está na tela (com "Tentar de novo"): o aviso de 4 segundos seria o mesmo texto de novo.
+    if (r.erro) { dig = ''; pintar(); if (!(r.estado && r.estado.falha)) avisar(r.erro) }
+  }
+
+  // O toque responde antes de o Swift responder: o estado de progresso aparece já, e o do Swift (o mesmo) chega logo atrás.
+  function escolher(id) {
+    estado = { ...estado, progresso: 'procurandoMac', alvoId: id, falha: null };
+    pintar();
+    return acao('escolher', { id });
+  }
+  function confirmar() {
+    estado = { ...estado, progresso: 'pareando' };
+    pintar();
+    return acao('confirmar', { ok: true });
   }
 
   /* ---------- aviso do canal em uso: 3 segundos ao trocar ---------- */
@@ -94,6 +127,8 @@
 
   /* ---------- toque ---------- */
   pareio.addEventListener('click', e => {
+    // Um passo em andamento: o toque já valeu, o resto da tela espera.
+    if (emCurso()) return;
     const d = e.target.closest('[data-dig]');
     if (d) {
       if (dig.length >= 6) return;
@@ -103,10 +138,14 @@
       return acao('digitos', { digitos });
     }
     if (e.target.closest('[data-apagar]')) { dig = dig.slice(0, -1); return pintar() }
-    const m = e.target.closest('[data-escolher]'); if (m) return acao('escolher', { id: m.dataset.escolher });
+    const m = e.target.closest('[data-escolher]'); if (m) return escolher(m.dataset.escolher);
     const a = e.target.closest('[data-acao]'); if (!a) return;
+    if (a.dataset.acao === 'tentarDeNovo') {
+      const mac = (estado.macs || []).find(x => x.id === estado.alvoId && x.perto);
+      return mac ? escolher(mac.id) : acao('procurar');
+    }
     if (a.dataset.acao === 'recusar') return acao('confirmar', { ok: false });
-    if (a.dataset.acao === 'confirmar') return acao('confirmar', { ok: true });
+    if (a.dataset.acao === 'confirmar') return confirmar();
     acao(a.dataset.acao);
   });
 

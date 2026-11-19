@@ -1,9 +1,12 @@
 /* Peças comuns do painel: ícones, apps conhecidos e textos de tempo. Os dados vêm do Mac pelo canal (canal.js). */
 const SVG = {
+  arquivo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h18v4H3zM5 9v10h14V9M10 13h4"/></svg>',
+  fixa: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 17v5M9 3h6l-1 6 3 3v2H7v-2l3-3z"/></svg>',
+  silencio: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 17h12l-2-3V9a4 4 0 0 0-8 0v5zM10 20a2 2 0 0 0 4 0M3 3l18 18"/></svg>',
   tela: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>',
-  baixo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>',
   baixa: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"/></svg>',
   sobe: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg>',
+  lembrete: '<svg class="ic-lem" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8 12.5 3 3 5-6"/></svg>',
   menos: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 12h12"/></svg>',
   mais: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
   menu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 7h14M5 12h14M5 17h14"/></svg>',
@@ -28,8 +31,11 @@ const SVG = {
   globo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg>',
   sol: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
   luzTeclado: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="9" width="20" height="11" rx="2"/><path d="M6 13h.01M10 13h.01M14 13h.01M18 13h.01M7 17h10M9 2v3M12 1v4M15 2v3"/></svg>',
+  pr: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><path d="M13 6h3a2 2 0 0 1 2 2v7M6 9v12"/></svg>',
+  valores: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20v-7M12 20V5M19 20v-10"/></svg>',
   video: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="13" height="12" rx="2"/><path d="m15 10 6-3v10l-6-3"/></svg>',
   controles: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg>',
+  mudo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4zM22 9l-6 6M16 9l6 6"/></svg>',
   volume: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 6 9H2v6h4l5 4zM15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/></svg>',
   curtir: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.5-1.5 3-3.2 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.8 0-3 .5-4.5 2-1.5-1.5-2.7-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4 3 5.5l7 7z"/></svg>',
   aparelhos: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="16" height="20" x="4" y="2" rx="2"/><circle cx="12" cy="14" r="4"/><path d="M12 6h.01"/></svg>',
@@ -42,7 +48,12 @@ const SVG = {
   disco: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="15" rx="3"/><path d="M3 14.5h18M7 17.2v.01"/></svg>',
   ventoinha: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="1.8"/><path d="M12 10.2c-.6-3.4.3-6 2.6-6.2 2.2-.2 2.7 2.4.6 4.6M13.8 12c3.4-.6 6 .3 6.2 2.6.2 2.2-2.4 2.7-4.6.6M12 13.8c.6 3.4-.3 6-2.6 6.2-2.2.2-2.7-2.4-.6-4.6M10.2 12c-3.4.6-6-.3-6.2-2.6C3.8 7.2 6.4 6.7 8.6 8.8"/></svg>',
   usb: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="19" r="2"/><path d="M12 17V3.5M12 3.5 10 6h4zM12 12.5l4-2.5v-1.5M12 14.5l-4-2.5v-2"/><rect x="14.7" y="6.6" width="2.6" height="2.4" rx=".4"/><circle cx="8" cy="9.4" r="1.2"/></svg>',
+  microfoneCortado: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 3 18 18M9 9v2a3 3 0 0 0 5.1 2.1M15 9.3V5a3 3 0 0 0-5.7-1.3M5 10a7 7 0 0 0 11.2 5.6M19 10a7 7 0 0 1-.6 2.8M12 19v3"/></svg>',
+  camera: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="6" width="13" height="12" rx="2"/><path d="m15 10 6-3v10l-6-3"/></svg>',
+  cameraCortada: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 3 18 18M15 15v1a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h1M9.5 6H13a2 2 0 0 1 2 2v3.5M15 10l6-3v10"/></svg>',
+  desligar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.6 15.2C2.6 14 2 13 2 12c0-3 4.5-5 10-5s10 2 10 5c0 1-.6 2-1.6 3.2l-2.6-1.3a1.2 1.2 0 0 1-.7-1.1V10.5a14 14 0 0 0-10.2 0v2.3c0 .5-.3.9-.7 1.1z"/></svg>',
   repetir: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4M3 11v-1a4 4 0 0 1 4-4h14M7 22l-4-4 4-4M21 13v1a4 4 0 0 1-4 4H3"/></svg>',
+  repetirFaixa: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4M3 11v-1a4 4 0 0 1 4-4h14M7 22l-4-4 4-4M21 13v1a4 4 0 0 1-4 4H3M11 10h1v4"/></svg>',
 };
 
 // ícones dos apps que o Mac pode ter em uma tecla (o nome vem em tecla.icone)
@@ -60,8 +71,11 @@ const icApp = n => (APPS.find(a => a.nome === n) || {}).ic;
 // ícone do serviço: o do app oficial (Claude, Codex, Spotify)
 const IC_SERVICO = { Claude: 'icones/claude.png', Codex: 'icones/codex.png', Spotify: 'icones/spotify.png' };
 const icServico = n => IC_SERVICO[n] ? `<img class="ic-mini" src="${IC_SERVICO[n]}" alt="">` : `<span class="ic-mini svg" aria-hidden="true">${SVG.terminal}</span>`;
-// teclas de app que abrem uma lista no próprio iPhone (WhatsApp, Calendário, Monitor de Atividade e Controles)
-const PAINEL_DO_APP = { WhatsApp: 'whatsapp', Calendar: 'calendario', 'Activity Monitor': 'monitor', [CONTROLES_DO_MAC.valor]: 'controles' };
+// teclas de app que abrem uma lista no próprio iPhone (WhatsApp, Calendário, Monitor de Atividade, Controles, Meet, GitHub e Valores)
+/* GitHub e Valores também são telas do próprio iPhone (externos.js), com o dado que o Mac já lê. `telaDoDeck` é o ícone da tecla */
+const GITHUB_DECK = { nome: 'GitHub (PRs e CI)', nomeTecla: 'GitHub', valor: 'Deck GitHub', bundle: 'deck-github', telaDoDeck: 'pr' };
+const VALORES_DECK = { nome: 'Valores de fora', nomeTecla: 'Valores', valor: 'Deck Valores', bundle: 'deck-valores', telaDoDeck: 'valores' };
+const PAINEL_DO_APP = { WhatsApp: 'whatsapp', Calendar: 'calendario', 'Activity Monitor': 'monitor', [CONTROLES_DO_MAC.valor]: 'controles', [MEET_NAVEGADOR.valor]: 'meet', [GITHUB_DECK.valor]: 'github', [VALORES_DECK.valor]: 'valores' };
 // tecla com ação (abrir a caixa de entrada, o dia da agenda) vai pro Mac: a lista do iPhone é só da tecla sem ação
 const painelDe = t => t.tipo === 'app' && !t.acao ? PAINEL_DO_APP[t.valor] : undefined;
 
@@ -85,6 +99,18 @@ function renovaEm(iso, curto, ref = Date.now()) {
   if (dias <= 0) return curto ? `hoje ${horaCurta(d)}` : `hoje às ${horaCurta(d)}`;
   if (dias === 1) return 'amanhã';
   return curto ? `${dias} dias` : `em ${dias} dias`;
+}
+/* Ritmo da semana de limite (7 dias) a partir do que o estado já traz (percentual e quando renova). `esperado`: onde o uso estaria se fosse
+   parelho; `enche`: quando chega a 100% se o ritmo de agora continuar (ms), ou null se dá até a renovação. Sem ritmo nos primeiros 5% da janela.
+   Mesma conta do RitmoDeUso.swift, que cobre as janelas do detalhe. */
+const SEMANA_MS = 7 * 864e5;
+function ritmoSemana(p, iso, ref = Date.now()) {
+  const fim = new Date(iso).getTime();
+  if (p == null || !iso || isNaN(fim) || fim <= ref) return null;
+  const dec = Math.min(1, 1 - (fim - ref) / SEMANA_MS);
+  if (dec < 0.05) return null;
+  const enche = p > 0 && p < 100 && Math.round(p / dec) > 100 ? ref + (100 - p) / p * dec * SEMANA_MS : null;
+  return { esperado: Math.round(dec * 100), enche };
 }
 // há quanto tempo a sessão espera: "5 min", "13 h", "4 dias". velha: passou de 1 h
 function haQuanto(iso, ref = Date.now()) {

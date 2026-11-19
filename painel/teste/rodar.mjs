@@ -1,5 +1,5 @@
 // Roda os testes do painel contra o Mac de mentira (servidor-falso.mjs) no Chrome. Sai 1 se algo falhar.
-//   node painel/teste/rodar.mjs            fotos em <repo>/.teste (fora do git), porta 4881 (DECK_TESTE_PORTA muda)
+//   node painel/teste/rodar.mjs [prefixo...]  sem prefixo roda tudo. Fotos em <repo>/.teste (fora do git), porta 4881 (DECK_TESTE_PORTA muda)
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -16,7 +16,7 @@ const fotos = process.env.DECK_FOTOS || path.join(principal, '.teste');
 fs.mkdirSync(fotos, { recursive: true });
 
 const servidor = await iniciar(porta);
-const navegador = await chromium.launch({ channel: 'chrome' });
+const navegador = await chromium.launch({ channel: 'chrome', headless: true });
 const falhas = [], paginasComErro = [];
 const h = {
   base, CODIGO, CODIGO_NOVO, falhas,
@@ -43,10 +43,10 @@ const h = {
   espera: (p, fn, arg, timeout = 6000) => p.waitForFunction(fn, arg, { timeout, polling: 50 }).then(() => true, () => false),
 };
 
-const arquivos = ['canal.teste.mjs', 'estados.teste.mjs', 'composicoes.teste.mjs', 'laco.teste.mjs', 'robustez.teste.mjs', 'organizar.teste.mjs', 'menu.teste.mjs', 'corrigidos.teste.mjs', 'paineis.teste.mjs', 'ux.teste.mjs', 'leva2.teste.mjs', 'agenda-criar.teste.mjs', 'verificacao.teste.mjs', 'correcoes.teste.mjs', 'home-extras.teste.mjs', 'pwa.teste.mjs', 'iphone-bugs.teste.mjs', 'fechar-puxando.teste.mjs', 'controles.teste.mjs', 'monitor-e-mes.teste.mjs', 'monitor-painel.teste.mjs', 'ajustes-teclas.teste.mjs', 'whatsapp-conexoes.teste.mjs', 'iphone-telas.teste.mjs', 'reuniao-estado.teste.mjs'];
-const so = process.argv[2];
+const arquivos = ['canal.teste.mjs', 'estados.teste.mjs', 'composicoes.teste.mjs', 'laco.teste.mjs', 'conexao-diagnostico.teste.mjs', 'robustez.teste.mjs', 'organizar.teste.mjs', 'menu.teste.mjs', 'corrigidos.teste.mjs', 'paineis.teste.mjs', 'ux.teste.mjs', 'leva2.teste.mjs', 'agenda-criar.teste.mjs', 'verificacao.teste.mjs', 'correcoes.teste.mjs', 'home-extras.teste.mjs', 'pwa.teste.mjs', 'iphone-bugs.teste.mjs', 'fechar-puxando.teste.mjs', 'controles.teste.mjs', 'cortina.teste.mjs', 'monitor-e-mes.teste.mjs', 'monitor-painel.teste.mjs', 'ajustes-teclas.teste.mjs', 'whatsapp-conexoes.teste.mjs', 'whatsapp-tudo.teste.mjs', 'whatsapp-cabecalho.teste.mjs', 'whatsapp-bluetooth.teste.mjs', 'whatsapp-fotos.teste.mjs', 'iphone-telas.teste.mjs', 'reuniao-estado.teste.mjs', 'meet-app.teste.mjs', 'comando-toggle.teste.mjs', 'uso-ias.teste.mjs', 'uso-grafico.teste.mjs', 'uso-ritmo.teste.mjs', 'fila-sem-rolagem-lateral.teste.mjs', 'player-fechar-titulo.teste.mjs', 'pular-contexto.teste.mjs', 'fila-animacao.teste.mjs', 'fila-animacao-rolada.teste.mjs', 'comando-solto.teste.mjs', 'agenda-arrasto.teste.mjs', 'agenda-seletores.teste.mjs', 'skeleton-rapido.teste.mjs', 'spotify-limite.teste.mjs', 'servidor-falso-timer.teste.mjs', 'painel-consumo.teste.mjs', 'fechar-novo.teste.mjs', 'escrever.teste.mjs', 'capa-tela-cheia.teste.mjs', 'aprovacao-sessoes.teste.mjs', 'regras.teste.mjs', 'externos.teste.mjs'];
+const so = process.argv.slice(2); // prefixos de arquivo (vários permitidos): sem argumento roda a suíte inteira
 for (const a of arquivos) {
-  if (so && !a.startsWith(so)) continue;
+  if (so.length && !so.some(x => a.startsWith(x))) continue;
   console.log(`\n== ${a}`);
   await h.reset();
   try { await (await import('./' + a)).default(h) } catch (e) { h.ok(false, `${a} quebrou: ${e.message}`) }

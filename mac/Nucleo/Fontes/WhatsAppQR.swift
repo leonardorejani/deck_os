@@ -407,7 +407,8 @@ final class PonteWhatsAppQR: @unchecked Sendable {
         let contam = conversas.filter { $0.arquivada != true }
         let total = contam.reduce(0) { $0 + $1.naoLidas }
         // Reconectando (queda curta): a lista de antes continua à vista, o total volta a ser medição quando conectar.
-        let resumo = ResumoWhatsApp(total: total, conversas: contam.count, origem: "qr", navegador: nil, aberto: conectado,
+        // A lista traz também as lidas: "conversas" é quantas têm não lida.
+        let resumo = ResumoWhatsApp(total: total, conversas: contam.filter { $0.naoLidas > 0 }.count, origem: "qr", navegador: nil, aberto: conectado,
                                     reconectando: e.reconectando ? true : nil)
         let aviso = e.aviso.map { Aviso(fonte: "whatsapp", texto: $0) }
         return Leitura(valor: WhatsAppDados(resumo: resumo, conversas: conectado || e.reconectando ? conversas : []), aviso: aviso)

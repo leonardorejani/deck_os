@@ -58,6 +58,8 @@ struct CapaAtual: Equatable, Sendable {
 protocol ProvedorPaineis: Sendable {
     func estado() -> Estado
     func whatsapp() -> [ConversaWhatsApp]
+    /// Muda a cada lista nova do WhatsApp por QR. nil: a lista não tem versão (banco do app, Web), então vai sempre inteira.
+    func versaoWhatsApp() -> Int?
     /// A foto de perfil de uma conversa do WhatsApp por QR (nil: sem foto).
     func fotoWhatsApp(arquivo: String) -> MidiaBaixada?
     /// A foto ou o áudio de uma mensagem do WhatsApp por QR, baixado agora (só leitura, com limite de tamanho).
@@ -67,9 +69,13 @@ protocol ProvedorPaineis: Sendable {
     func agenda(de: String, dias: Int) -> [Evento]
     func sessoes() -> [Sessao]
     func capa() -> CapaAtual?
+    /// O detalhe do uso das IAs (janelas de limite e gasto de tokens). nil: este provedor não sabe (a rota responde 404).
+    func usoDetalhe(periodo: PeriodoUso) -> DetalheUso?
 }
 
 extension ProvedorPaineis {
+    func usoDetalhe(periodo: PeriodoUso) -> DetalheUso? { nil }
+    func versaoWhatsApp() -> Int? { nil }
     func fotoWhatsApp(arquivo: String) -> MidiaBaixada? { nil }
     func midiaWhatsApp(chat: String, id: String) -> ResultadoMidia { .erro("Essa mídia não abre aqui.") }
     func abrirConversaWhatsApp(id: String) -> AberturaDeConversa { .falhou("Não consegui abrir a conversa.") }
@@ -103,6 +109,11 @@ protocol ControleSpotify: Sendable {
     func transferir(para id: String) -> ErroSpotify?
     func curtir(_ curtir: Bool) -> ErroSpotify?
     func fila() -> Result<FilaSpotify, ErroSpotify>
+    func recentes() -> Result<RecentesSpotify, ErroSpotify>
+    /// Toca a música da fila na vez `posicao` (1 é a próxima), pulando as de antes. `uri` confere que a fila não andou.
+    func pularFila(posicao: Int, uri: String?) -> ErroSpotify?
+    /// Igual, com a lista ou o álbum que toca (o painel já sabe): o Mac manda o play na hora e confere depois.
+    func pularFila(posicao: Int, uri: String?, contexto: String?) -> ErroSpotify?
     /// "faixa" (repetir só a música), "nao" ou "contexto". Pela API, por isso só com login.
     func repetirModo(_ modo: String) -> ErroSpotify?
 }
@@ -113,6 +124,9 @@ extension ControleSpotify {
     func transferir(para id: String) -> ErroSpotify? { .naoConectado }
     func curtir(_ curtir: Bool) -> ErroSpotify? { .naoConectado }
     func fila() -> Result<FilaSpotify, ErroSpotify> { .failure(.naoConectado) }
+    func recentes() -> Result<RecentesSpotify, ErroSpotify> { .failure(.naoConectado) }
+    func pularFila(posicao: Int, uri: String?) -> ErroSpotify? { .naoConectado }
+    func pularFila(posicao: Int, uri: String?, contexto: String?) -> ErroSpotify? { pularFila(posicao: posicao, uri: uri) }
     func repetirModo(_ modo: String) -> ErroSpotify? { .naoConectado }
 }
 
@@ -172,6 +186,18 @@ struct Roteador: Sendable {
     var controles: (any ControlesDoMac)? = nil
     /// Os processos que mais usam processador e memória, e o encerrar (tela do Monitor de Atividade). Nil: as rotas /api/processos não existem (404).
     var processos: (any ProcessosDoMac)? = nil
+    /// A central do Google Meet (estado, entrar, microfone, câmera e sair). Nil: as rotas /api/meet não existem (404).
+    var meet: (any MeetDoMac)? = nil
+    /// Abrir um PR do GitHub no navegador do Mac. Nil: a rota /api/github/abrir não existe (404).
+    var github: (any ProvedorDeGitHub)? = nil
+    /// As regras automáticas (Regras.swift). Nil: o estado nunca traz `regras`.
+    var regras: VigiaDeRegras? = nil
+    /// Os pedidos de permissão do Claude Code esperando Permitir ou Negar. Nil: o estado não leva `aprovacoes` e a rota /api/aprovacoes/<id> responde 404.
+    var aprovacoes: Aprovacoes? = nil
+    /// O app do iPhone diz quem o instalou e quando vence (POST /api/app/instalacao). Nil: a rota não existe (404).
+    var aoInformarInstalacao: (@Sendable (InstalacaoDoApp) -> Void)? = nil
+    /// "Escrever no Mac": cola o texto do iPhone no app em foco. Nil: a rota /api/colar não existe (404).
+    var colador: (any ColadorDeTexto)? = nil
 
     func responder(_ r: HttpRequisicao) -> RespostaRota {
         if r.caminho == "/api/parear" {
@@ -214,7 +240,12 @@ struct Roteador: Sendable {
     private func api(_ r: HttpRequisicao, _ atual: Config) -> RespostaRota {
         switch r.caminho {
         case "/api/estado":
-            return somente(["GET"], r) ?? .codificar(200, paineis.estado())
+            if let e = somente(["GET"], r) { return e }
+            // Quem pede o estado é o iPhone: é assim que o gancho sabe que há alguém ali para responder.
+            aprovacoes?.iphoneApareceu()
+            var estado = estadoComRegras(atual)
+            if let pedidos = aprovacoes?.pendentes(), !pedidos.isEmpty { estado.aprovacoes = pedidos }
+            return .codificar(200, estado)
         case "/api/config":
             switch r.metodo {
             case "GET": return configSemCodigo(atual)
@@ -226,13 +257,17 @@ struct Roteador: Sendable {
             guard let capa = paineis.capa() else { return .erro(404, "Nenhuma capa tocando agora.") }
             return RespostaRota(status: 200, tipo: capa.tipo, corpo: capa.dados, extras: ["Cache-Control": "no-store"])
         case "/api/whatsapp":
-            return somente(["GET"], r) ?? .codificar(200, paineis.whatsapp())
+            return somente(["GET"], r) ?? listaDoWhatsApp(r)
         case "/api/whatsapp/midia":
             return somente(["GET"], r) ?? midiaDoWhatsApp(r)
         case "/api/whatsapp/abrir":
             return somente(["POST"], r) ?? abrirConversaDoWhatsApp(r)
         case "/api/sessoes":
             return somente(["GET"], r) ?? .codificar(200, paineis.sessoes())
+        case "/api/uso/detalhe":
+            // periodo desconhecido cai em semana, que é o que o bloco de uso mostra
+            return somente(["GET"], r) ?? paineis.usoDetalhe(periodo: PeriodoUso(rawValue: r.query["periodo"] ?? "") ?? .semana)
+                .map { .codificar(200, $0) } ?? .erro(404, "Essa rota não existe.")
         case "/api/agenda":
             return somente(["GET"], r) ?? agenda(r)
         default:
@@ -250,8 +285,14 @@ struct Roteador: Sendable {
         if r.caminho == "/api/agenda/criar" {
             return somente(["POST"], r) ?? criarNaAgenda(r)
         }
+        if r.caminho == "/api/colar" {
+            return somente(["POST"], r) ?? colarTexto(r)
+        }
         if r.caminho == "/api/reuniao/entrar" {
             return somente(["POST"], r) ?? entrarNaReuniao(r)
+        }
+        if let id = sufixo(r.caminho, "/api/aprovacoes/") {
+            return somente(["POST"], r) ?? responderAprovacao(id, r)
         }
         if r.caminho.hasPrefix("/api/sessoes/"), r.caminho.hasSuffix("/abrir") {
             let id = String(r.caminho.dropFirst("/api/sessoes/".count).dropLast("/abrir".count))
@@ -263,6 +304,18 @@ struct Roteador: Sendable {
         if r.caminho == "/api/controles" {
             // O que a pessoa desligou na tecla Controles do Mac não sai daqui: a barra some no iPhone, como a que o Mac não oferece.
             return somente(["GET"], r) ?? controles.map { .codificar(200, $0.estado().somente(config.ler().controles)) } ?? .erro(404, "Essa rota não existe.")
+        }
+        if r.caminho == "/api/github/abrir" {
+            return somente(["POST"], r) ?? abrirPrDoGitHub(r)
+        }
+        if r.caminho == "/api/app/instalacao" {
+            return somente(["POST"], r) ?? informarInstalacao(r)
+        }
+        if r.caminho == "/api/meet" {
+            return somente(["GET"], r) ?? meet.map { .codificar(200, $0.estado()) } ?? .erro(404, "Essa rota não existe.")
+        }
+        if let nome = sufixo(r.caminho, "/api/meet/") {
+            return somente(["POST"], r) ?? agirNoMeet(nome)
         }
         if r.caminho == "/api/processos" {
             return somente(["GET"], r) ?? processos.map { .codificar(200, $0.maiores()) } ?? .erro(404, "Essa rota não existe.")
@@ -277,9 +330,20 @@ struct Roteador: Sendable {
         if let acao = sufixo(r.caminho, "/api/spotify/") {
             if acao == "dispositivos" { return somente(["GET"], r) ?? respostaSpotify(spotify.dispositivos()) }
             if acao == "fila" { return somente(["GET"], r) ?? respostaSpotify(spotify.fila()) }
+            if acao == "recentes" { return somente(["GET"], r) ?? respostaSpotify(spotify.recentes()) }
             return somente(["POST"], r) ?? controlarSpotify(acao, r)
         }
         return .erro(404, "Essa rota não existe.")
+    }
+
+    /// O estado do provedor mais as regras automáticas que valem agora (o Mac decide, o iPhone troca).
+    private func estadoComRegras(_ atual: Config) -> Estado {
+        var e = paineis.estado()
+        if let regras {
+            let ativas = regras.avaliar(estado: e, config: atual, meet: meet)
+            e.regras = ativas.isEmpty ? nil : ativas
+        }
+        return e
     }
 
     private func sufixo(_ caminho: String, _ prefixo: String) -> String? {
@@ -297,12 +361,30 @@ struct Roteador: Sendable {
 
     // MARK: Rotas
 
+    private func informarInstalacao(_ r: HttpRequisicao) -> RespostaRota {
+        guard let aviso = aoInformarInstalacao else { return .erro(404, "Essa rota não existe.") }
+        guard let i = InstalacaoDoApp.decodificar(r.corpo) else { return .erro(400, "Não entendi os dados da instalação.") }
+        aviso(i)
+        return .json(200, Data("{\"ok\":true}".utf8))
+    }
+
     private func botao(_ id: String, _ atual: Config) -> RespostaRota {
         let perfil = atual.perfis.first { $0.id == atual.perfilAtivo }
         guard let tecla = perfil?.teclas.first(where: { $0.id == id }) else {
             return .erro(404, "Essa tecla não existe no perfil atual.")
         }
         if let erro = teclas.executar(tecla) { return .erro(422, erro) }
+        return .json(200, Data("{\"ok\":true}".utf8))
+    }
+
+    /// POST /api/colar, corpo {"texto": "..."} (até 32 mil caracteres): põe o texto na prancheta, manda Cmd+V para o app em
+    /// foco e devolve a prancheta como estava. Sem app aceitável em foco não cola nada. O texto nunca vai para o log.
+    private func colarTexto(_ r: HttpRequisicao) -> RespostaRota {
+        guard let colador else { return .erro(404, "Essa rota não existe.") }
+        guard let obj = (try? JSONSerialization.jsonObject(with: r.corpo)) as? [String: Any], let texto = obj["texto"] as? String else {
+            return .erro(400, "Mande o texto a escrever, por exemplo {\"texto\": \"...\"}.")
+        }
+        if let e = colador.colar(texto) { return .erro(e.status, e.texto) }
         return .json(200, Data("{\"ok\":true}".utf8))
     }
 
@@ -316,6 +398,17 @@ struct Roteador: Sendable {
         return .json(200, Data("{\"ok\":true}".utf8))
     }
 
+
+    /// GET /api/whatsapp: a lista inteira, como sempre. Com `?v=<versão>` (o iPhone manda a que já tem) o Mac responde
+    /// {"v", "conversas"} e, se nada mudou, só {"v", "igual": true}. Pelo Bluetooth (uns 25 KB/s) reenviar a lista a cada
+    /// segundo entupia o canal e estourava o tempo do pedido. Sem versão no Mac (banco do app, Web), vai a lista de sempre.
+    private func listaDoWhatsApp(_ r: HttpRequisicao) -> RespostaRota {
+        guard r.query["v"] != nil, let versao = paineis.versaoWhatsApp() else { return .codificar(200, paineis.whatsapp()) }
+        if r.query["v"] == String(versao) { return .codificar(200, ListaComVersao(v: versao, igual: true)) }
+        return .codificar(200, ListaComVersao(v: versao, conversas: paineis.whatsapp()))
+    }
+
+    private struct ListaComVersao: Encodable { var v: Int; var conversas: [ConversaWhatsApp]? = nil; var igual: Bool? = nil }
 
     /// GET /api/whatsapp/foto/<arquivo>: a foto de perfil, em base64 (a mesma forma serve ao Wi-Fi, ao cabo e ao Bluetooth).
     private func fotoDoWhatsApp(_ arquivo: String) -> RespostaRota {
@@ -351,6 +444,17 @@ struct Roteador: Sendable {
             return .json(200, (try? JSONSerialization.data(withJSONObject: corpo)) ?? Data("{\"ok\":true}".utf8))
         case .falhou(let e): return .erro(422, e)
         }
+    }
+
+    /// POST /api/github/abrir, corpo {"id": "dono/repo#12"}: abre o PR no navegador do Mac. O id tem de ser de um PR da última leitura.
+    private func abrirPrDoGitHub(_ r: HttpRequisicao) -> RespostaRota {
+        guard let github else { return .erro(404, "Essa rota não existe.") }
+        guard let obj = (try? JSONSerialization.jsonObject(with: r.corpo)) as? [String: Any], let id = obj["id"] as? String,
+              Self.textoSimples(id, maximo: 200) else {
+            return .erro(400, "Informe o PR a abrir, por exemplo {\"id\": \"dono/repo#12\"}.")
+        }
+        if let erro = github.abrir(id: id) { return .erro(422, erro) }
+        return .json(200, Data("{\"ok\":true}".utf8))
     }
 
     /// Texto sem caractere de controle e sem tamanho absurdo.
@@ -399,6 +503,16 @@ struct Roteador: Sendable {
         }
     }
 
+    /// POST /api/aprovacoes/<id> com {"decisao": "allow"|"deny"} (ou ?decisao=). O pedido que venceu ou que o terminal já respondeu dá 404.
+    private func responderAprovacao(_ id: String, _ r: HttpRequisicao) -> RespostaRota {
+        guard let aprovacoes else { return .erro(404, "Essa rota não existe.") }
+        let corpo = (try? JSONSerialization.jsonObject(with: r.corpo)) as? [String: Any]
+        let texto = (corpo?["decisao"] as? String) ?? r.query["decisao"] ?? ""
+        guard let decisao = DecisaoDeAprovacao(rawValue: texto) else { return .erro(400, "A decisão tem que ser allow ou deny.") }
+        guard aprovacoes.decidir(id, decisao) else { return .erro(404, "Esse pedido já foi respondido ou venceu.") }
+        return .json(200, Data(#"{"ok":true}"#.utf8))
+    }
+
     private func abrirSessao(_ id: String) -> RespostaRota {
         guard let abridorDeSessao else { return .erro(404, "Essa rota não existe.") }
         switch abridorDeSessao.abrir(id: id) {
@@ -432,6 +546,12 @@ struct Roteador: Sendable {
     }
 
     /// POST /api/controles/<volume|brilho|teclado>?v=0..100 e /api/controles/mudo?v=0|1.
+    private func agirNoMeet(_ nome: String) -> RespostaRota {
+        guard let meet, let acao = AcaoMeet(rawValue: nome) else { return .erro(404, "Essa rota não existe.") }
+        if let erro = meet.agir(acao) { return .erro(422, erro) }
+        return .json(200, Data("{\"ok\":true}".utf8))
+    }
+
     private func controlar(_ item: String, _ r: HttpRequisicao) -> RespostaRota {
         guard let controles, ["volume", "mudo", "brilho", "teclado"].contains(item) else { return .erro(404, "Essa rota não existe.") }
         let erro: String?
@@ -485,6 +605,11 @@ struct Roteador: Sendable {
         case "curtir":
             guard let v = r.query["v"], ["0", "1"].contains(v) else { return .erro(400, "Informe curtir?v=1 para curtir ou curtir?v=0 para tirar a curtida.") }
             return respostaSpotify(spotify.curtir(v == "1"))
+        case "pular":
+            guard let n = r.query["n"].flatMap(Int.init), (1...50).contains(n) else {
+                return .erro(400, "Informe a vez da música na fila, por exemplo pular?n=3.")
+            }
+            return respostaSpotify(spotify.pularFila(posicao: n, uri: r.query["uri"], contexto: r.query["ctx"]))
         case "repetir", "aleatorio":
             // Com `modo`, é o repetir da API (só a música, pede login). Sem ele, o do AppleScript, que já existia.
             if acao == "repetir", let modo = r.query["modo"] {

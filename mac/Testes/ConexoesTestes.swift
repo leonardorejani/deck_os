@@ -47,6 +47,23 @@ final class ConexoesTestes: XCTestCase {
         XCTAssertEqual(MetodoDeConexao.allCases.map(\.rotulo), ["Cabo e Bluetooth", "PWA", "WhatsApp", "Spotify"])
     }
 
+    /// Pedido de 16/11/2026: "já consta a conexão e nao aparece nada". WhatsApp e Spotify conectados não tinham ponto no seletor.
+    func testPontoVerdeTambemParaWhatsAppEEspotifyConectados() {
+        XCTAssertEqual(MetodoDeConexao.aoVivo(cabo: false, pwa: true, whatsappOrigem: "qr", whatsappQR: .conectado, spotifyConectado: true),
+                       [.pwa, .whatsapp, .spotify])
+        XCTAssertEqual(MetodoDeConexao.aoVivo(cabo: true, pwa: false, whatsappOrigem: "qr", whatsappQR: .conectado, spotifyConectado: false),
+                       [.cabo, .whatsapp])
+    }
+
+    func testPontoVerdeDoWhatsAppSoQuandoQrEstaConectado() {
+        for fase in [FaseQR.desligado, .iniciando, .desconectado, .erro, .aguardandoQR, .qrExpirou] {
+            XCTAssertFalse(MetodoDeConexao.aoVivo(cabo: false, pwa: false, whatsappOrigem: "qr", whatsappQR: fase, spotifyConectado: false).contains(.whatsapp), "\(fase)")
+        }
+        // Origem diferente de QR: a fase do ajudante não vale (ele pode estar de pé sem ser a fonte).
+        XCTAssertFalse(MetodoDeConexao.aoVivo(cabo: false, pwa: false, whatsappOrigem: "app", whatsappQR: .conectado, spotifyConectado: false).contains(.whatsapp))
+        XCTAssertTrue(MetodoDeConexao.aoVivo(cabo: false, pwa: false, whatsappOrigem: "x", whatsappQR: .desligado, spotifyConectado: false).isEmpty)
+    }
+
     // MARK: Trazer o Deck de volta
 
     @MainActor func testTrazOParaFrenteQuandoAPermissaoMuda() async {

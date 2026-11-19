@@ -7,28 +7,35 @@
      spotify(acao, valor?)     -> {ok: true}     acao: tocar, pausar, anterior, proxima, posicao (segundos), repetir e aleatorio (true liga, false desliga)
      controles()               -> {volume?, mudo?, brilho?, teclado?}  o que o Mac oferece (0 a 100), campo que falta = não oferece
      controle(item, v)         -> {ok: true}     item: volume, mudo (v 0 ou 1), brilho ou teclado
+     meet()                    -> {aberta, naChamada?, microfone, camera, aviso?}  a central do Google Meet (404 em Mac antigo). microfone e camera: ligado, desligado, desconhecido ou sem-reuniao
+     meetAcao(acao)            -> {ok: true}     acao: entrar (abre o Meet ou traz a aba), microfone, camera ou sair
      spotifyVolume(v, alvo)    -> {ok: true}     v de 0 a 100, alvo: spotify, mac ou aparelho
      aparelhos()               -> [Aparelho]     só com o Spotify conectado (senão 409)
      transferir(id)            -> {ok: true}     passa a música para o aparelho (só conectado)
      curtir(curtir)            -> {ok: true}     true curte, false tira a curtida (só conectado)
      fila()                    -> {atual, proximas}  só conectado
+     recentes()                -> {itens}            o que tocou por último (só conectado)
+     pularFila(n, uri, ctx)   -> {ok: true}         toca a música na vez n da fila (1 é a próxima), pulando as de antes (só conectado)
      repetirModo(modo)         -> {ok: true}     faixa (só a música), contexto (a lista) ou nao (só conectado)
      config()                  -> Config sem o codigoAcesso
      gravarConfig(config)      -> Config
-     whatsapp()                -> [ConversaWhatsApp]
+     whatsapp(versao?)         -> [ConversaWhatsApp] | {v, conversas} | {v, igual}   com a versão que a tela já tem, o Mac (QR) responde só "igual" se nada mudou
      whatsappFoto(arquivo)     -> {tipo, dados}    a foto de perfil de uma conversa (dados em base64, 404 sem foto)
      whatsappMidia(chat, id)   -> {tipo, dados}    a foto ou o áudio de uma mensagem, baixado agora (só aparelho conectado, até 8 MB, nunca visualização única)
      abrirConversa(id)         -> {ok, aviso?}     "Responder no Mac": abre a conversa no WhatsApp Web do Mac (404 em Mac antigo)
      agenda(de, dias)          -> [Evento]
-     sessoes()                 -> [Sessao]
+     sessoes()                 -> [Sessao]       as que esperam resposta primeiro, depois as outras (com `situacao` e `passo`)
+     aprovar(id, decisao)      -> {ok: true}     responde um pedido de permissão do Claude Code (Estado.aprovacoes): allow ou deny. 404: já respondido ou venceu
+     usoDetalhe(periodo)       -> {periodo, atualizadoEm?, calculando?, ate, contas, claudeMac?}  o detalhe do uso das IAs, periodo: dia, semana ou mes (404 em Mac antigo)
      abrirSessao(id)           -> {ok, como, app}  traz o terminal da sessão para a frente no Mac (como: "terminal" ou "pasta")
      entrarNaReuniao(link)     -> {ok: true}       abre no Mac o link de reunião do evento (Meet, Zoom ou Teams)
      agendaDestinos(pedir?)    -> {calendarios, listas, permissaoCalendario, permissaoLembretes, padrao}  onde dá para salvar um compromisso (404 em Mac antigo). pedir=true abre no Mac o pedido de acesso aos Lembretes
      criarCompromisso(dados)   -> {ok, padraoSalvo}  cria no Calendário ou nos Lembretes do Mac: {titulo, dia, diaTodo, inicio, fim, destino: {tipo, id}, alertaMin, padrao}
-     capaUrl(capaId)           -> endereço da imagem da capa
+     capaUrl(capaId, grande)  -> endereço da imagem da capa (grande: a da tela cheia, em 640 px, também pelo Bluetooth)
      apps()                    -> [{nome, valor, bundle, navegador}]  os apps instalados no Mac (404 em Mac antigo)
      acoesDoApp(bundle)        -> {bundle, acoes: [Acao]}  o que o app oferece além de abrir (ler as contas do Mail pode levar uns 8 s)
      appIconeUrl(bundle)       -> endereço do ícone do app
+     abrirGitHub(id)           -> {ok: true}       abre no navegador do Mac o PR da última leitura do GitHub (id "dono/repo#12", 404 em Mac antigo)
 
    Erro: sempre um Error com .message em português para mostrar no iPhone, .status com o código HTTP
    (401 = código de acesso inválido) e .rede = true quando o Mac nem respondeu. */
@@ -38,7 +45,28 @@
    falhasParaOffline e msParaOffline: a tela "Mac desconectado" só fecha quando o Mac sumiu de fato, com essas falhas
    seguidas E esse tempo desde a última resposta boa. Com o Mac pendurado (cada pedido espera o tempo limite inteiro),
    falhasTravado e msTravado fecham mais cedo, senão a tela ficaria uns 16 s com cara de ao vivo. Um tropeço (pedido lento, Mac reiniciando) não pisca a tela. */
-const AJUSTES = Object.assign({ tempoLimite: 5000, intervalo: 1000, deslocamento: 180000, falhasParaOffline: 3, msParaOffline: 5000, falhasTravado: 2, msTravado: 10000 }, window.DECK_AJUSTES);
+const AJUSTES = Object.assign({ tempoLimite: 5000, intervalo: 1000, deslocamento: 180000, falhasParaOffline: 3, msParaOffline: 5000, falhasTravado: 2, msTravado: 10000, semToqueMs: 10000,
+  esperasOffline: [1000, 2000, 4000, 8000, 16000, 30000] }, window.DECK_AJUSTES);
+
+/* Por que o Mac não responde, em vez de um erro genérico (ideia de docs/SECURE_CONNECTIONS.md do WinDock, MIT, reescrita aqui).
+   O app nativo diz as mesmas frases pelo Swift (ios/Pacote/Sources/DeckCasca/Diagnostico.swift).
+   A identidade do Mac que mudou só o Bluetooth do app sabe dizer: pelo HTTPS, certificado trocado e Mac desligado falham igual. */
+const CAUSAS = {
+  macIndisponivel: 'Mac indisponível. Confira se ele está ligado e no mesmo Wi-Fi.',
+  codigoExpirou: 'O código expirou. Leia o QR de novo no Mac.',
+  pareamentoPausado: 'Pareamento pausado. Gere um código novo no Mac.',
+};
+function causaDaFalha(e) {
+  if (e?.status === 401) return e.semCodigo ? 'naoPareado' : 'codigoExpirou';
+  if (e?.status === 429) return 'pareamentoPausado';
+  return 'macIndisponivel';
+}
+/* Quando o Mac sumiu, as novas tentativas se espaçam em 1, 2, 4, 8, 16 e 30 s e ficam em 30: sem rajada de pedidos.
+   `n` é a tentativa depois de a tela fechar (1 é a primeira). Voltar para a frente ou a rede mudar recomeçam do 1. */
+const esperaOffline = n => AJUSTES.esperasOffline[Math.min(Math.max(n, 1), AJUSTES.esperasOffline.length) - 1];
+
+/* a lista do WhatsApp pelo Bluetooth (uns 25 KB/s) leva mais que os 5 s dos outros pedidos: com 5 s ela nunca chegava */
+const TEMPO_WHATSAPP = AJUSTES.tempoLimite * 5;
 
 function erroDeCanal(mensagem, status = 0, rede = false) {
   return Object.assign(new Error(mensagem), { status, rede });
@@ -59,7 +87,7 @@ function lerCodigo() {
 function criarCanalHttps() {
   let codigo = lerCodigo();
   async function pedir(metodo, caminho, corpo, limite = AJUSTES.tempoLimite) {
-    if (!codigo) throw erroDeCanal('Abra o Deck no Mac e leia o QR de novo.', 401);
+    if (!codigo) throw Object.assign(erroDeCanal('Abra o Deck no Mac e leia o QR de novo.', 401), { semCodigo: true });
     const ctl = new AbortController(), tempo = setTimeout(() => ctl.abort(), limite);
     try {
       let r;
@@ -90,26 +118,34 @@ function criarCanalHttps() {
     transferir: id => pedir('POST', '/api/spotify/dispositivo?id=' + encodeURIComponent(id)),
     curtir: curtir => pedir('POST', '/api/spotify/curtir?v=' + (curtir ? '1' : '0')),
     fila: () => pedir('GET', '/api/spotify/fila'),
+    recentes: () => pedir('GET', '/api/spotify/recentes'),
+    pularFila: (n, uri, ctx) => pedir('POST', `/api/spotify/pular?n=${encodeURIComponent(n)}` + (uri ? '&uri=' + encodeURIComponent(uri) : '') + (uri && ctx ? '&ctx=' + encodeURIComponent(ctx) : '')),
     repetirModo: modo => pedir('POST', '/api/spotify/repetir?modo=' + encodeURIComponent(modo)),
     config: () => pedir('GET', '/api/config'),
     gravarConfig: config => pedir('PUT', '/api/config', config),
-    whatsapp: () => pedir('GET', '/api/whatsapp'),
+    whatsapp: versao => pedir('GET', '/api/whatsapp' + (versao != null ? '?v=' + encodeURIComponent(versao) : ''), undefined, TEMPO_WHATSAPP),
     whatsappFoto: arquivo => pedir('GET', '/api/whatsapp/foto/' + encodeURIComponent(arquivo)),
     whatsappMidia: (chat, id) => pedir('GET', `/api/whatsapp/midia?chat=${encodeURIComponent(chat)}&id=${encodeURIComponent(id)}`, undefined, 45000), // o Mac baixa da internet antes de responder
-    abrirConversa: id => pedir('POST', '/api/whatsapp/abrir', { id }),
+    abrirConversa: id => pedir('POST', '/api/whatsapp/abrir', { id }, AJUSTES.tempoLimite * 6), // o Mac traz a aba, acha a busca e digita (e, sem aba, espera o navegador e a página abrirem): passa de 5 s
     agenda: (de, dias) => pedir('GET', `/api/agenda?de=${encodeURIComponent(de)}&dias=${encodeURIComponent(dias)}`),
     sessoes: () => pedir('GET', '/api/sessoes'),
+    aprovar: (id, decisao) => pedir('POST', '/api/aprovacoes/' + encodeURIComponent(id), { decisao }),
+    usoDetalhe: periodo => pedir('GET', '/api/uso/detalhe?periodo=' + encodeURIComponent(periodo)),
     abrirSessao: id => pedir('POST', '/api/sessoes/' + encodeURIComponent(id) + '/abrir'),
     entrarNaReuniao: link => pedir('POST', '/api/reuniao/entrar', { link }),
     controles: () => pedir('GET', '/api/controles'),
     controle: (item, v) => pedir('POST', `/api/controles/${encodeURIComponent(item)}?v=${encodeURIComponent(v)}`),
+    meet: () => pedir('GET', '/api/meet'),
+    meetAcao: acao => pedir('POST', '/api/meet/' + encodeURIComponent(acao), undefined, 20000), // trazer a aba ou abrir o Meet pode levar um instante
     agendaDestinos: pedirAcesso => pedir('GET', '/api/agenda/destinos' + (pedirAcesso ? '?pedir=1' : '')),
     criarCompromisso: dados => pedir('POST', '/api/agenda/criar', dados, 15000), // o Mac grava pelo EventKit, que pode demorar com a conta na nuvem
+    abrirGitHub: id => pedir('POST', '/api/github/abrir', { id }),
+    colar: texto => pedir('POST', '/api/colar', { texto }, 15000), // o Mac guarda a prancheta, cola e devolve: passa de 5 s no Bluetooth com texto longo
     apps: () => pedir('GET', '/api/apps'),
     acoesDoApp: bundle => pedir('GET', `/api/apps/${encodeURIComponent(bundle)}/acoes`, undefined, 15000), // o Mac lê a lista de dentro do app, e o macOS pode pedir permissão no meio
     appIconeUrl: bundle => `/api/apps/${encodeURIComponent(bundle)}/icone?codigo=${encodeURIComponent(codigo || '')}`,
     // <img> não manda cabeçalho: a capa leva o código na URL, e o capaId faz o navegador trocar a imagem só quando ela muda
-    capaUrl: capaId => `/api/capa?codigo=${encodeURIComponent(codigo || '')}&v=${encodeURIComponent(capaId || '')}`,
+    capaUrl: (capaId, grande) => `/api/capa?codigo=${encodeURIComponent(codigo || '')}&v=${encodeURIComponent(capaId || '')}${grande ? '&tam=grande' : ''}`,
     // Só no HTTPS (o app nativo pareia por cabo e Bluetooth). Troca os 6 dígitos que o Mac mostra pelo código de acesso.
     // A rota não pede código (o iPhone ainda não tem um), por isso não passa pelo pedir().
     async parear(digitos) {
@@ -120,7 +156,7 @@ function criarCanalHttps() {
       } catch { throw erroDeCanal('Não deu para falar com o Mac.', 0, true) } finally { clearTimeout(tempo) }
       let dados = null;
       try { dados = await r.json() } catch {}
-      if (!r.ok || !dados?.codigoAcesso) throw erroDeCanal(dados?.erro || 'O Mac não aceitou o código.', r.status);
+      if (!r.ok || !dados?.codigoAcesso) throw erroDeCanal(r.status === 429 ? CAUSAS.pareamentoPausado : dados?.erro || 'O Mac não aceitou o código.', r.status);
       codigo = dados.codigoAcesso; guardar('deck-codigo', codigo);
     },
   };

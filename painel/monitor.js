@@ -100,10 +100,10 @@ function pintarMonitor() {
   let chave, aviso = '';
   if (!V?.monitor || !ligado) {
     chave = 'vazio:' + (V?.blocos?.monitor ? 'sem-item' : 'desligado');
-    aviso = avisoVazio(V?.blocos?.monitor ? 'Nenhum item ligado' : 'O monitor está desligado', 'Para ver o uso do Mac aqui, ligue o monitor na tecla Monitor de Atividade, nos Ajustes do Deck no Mac.');
+    aviso = avisoVazio(V?.blocos?.monitor ? 'Nenhum item ligado' : 'O monitor está desligado', 'Para ver o uso do Mac aqui, ligue o monitor em Este Mac, nos Ajustes do Deck no Mac.');
   } else if (!cartoes.length) {
     chave = 'vazio:sem-leitura';
-    aviso = avisoVazio('O Mac não conseguiu ler os itens', 'Os itens ligados na tecla Monitor de Atividade, nos Ajustes do Deck no Mac, não estão disponíveis neste Mac agora.');
+    aviso = avisoVazio('O Mac não conseguiu ler os itens', 'Os itens ligados em Este Mac, nos Ajustes do Deck no Mac, não estão disponíveis neste Mac agora.');
   } else chave = 'grade:' + cartoes.map(c => c.k).join(',');
   // a grade só é refeita quando a lista de cartões muda. No resto do tempo os mesmos elementos são atualizados no lugar
   const refez = chave !== mn.chave;

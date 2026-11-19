@@ -14,6 +14,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 
 	"go.mau.fi/whatsmeow"
 	"go.mau.fi/whatsmeow/proto/waE2E"
@@ -36,11 +38,26 @@ func guardarArquivo(pasta, nome string, dados []byte) error {
 		return err
 	}
 	_ = os.Chmod(pasta, 0o700)
-	tmp := filepath.Join(pasta, nome+".tmp")
-	if err := os.WriteFile(tmp, dados, 0o600); err != nil {
+	// Temporário único: dois gravadores do mesmo nome não disputam o mesmo .tmp.
+	f, err := os.CreateTemp(pasta, nome+".*.tmp")
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, filepath.Join(pasta, nome))
+	tmp := f.Name()
+	_, err = f.Write(dados)
+	if e := f.Close(); err == nil {
+		err = e
+	}
+	if err == nil {
+		err = os.Chmod(tmp, 0o600)
+	}
+	if err == nil {
+		err = os.Rename(tmp, filepath.Join(pasta, nome))
+	}
+	if err != nil {
+		_ = os.Remove(tmp)
+	}
+	return err
 }
 
 const limiteFoto = 2 << 20
@@ -99,6 +116,42 @@ func extensao(tipo string) string {
 // baixarMidia baixa a foto ou o áudio de uma mensagem (só os comuns: visualização única não tem referência) para a
 // pasta `midia`, até o limite de tamanho. Devolve o arquivo e o tipo.
 func baixarMidia(ctx context.Context, b baixador, pasta, chat string, m Msg) (arquivo, tipo string, err error) {
+	// O mesmo pedido feito junto (dois cliques, dois painéis) espera o primeiro em vez de baixar de novo.
+	chave := pasta + "|" + chat + "|" + m.ID
+	pedidosMidia.Lock()
+	if p, ok := pedidosMidia.m[chave]; ok {
+		pedidosMidia.Unlock()
+		<-p.pronto
+		return p.arquivo, p.tipo, p.err
+	}
+	p := &pedidoMidia{pronto: make(chan struct{})}
+	pedidosMidia.m[chave] = p
+	pedidosMidia.Unlock()
+	defer func() {
+		pedidosMidia.Lock()
+		delete(pedidosMidia.m, chave)
+		pedidosMidia.Unlock()
+		p.arquivo, p.tipo, p.err = arquivo, tipo, err
+		close(p.pronto)
+	}()
+	return baixarMidiaUnica(ctx, b, pasta, chat, m)
+}
+
+type pedidoMidia struct {
+	pronto        chan struct{}
+	arquivo, tipo string
+	err           error
+}
+
+var pedidosMidia = struct {
+	sync.Mutex
+	m map[string]*pedidoMidia
+}{m: map[string]*pedidoMidia{}}
+
+// vagasMidia limita quantas mídias baixam ao mesmo tempo (cada uma chega a 8 MB na memória).
+var vagasMidia = make(chan struct{}, 3)
+
+func baixarMidiaUnica(ctx context.Context, b baixador, pasta, chat string, m Msg) (arquivo, tipo string, err error) {
 	if m.Unica || !m.Midia || len(m.Ref) == 0 {
 		return "", "", errors.New("Essa mídia não abre aqui.")
 	}
@@ -135,8 +188,23 @@ func baixarMidia(ctx context.Context, b baixador, pasta, chat string, m Msg) (ar
 	}
 	arquivo = hashCurto("midia:"+chat+":"+m.ID) + extensao(tipo)
 	caminho := filepath.Join(pasta, arquivo)
+	if m.Tipo == "foto" {
+		// A cópia reduzida (sempre JPEG) tem vez sobre a original.
+		reduzida := hashCurto("midia:"+chat+":"+m.ID) + ".jpg"
+		if info, e := os.Stat(filepath.Join(pasta, reduzida)); e == nil && info.Size() > 0 {
+			usada(filepath.Join(pasta, reduzida))
+			return reduzida, "image/jpeg", nil
+		}
+	}
 	if info, e := os.Stat(caminho); e == nil && info.Size() > 0 {
+		usada(caminho)
 		return arquivo, tipo, nil
+	}
+	select {
+	case vagasMidia <- struct{}{}:
+		defer func() { <-vagasMidia }()
+	case <-ctx.Done():
+		return "", "", errors.New("Não consegui baixar. Tente de novo em instantes.")
 	}
 	dados, e := b.Download(ctx, dm)
 	if e != nil {
@@ -145,6 +213,12 @@ func baixarMidia(ctx context.Context, b baixador, pasta, chat string, m Msg) (ar
 	if len(dados) > limiteMidia {
 		return "", "", errors.New("Arquivo grande demais para abrir aqui.")
 	}
+	if m.Tipo == "foto" {
+		if menor := reduzirFoto(dados); len(menor) < len(dados) {
+			dados, tipo = menor, "image/jpeg"
+			arquivo = hashCurto("midia:"+chat+":"+m.ID) + ".jpg"
+		}
+	}
 	if e := guardarArquivo(pasta, arquivo, dados); e != nil {
 		return "", "", errors.New("Não consegui guardar o arquivo.")
 	}
@@ -152,18 +226,44 @@ func baixarMidia(ctx context.Context, b baixador, pasta, chat string, m Msg) (ar
 	return arquivo, tipo, nil
 }
 
-// limparMidiasVelhas mantém só os arquivos mais novos da pasta de mídia.
+// usada renova o horário do arquivo servido do cache: a limpeza apaga primeiro o que ninguém abre há mais tempo.
+func usada(caminho string) {
+	agora := time.Now()
+	_ = os.Chtimes(caminho, agora, agora)
+}
+
+// limparMidiasVelhas mantém só os arquivos mais recentes da pasta de mídia, no máximo maxArquivosMidia e maxBytesMidia.
 func limparMidiasVelhas(pasta string) {
 	itens, err := os.ReadDir(pasta)
-	if err != nil || len(itens) <= maxArquivosMidia {
+	if err != nil {
 		return
 	}
-	sort.Slice(itens, func(i, j int) bool {
-		a, _ := itens[i].Info()
-		b, _ := itens[j].Info()
-		return a != nil && b != nil && a.ModTime().Before(b.ModTime())
-	})
-	for _, it := range itens[:len(itens)-maxArquivosMidia] {
-		_ = os.Remove(filepath.Join(pasta, it.Name()))
+	type arq struct {
+		nome string
+		hora time.Time
+		tam  int64
+	}
+	var lista []arq
+	var total int64
+	for _, it := range itens {
+		info, err := it.Info()
+		if err != nil || it.IsDir() {
+			continue
+		}
+		lista = append(lista, arq{it.Name(), info.ModTime(), info.Size()})
+		total += info.Size()
+	}
+	if len(lista) <= maxArquivosMidia && total <= maxBytesMidia {
+		return
+	}
+	sort.Slice(lista, func(i, j int) bool { return lista[i].hora.Before(lista[j].hora) })
+	for _, a := range lista {
+		if len(lista) <= maxArquivosMidia && total <= maxBytesMidia {
+			break
+		}
+		if os.Remove(filepath.Join(pasta, a.nome)) == nil {
+			lista = lista[1:]
+			total -= a.tam
+		}
 	}
 }

@@ -46,7 +46,8 @@ final class AcoesTestes: XCTestCase {
     func testComandoQueEstouraOTempo() {
         let f = ExecutorDeAcoesFalso()
         f.saida = SaidaShell(status: ExecutorAcoes.statusTempoEsgotado, saida: "")
-        XCTAssertEqual(acoes(f).executar(tecla("comando", "sleep 99")), "O comando demorou mais de 10 segundos e foi interrompido")
+        // 13/11/2026: a tecla de comando roda solta (ComandoSoltoTestes). O prazo de 10 s segue valendo para quem chama o `rodarComando` direto.
+        XCTAssertEqual(acoes(f).rodarComando("sleep 99"), "O comando demorou mais de 10 segundos e foi interrompido")
     }
 
     // Os três testes abaixo usam zsh e perl de verdade, que só o Mac tem (o Linux do CI não tem).
@@ -56,8 +57,8 @@ final class AcoesTestes: XCTestCase {
         let real = ExecutorAcoes(shell: ExecutorShell(), temAcessibilidade: { false }, enviarTecla: { _ in }, limiteSegundos: 1)
         let msg = "O comando demorou mais de 1 segundos e foi interrompido"
         let t0 = Date()
-        XCTAssertEqual(real.executar(tecla("comando", "while true; do :; done")), msg)
-        XCTAssertEqual(real.executar(tecla("comando", "sleep 20; echo fim")), msg)
+        XCTAssertEqual(real.rodarComando("while true; do :; done"), msg)
+        XCTAssertEqual(real.rodarComando("sleep 20; echo fim"), msg)
         XCTAssertLessThan(Date().timeIntervalSince(t0), 8)
     }
 

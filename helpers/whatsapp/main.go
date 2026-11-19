@@ -22,7 +22,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"net/http"
+	"math"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -35,6 +35,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"go.mau.fi/whatsmeow"
+	"go.mau.fi/whatsmeow/appstate"
 	"go.mau.fi/whatsmeow/proto/waCompanionReg"
 	"go.mau.fi/whatsmeow/proto/waHistorySync"
 	"go.mau.fi/whatsmeow/store"
@@ -91,12 +92,21 @@ type ajudante struct {
 	mu     sync.Mutex
 	grupos map[string]string // nome de grupo por JID, para não perguntar de novo
 	// Quando se tentou pela última vez (e falhou) pegar o nome de um grupo ou a foto de uma conversa.
-	tentadas  map[string]time.Time
-	filaFotos chan string
+	tentadas map[string]time.Time
+	// Fotos de perfil: as que já estão na fila (ou baixando), as vagas de download em paralelo, quantas falhas seguidas
+	// cada uma teve e as que a pessoa esconde (guardadas no disco, sobrevivem ao reinício). Tudo nasce na 1a vez.
+	emFila     map[string]bool
+	vagasFoto  chan struct{}
+	falhasFoto map[string]int
+	semFoto    map[string]time.Time
+	// pegarFoto baixa a miniatura. O teste troca a rede por um falso.
+	pegarFoto func(ctx context.Context, id string) ([]byte, error)
+	ctxGeral  context.Context
 	// completando evita duas rodadas de completar ao mesmo tempo. completarFn existe para o teste trocar a rede.
-	completando bool
-	refazer     bool
-	completarFn func(context.Context) bool
+	completando   bool
+	sincronizando bool
+	refazer       bool
+	completarFn   func(context.Context) bool
 }
 
 // Como o aparelho aparece em "Aparelhos conectados" no WhatsApp do celular. Com o tipo "desconhecido" (o padrão da
@@ -124,7 +134,7 @@ func (a *ajudante) publicar(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-a.sujo:
-			emitir(map[string]any{"t": "conversas", "lista": a.estado.Lista()})
+			emitir(map[string]any{"t": "conversas", "lista": a.estado.Recentes()})
 			_ = a.estado.Salvar()
 			// Nome, número e foto das conversas da lista: depois de entregar, e fora do laço, para uma consulta
 			// de rede lenta não segurar a próxima mensagem.
@@ -168,10 +178,12 @@ func (a *ajudante) completarEmFundo(ctx context.Context) {
 const (
 	esperaGrupo      = 10 * time.Minute
 	esperaConsulta   = 15 * time.Second
-	esperaFoto       = 6 * time.Hour
 	validadeFoto     = 24 * time.Hour
 	limiteMidia      = 8 << 20
 	maxArquivosMidia = 100
+	maxBytesMidia    = 100 << 20
+	// maxCompletar é quantas conversas lidas por rodada procuram nome, número e foto.
+	maxCompletar = 80
 )
 
 func primeiro(nomes ...string) string {
@@ -223,11 +235,30 @@ func (a *ajudante) nomeDeQuem(ctx context.Context, j types.JID, dica types.JID, 
 
 // completar acha o que falta nas conversas da lista (nome, telefone, foto). Devolve true se algo mudou.
 func (a *ajudante) completar(ctx context.Context) bool {
-	if a.cli == nil {
-		return false
-	}
 	mudou := false
-	for _, c := range a.estado.Pendentes() {
+	pendentes := a.estado.Pendentes()
+	// Só as mais recentes (as não lidas vêm antes) vão atrás de foto e nome na rede: o resto da lista espera ficar à vista.
+	lidas := 0
+	for i, c := range pendentes {
+		if c.NaoLidas > 0 {
+			continue
+		}
+		if lidas++; lidas > maxCompletar {
+			pendentes = pendentes[:i]
+			break
+		}
+	}
+	// As fotos entram na fila antes de qualquer consulta de nome: descobrir o nome de um grupo é pedido de rede em série
+	// e não pode atrasar as miniaturas da lista.
+	for _, c := range pendentes {
+		if a.agendarFoto(c) {
+			mudou = true
+		}
+	}
+	if a.cli == nil {
+		return mudou
+	}
+	for _, c := range pendentes {
 		if ctx.Err() != nil {
 			return mudou
 		}
@@ -253,87 +284,8 @@ func (a *ajudante) completar(ctx context.Context) bool {
 				mudou = true
 			}
 		}
-		if a.agendarFoto(c) {
-			mudou = true
-		}
 	}
 	return mudou
-}
-
-// agendarFoto põe a conversa na fila da foto de perfil quando falta (ou venceu). Devolve true se achou uma já guardada.
-func (a *ajudante) agendarFoto(c Conversa) bool {
-	arq := arquivoDaFoto(c.ID)
-	if info, err := os.Stat(filepath.Join(a.pasta, "fotos", arq)); err == nil {
-		achou := c.Foto != arq
-		if achou {
-			a.estado.Foto(c.ID, arq)
-		}
-		if time.Since(info.ModTime()) < validadeFoto {
-			return achou
-		}
-		a.enfileirarFoto(c.ID)
-		return achou
-	}
-	a.enfileirarFoto(c.ID)
-	return false
-}
-
-func (a *ajudante) enfileirarFoto(id string) {
-	a.mu.Lock()
-	t, visto := a.tentadas["foto:"+id]
-	if visto && time.Since(t) < esperaFoto {
-		a.mu.Unlock()
-		return
-	}
-	a.tentadas["foto:"+id] = time.Now()
-	a.mu.Unlock()
-	select {
-	case a.filaFotos <- id:
-	default:
-	}
-}
-
-// trabalhadorDeFotos baixa uma foto de perfil por vez, com uma pausa entre elas para não irritar o WhatsApp.
-func (a *ajudante) trabalhadorDeFotos(ctx context.Context) {
-	cliente := &http.Client{Timeout: 15 * time.Second}
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case id := <-a.filaFotos:
-			if a.buscarFoto(ctx, cliente, id) {
-				a.marcarSujo()
-			}
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.After(400 * time.Millisecond):
-			}
-		}
-	}
-}
-
-func (a *ajudante) buscarFoto(ctx context.Context, cliente *http.Client, id string) bool {
-	j, err := types.ParseJID(id)
-	if err != nil {
-		return false
-	}
-	c, cancelar := context.WithTimeout(ctx, 20*time.Second)
-	defer cancelar()
-	info, err := a.cli.GetProfilePictureInfo(c, j, &whatsmeow.GetProfilePictureParams{Preview: true})
-	if err != nil || info == nil || info.URL == "" {
-		return false // sem foto (ou sem permissão de ver): tenta de novo só daqui a algumas horas
-	}
-	dados, err := baixarFoto(c, cliente, info.URL)
-	if err != nil {
-		return false
-	}
-	arq := arquivoDaFoto(id)
-	if err := guardarArquivo(filepath.Join(a.pasta, "fotos"), arq, dados); err != nil {
-		return false
-	}
-	a.estado.Foto(id, arq)
-	return true
 }
 
 // baixarMidiaPedida atende o pedido do núcleo e responde com uma linha. Nada de nome nem texto vai para o erro.
@@ -382,6 +334,7 @@ func (a *ajudante) tratar(ctx context.Context, ev any) {
 	switch e := ev.(type) {
 	case *events.Connected:
 		fase("conectado", "")
+		a.sincronizarArquivadas(ctx)
 	case *events.Disconnected:
 		fase("desconectado", "")
 	case *events.PairSuccess:
@@ -394,23 +347,52 @@ func (a *ajudante) tratar(ctx context.Context, ev any) {
 		_ = os.RemoveAll(filepath.Join(a.pasta, "midia"))
 		a.marcarSujo()
 		fase("erro", "O aparelho foi desconectado pelo WhatsApp. Gere um QR novo.")
+	case *events.UnarchiveChatsSetting:
+		if e.Action != nil {
+			a.estado.DesarquivaComMensagem(e.Action.GetUnarchiveChats())
+			a.marcarSujo()
+		}
+	case *events.Mute:
+		if e.Action != nil {
+			a.estado.Silenciar(e.JID.String(), fimDoSilencio(e.Action.GetMuted(), e.Action.GetMuteEndTimestamp()))
+			a.marcarSujo()
+		}
+	case *events.ClientOutdated:
+		fase("erro", "O WhatsApp não aceita mais esta versão do Deck. Atualize o Deck para voltar a ler as conversas.")
+	case *events.TemporaryBan:
+		fase("erro", "O WhatsApp bloqueou esta conta por um tempo. Espere e gere um QR novo depois.")
+	case *events.ConnectFailure:
+		fase("erro", "Não consegui conectar ao WhatsApp. Confira a internet e tente de novo nos Ajustes.")
 	case *events.StreamReplaced:
 		fase("erro", "Outro programa tomou o lugar do Deck nesta conexão.")
 	case *events.Message:
 		a.mensagem(ctx, e)
+	case *events.UndecryptableMessage:
+		a.indecifravel(ctx, e)
+	case *events.Pin:
+		if e.Action != nil {
+			a.estado.Fixar(e.JID.String(), e.Action.GetPinned())
+			a.marcarSujo()
+		}
+	case *events.DeleteChat:
+		a.estado.Remover(e.JID.String())
+		a.marcarSujo()
 	case *events.HistorySync:
 		a.historico(ctx, e)
 	case *events.Archive:
 		if e.Action != nil {
-			a.estado.Arquivar(e.JID.String(), e.Action.GetArchived())
+			a.estado.ArquivarEm(e.JID.String(), e.Action.GetArchived(), e.Timestamp)
 			a.marcarSujo()
 		}
 	case *events.PushName, *events.Contact:
 		// Nome novo no celular ou na conta: as conversas sem nome tentam de novo.
 		a.marcarSujo()
 	case *events.MarkChatAsRead:
+		if e.FromFullSync {
+			break // o retrato inteiro do app state pode ser mais velho que as mensagens que chegaram desde então
+		}
 		if e.Action != nil && e.Action.GetRead() {
-			a.estado.Lida(e.JID.String())
+			a.estado.LidaEm(e.JID.String(), e.Timestamp)
 		} else {
 			a.estado.MarcadaNaoLida(e.JID.String())
 		}
@@ -418,7 +400,7 @@ func (a *ajudante) tratar(ctx context.Context, ev any) {
 	case *events.Receipt:
 		// Leitura feita em outro aparelho do próprio dono (ele leu no celular).
 		if (e.Type == types.ReceiptTypeReadSelf || (e.Type == types.ReceiptTypeRead && e.IsFromMe)) && eChat(e.Chat) {
-			a.estado.Lida(e.Chat.String())
+			a.estado.LidaEm(e.Chat.String(), e.Timestamp)
 			a.marcarSujo()
 		}
 	}
@@ -429,12 +411,23 @@ func (a *ajudante) mensagem(ctx context.Context, e *events.Message) {
 	if !eChat(chat) {
 		return
 	}
+	c, ok := Analisar(e.Message, e.IsViewOnce)
 	if e.Info.IsFromMe {
-		a.estado.Enviada(chat.String(), e.Info.Timestamp)
+		// Escrita no celular: quem responde leu a conversa, e a mensagem vira a prévia dela.
+		if !ok {
+			a.estado.Enviada(chat.String(), e.Info.Timestamp)
+		} else {
+			de, nome, grupo := "", "", e.Info.IsGroup
+			if grupo {
+				de, nome = "Você", a.nomeDoGrupo(ctx, chat, false)
+			} else {
+				nome, _ = a.identificar(ctx, chat, types.EmptyJID, "")
+			}
+			a.estado.EnviadaMsg(chat.String(), nome, grupo, a.mensagemDe(c, de, e.Info.ID, e.Info.Timestamp), e.Info.Timestamp)
+		}
 		a.marcarSujo()
 		return
 	}
-	c, ok := Analisar(e.Message, e.IsViewOnce)
 	if !ok {
 		return
 	}
@@ -453,6 +446,28 @@ func (a *ajudante) mensagem(ctx context.Context, e *events.Message) {
 	a.marcarSujo()
 }
 
+// indecifravel conta como não lida a mensagem que chegou mas não abriu (sem a chave ainda): o celular a mostra como
+// "Aguardando mensagem" e conta. Se ela abrir depois (mesmo id), a Recebida troca o texto sem contar de novo.
+func (a *ajudante) indecifravel(ctx context.Context, e *events.UndecryptableMessage) {
+	chat := e.Info.Chat
+	if !eChat(chat) || e.Info.IsFromMe {
+		return
+	}
+	de := ""
+	if e.Info.IsGroup {
+		de = a.nomeDeQuem(ctx, e.Info.Sender, e.Info.SenderAlt, e.Info.PushName)
+	}
+	nome, numero, grupo := "", "", e.Info.IsGroup
+	if grupo {
+		nome = a.nomeDoGrupo(ctx, chat, false)
+	} else {
+		nome, numero = a.identificar(ctx, chat, e.Info.SenderAlt, e.Info.PushName)
+	}
+	a.estado.Recebida(chat.String(), nome, grupo, Msg{De: de, Texto: "Mensagem", Hora: hora(e.Info.Timestamp), ID: e.Info.ID}, e.Info.Timestamp)
+	a.estado.Numero(chat.String(), numero)
+	a.marcarSujo()
+}
+
 // mensagemDe monta a mensagem para a lista. Visualização única nunca guarda a referência do conteúdo.
 func (a *ajudante) mensagemDe(c Conteudo, de, id string, quando time.Time) Msg {
 	m := Msg{De: de, Texto: c.Texto, Hora: hora(quando), ID: id, Tipo: c.Tipo, Unica: c.Unica}
@@ -460,6 +475,51 @@ func (a *ajudante) mensagemDe(c Conteudo, de, id string, quando time.Time) Msg {
 		m.Midia, m.Ref = true, c.Ref
 	}
 	return m
+}
+
+// sincronizarArquivadas pede uma vez ao WhatsApp o retrato inteiro das conversas arquivadas (app state regular_low).
+// A whatsmeow não emite esses eventos na sincronização completa a não ser que se peça, e o histórico só traz o
+// campo das conversas recentes: o resto aparecia em Todas. Só marca como feito depois de dar certo.
+func (a *ajudante) sincronizarArquivadas(ctx context.Context) {
+	if a.cli == nil || a.pasta == "" {
+		return
+	}
+	marca := filepath.Join(a.pasta, "arquivadas-sincronizadas-2")
+	if _, err := os.Stat(marca); err == nil {
+		return
+	}
+	a.mu.Lock()
+	if a.sincronizando {
+		a.mu.Unlock()
+		return
+	}
+	a.sincronizando = true
+	a.mu.Unlock()
+	go func() {
+		err := a.cli.FetchAppState(ctx, appstate.WAPatchRegularLow, true, false)
+		a.mu.Lock()
+		a.sincronizando = false
+		a.mu.Unlock()
+		if err == nil {
+			_ = os.WriteFile(marca, nil, 0o600)
+			a.marcarSujo()
+		}
+	}()
+}
+
+// fimDoSilencio converte o fim do silêncio do WhatsApp (segundos, ms, ou -1 para sempre) em unix ms.
+// Zero quer dizer sem silêncio.
+func fimDoSilencio(silenciada bool, fim int64) int64 {
+	if !silenciada {
+		return 0
+	}
+	if fim <= 0 || fim > math.MaxInt64/1000 {
+		return math.MaxInt64
+	}
+	if fim < 100_000_000_000 {
+		return fim * 1000
+	}
+	return fim
 }
 
 func (a *ajudante) historico(ctx context.Context, e *events.HistorySync) {
@@ -491,12 +551,66 @@ func (a *ajudante) historico(ctx context.Context, e *events.HistorySync) {
 		if nao > 0 {
 			msgs = a.mensagensDoHistorico(ctx, j, c.GetMessages())
 		}
-		a.estado.Historico(j.String(), nome, grupo, nao, time.Unix(int64(c.GetConversationTimestamp()), 0), msgs)
+		previa, quandoPrevia := a.previaDoHistorico(ctx, j, c.GetMessages())
+		ts := int64(c.GetConversationTimestamp())
+		if ts == 0 {
+			ts = quandoPrevia
+		}
+		var ultima time.Time
+		if ts > 0 {
+			ultima = time.Unix(ts, 0)
+		}
+		a.estado.Historico(j.String(), nome, grupo, nao, ultima, msgs)
+		if previa != nil {
+			a.estado.Previa(j.String(), *previa)
+		}
 		a.estado.Numero(j.String(), numero)
-		// Arquivada: fica fora de Todas, Contatos e Grupos e só aparece no filtro Arquivadas.
-		a.estado.Arquivar(j.String(), c.GetArchived())
+		// Arquivada: fica fora de Todas, Contatos e Grupos e só aparece no filtro Arquivadas. Histórico sem o campo
+		// não diz nada (não desarquiva).
+		a.estado.Silenciar(j.String(), fimDoSilencio(c.GetMuteEndTime() > 0, int64(c.GetMuteEndTime())))
+		if c.Archived != nil {
+			a.estado.ArquivarEm(j.String(), c.GetArchived(), time.Unix(int64(c.GetConversationTimestamp()), 0))
+		}
+		if c.Pinned != nil {
+			a.estado.Fixar(j.String(), c.GetPinned() > 0)
+		}
 	}
 	a.marcarSujo()
+}
+
+// previaDoHistorico acha a mensagem mais nova do histórico da conversa (a do dono também) para a prévia da linha.
+// Devolve também o instante dela (unix s), 0 sem mensagem.
+func (a *ajudante) previaDoHistorico(ctx context.Context, chat types.JID, lista []*waHistorySync.HistorySyncMsg) (*Msg, int64) {
+	var melhor *waHistorySync.HistorySyncMsg
+	var tmax int64
+	for _, h := range lista {
+		w := h.GetMessage()
+		if w == nil {
+			continue
+		}
+		if _, ok := Analisar(w.GetMessage(), false); !ok {
+			continue
+		}
+		if t := int64(w.GetMessageTimestamp()); melhor == nil || t >= tmax {
+			melhor, tmax = h, t
+		}
+	}
+	if melhor == nil {
+		return nil, 0
+	}
+	w := melhor.GetMessage()
+	c, _ := Analisar(w.GetMessage(), false)
+	de := ""
+	if chat.Server == types.GroupServer {
+		if w.GetKey().GetFromMe() {
+			de = "Você"
+		} else if p, err := types.ParseJID(w.GetParticipant()); err == nil {
+			de = a.nomeDeQuem(ctx, p, types.EmptyJID, w.GetPushName())
+		}
+	}
+	m := a.mensagemDe(c, de, w.GetKey().GetID(), time.Unix(tmax, 0))
+	m.Minha = w.GetKey().GetFromMe()
+	return &m, tmax
 }
 
 // mensagensDoHistorico pega as mensagens de outras pessoas, da mais antiga para a mais nova.
@@ -627,12 +741,14 @@ func main() {
 	_ = os.RemoveAll(filepath.Join(*pasta, "midia"))
 
 	cli := whatsmeow.NewClient(dev, waLog.Noop)
+	// Sem isto a sincronização completa do app state (a primeira, e a de arquivadas) não emite os eventos Archive.
+	cli.EmitAppStateEventsOnFullSync = true
 	a := &ajudante{cli: cli, estado: NovoEstado(filepath.Join(*pasta, "conversas.json")), pasta: *pasta,
 		sujo: make(chan struct{}, 1), grupos: map[string]string{},
-		tentadas: map[string]time.Time{}, filaFotos: make(chan string, 64)}
+		tentadas: map[string]time.Time{}}
+	a.ctxGeral = ctx
 	cli.AddEventHandler(func(ev any) { a.tratar(ctx, ev) })
 	go a.publicar(ctx)
-	go a.trabalhadorDeFotos(ctx)
 	a.marcarSujo()
 
 	// Comandos do núcleo. Fim do stdin: o Deck fechou, então este ajudante também.

@@ -77,8 +77,8 @@ func TestPersistenciaComPermissaoRestrita(t *testing.T) {
 func TestConversaSemNomeMostraONumero(t *testing.T) {
 	e := NovoEstado("")
 	e.Recebida("1@lid", "", false, Msg{De: "", Texto: "oi", Hora: "h"}, t0)
-	e.Numero("1@lid", "5544984097902")
-	if l := e.Lista(); l[0].Nome != "+55 44 98409-7902" {
+	e.Numero("1@lid", "5544999990001")
+	if l := e.Lista(); l[0].Nome != "+55 44 99999-0001" {
 		t.Fatalf("nome: %q", l[0].Nome)
 	}
 	e.Recebida("1@lid", "Ana", false, Msg{De: "", Texto: "oi", Hora: "h"}, t0)
@@ -104,5 +104,87 @@ func TestArquivadaSegueNaListaMarcadaEMidiaNaoVazaReferencia(t *testing.T) {
 	e.Arquivar("a", false)
 	if e.Lista()[0].Arquivada {
 		t.Fatal("desarquivar")
+	}
+}
+
+// Caso do Leonardo: grupos arquivados no celular continuam arquivados com mensagem nova. Sem aviso explícito do
+// WhatsApp, o padrão é MANTER arquivada, e as não lidas deles não contam em Todas.
+func TestMensagemNovaNaoDesarquivaPorPadrao(t *testing.T) {
+	e := NovoEstado("")
+	e.ArquivarEm("a", true, t0)
+	e.Recebida("a", "Ana", false, Msg{Texto: "oi", Hora: "h"}, t0.Add(time.Hour))
+	if l := e.Lista(); len(l) != 1 || !l[0].Arquivada {
+		t.Fatalf("sem aviso do WhatsApp a conversa fica arquivada: %+v", l)
+	}
+	// Marca antiga (sem instante) com não lidas também continua arquivada.
+	f := NovoEstado("")
+	f.arquivadas["b"] = 0
+	f.Recebida("b", "Bia", false, Msg{Texto: "oi", Hora: "h"}, t0)
+	if l := f.Lista(); !l[0].Arquivada {
+		t.Fatalf("marca antiga com não lidas fica arquivada: %+v", l)
+	}
+}
+
+// Arquivar depois da última mensagem segue valendo (a ação é mais nova que a mensagem).
+func TestArquivadaDepoisDaMensagemContinuaArquivada(t *testing.T) {
+	e := NovoEstado("")
+	e.Recebida("a", "Ana", false, Msg{Texto: "oi", Hora: "h"}, t0)
+	e.ArquivarEm("a", true, t0.Add(time.Hour))
+	if l := e.Lista(); !l[0].Arquivada {
+		t.Fatal("ação mais nova que a mensagem tem de manter arquivada")
+	}
+}
+
+// Só o aviso explícito de que mensagem nova desarquiva faz a conversa sair do arquivo. A ordem dos eventos não importa.
+func TestAjusteExplicitoDesarquivaComMensagem(t *testing.T) {
+	e := NovoEstado("")
+	e.ArquivarEm("a", true, t0)
+	e.Recebida("a", "Ana", false, Msg{Texto: "oi", Hora: "h"}, t0.Add(time.Hour))
+	e.DesarquivaComMensagem(true)
+	if l := e.Lista(); l[0].Arquivada {
+		t.Fatal("com o aviso explícito a mensagem nova desarquiva")
+	}
+	e.DesarquivaComMensagem(false)
+	if l := e.Lista(); !l[0].Arquivada {
+		t.Fatal("desligando o ajuste a conversa fica arquivada")
+	}
+}
+
+// Estado que o #47 deixou no disco (marca sem instante, conversas com não lidas, ajuste que nunca chegou): no próximo
+// início tudo volta arquivado, sem apagar id nenhum.
+func TestEstadoDoDiscoVoltaArquivadoNoInicio(t *testing.T) {
+	dir := t.TempDir()
+	arq := filepath.Join(dir, "conversas.json")
+	conv := `[{"id":"a","nome":"Ana","naoLidas":2,"ultima":"2026-11-13T10:00:00Z","mensagens":[{"texto":"x","hora":"h"},{"texto":"y","hora":"h"}]}]`
+	if err := os.WriteFile(arq, []byte(conv), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(arq+".arquivadas", []byte(`{"ids":{"a":0,"b":1763000000000}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	e := NovoEstado(arq)
+	if l := e.Lista(); len(l) != 1 || !l[0].Arquivada {
+		t.Fatalf("tinha de voltar arquivada: %+v", l)
+	}
+	e.Recebida("b", "Bia", false, Msg{Texto: "oi", Hora: "h"}, time.Now().Add(time.Hour))
+	for _, c := range e.Lista() {
+		if !c.Arquivada {
+			t.Fatalf("todas arquivadas: %+v", c)
+		}
+	}
+}
+
+// Ajuste e instantes sobrevivem ao reinício.
+func TestAjusteEInstantePersistem(t *testing.T) {
+	arq := filepath.Join(t.TempDir(), "conversas.json")
+	e := NovoEstado(arq)
+	e.DesarquivaComMensagem(true)
+	e.ArquivarEm("a", true, t0)
+	e.Recebida("a", "Ana", false, Msg{Texto: "oi", Hora: "h"}, t0.Add(time.Hour))
+	if err := e.Salvar(); err != nil {
+		t.Fatal(err)
+	}
+	if l := NovoEstado(arq).Lista(); len(l) != 1 || l[0].Arquivada {
+		t.Fatalf("o aviso explícito tem de sobreviver: %+v", l)
 	}
 }

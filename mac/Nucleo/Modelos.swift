@@ -57,8 +57,11 @@ struct Blocos: Codable, Equatable, Sendable {
     var whatsapp = true
     var sessoes = true
     var uso = true
-    /// O monitor do Mac nasce desligado: ligar é escolha de quem usa (SPEC, seção 13, 12/11/2026).
-    var monitor = false
+    /// O monitor do Mac vem ligado de fábrica (SPEC, seção 13, 13/11/2026). A pessoa desliga na tecla do Monitor de Atividade.
+    var monitor = true
+    /// Se a pessoa mexeu na chave do monitor. Config gravada antes da V1.1.1 trazia `monitor: false` sem ninguém ter escolhido
+    /// (era o padrão antigo), então só vale o `false` de quem escolheu.
+    var monitorEscolhido = false
 }
 
 /// Quais itens o monitor do Mac mostra no iPhone ("não tem mais espaço": quem usa escolhe o que fica na tela).
@@ -145,6 +148,10 @@ struct Config: Codable, Equatable, Sendable {
     /// Onde "Novo compromisso" da agenda salva quando a pessoa não escolhe (um calendário ou uma lista dos Lembretes).
     /// Nil: pergunta toda vez.
     var agendaPadrao: DestinoAgenda? = nil
+    /// Regras automáticas "quando, então" (Regras.swift). Config sem a chave começa com as duas de exemplo, desligadas.
+    var regras: [Regra] = Regra.exemplos
+    /// Pausa geral: nenhuma regra dispara sozinha (o botão Testar dos Ajustes ainda funciona).
+    var regrasPausadas = false
 }
 
 // MARK: - Estado (GET /api/estado, pedido pelo painel a cada 1 s)
@@ -185,6 +192,8 @@ struct EstadoSpotify: Codable, Equatable, Sendable {
     var repetirFaixa: Bool? = nil
     /// Só com login: nome do aparelho onde o Spotify toca agora.
     var aparelho: String? = nil
+    /// Só quando o Spotify mandou esperar (429): até quando (segundos desde 1970). O painel avisa em vez de falhar calado.
+    var limitadoAte: Double? = nil
 }
 
 struct UsoConta: Codable, Equatable, Sendable {
@@ -211,6 +220,11 @@ struct Sessao: Codable, Equatable, Sendable {
     var contexto: String? = nil
     /// A resposta que a própria sessão sugere (`suggestedReply`), só para ler. Ausente em Mac antigo.
     var sugestao: String? = nil
+    /// nil: a sessão espera a sua resposta (é o caso de sempre). Nas outras: "trabalhando", "parada" ou "concluida".
+    /// Ausente em Mac antigo, e então toda sessão da lista espera resposta.
+    var situacao: String? = nil
+    /// O último passo da sessão, em poucas palavras (o `detail` do job), sem segredos. Só nas que não esperam resposta.
+    var passo: String? = nil
 }
 
 struct ResumoWhatsApp: Codable, Equatable, Sendable {
@@ -243,6 +257,8 @@ struct Evento: Codable, Equatable, Sendable {
     /// ISO 8601 do fim. Ausente em Mac antigo: o painel trata como evento de um dia só. Vem para o evento de vários dias
     /// (viagem, feriado prolongado) aparecer em todos os dias e meses que cobre.
     var fim: String? = nil
+    /// true quando o item é um lembrete do app Lembretes (a cor é a da lista). Ausente em evento do Calendário e em Mac antigo.
+    var lembrete: Bool? = nil
 }
 
 struct ResumoAgenda: Codable, Equatable, Sendable {
@@ -259,6 +275,7 @@ struct Estado: Codable, Equatable, Sendable {
     var blocos: Blocos
     var spotify: EstadoSpotify?
     var uso: [UsoConta]
+    /// Só as que esperam a resposta da pessoa.
     var sessoes: [Sessao]
     var whatsapp: ResumoWhatsApp?
     var agenda: ResumoAgenda?
@@ -272,6 +289,39 @@ struct Estado: Codable, Equatable, Sendable {
     /// Por id de tecla de microfone ou de câmera da reunião: ligado, desligado, desconhecido ou sem-reuniao.
     /// Ausente em Mac antigo e quando o perfil não tem tecla dessas: o painel trata como "não sabe" e desenha a tecla de sempre.
     var reuniao: [String: EstadoDeReuniao]? = nil
+    /// Por id de tecla de comando que está rodando solta (ligando, desligando, rodando) ou que falhou há pouco.
+    /// Ausente quando nenhuma está: o painel só mostra "Ligando..." enquanto o Mac roda o comando, e não espera o pedido.
+    var andamento: [String: AndamentoDeTecla]? = nil
+    /// Carimbo da config (o mesmo conteúdo que /api/config devolve). O painel só relê a config quando ele muda.
+    /// Ausente em Mac antigo: o painel volta a reler de vez em quando.
+    var configVersao: String? = nil
+    /// As sessões que não esperam resposta (trabalhando, paradas e as que acabaram de terminar), sem o contexto.
+    /// Ausente quando não há nenhuma e em Mac antigo.
+    var outrasSessoes: [Sessao]? = nil
+    /// Pedidos de permissão do Claude Code esperando Permitir ou Negar (o gancho de aprovação). Ausente quando não há
+    /// nenhum e em Mac antigo.
+    var aprovacoes: [PedidoDeAprovacao]? = nil
+    /// As regras automáticas que estão valendo agora, da de maior prioridade para a menor. Ausente quando nenhuma vale e em Mac antigo.
+    var regras: [RegraAtiva]? = nil
+    /// Avisos que chegaram de fora (script, build) e ainda valem. O iPhone mostra cada id uma vez, como toast. Ausente quando não há.
+    var avisosDeFora: [AvisoDeFora]? = nil
+    /// Valores que chegaram de fora e não venceram. Só vem com a tecla Valores no perfil ativo.
+    var valoresDeFora: [ValorDeFora]? = nil
+    /// PRs esperando revisão e PRs com a CI falhando. Só vem com a tecla GitHub no perfil ativo.
+    var github: ResumoGitHub? = nil
+}
+
+extension Config {
+    /// Impressão digital do que /api/config devolve (sem o código de acesso e o que gira com ele). FNV-1a de 64 bits sobre o JSON ordenado.
+    var carimbo: String {
+        guard let dados = try? JSONEncoder().encode(self),
+              var obj = (try? JSONSerialization.jsonObject(with: dados)) as? [String: Any] else { return "" }
+        for k in ["codigoAcesso", "codigoCriadoEm", "codigoAnterior", "anteriorValeAte"] { obj.removeValue(forKey: k) }
+        guard let saida = try? JSONSerialization.data(withJSONObject: obj, options: [.sortedKeys]) else { return "" }
+        var h: UInt64 = 0xcbf29ce484222325
+        for b in saida { h = (h ^ UInt64(b)) &* 0x100000001b3 }
+        return String(h, radix: 16)
+    }
 }
 
 /// Medidas do Mac. Cada uma é nil quando o item está escondido nos Ajustes ou o Mac não tem a medida
@@ -331,12 +381,18 @@ struct ConversaWhatsApp: Codable, Equatable, Sendable {
     /// Hora da última mensagem, ISO 8601.
     var ultima: String
     var mensagens: [MensagemWhatsApp]
-    /// Só na origem "qr". Arquivada aparece só no filtro Arquivadas e não entra na conta das não lidas.
+    /// Na origem "qr" a lista traz também as conversas lidas (naoLidas 0, com a última mensagem em `mensagens`).
+    /// Arquivada aparece só no filtro Arquivadas e não entra na conta das não lidas.
     var arquivada: Bool? = nil
     /// Só na origem "qr". Os dígitos do telefone (conversa direta), para abrir a conversa no WhatsApp Web.
     var numero: String? = nil
     /// Só na origem "qr". O arquivo da foto de perfil (pedida em /api/whatsapp/foto/<arquivo>). Ausente = sem foto.
     var foto: String? = nil
+    /// Só na origem "qr". Fixada no topo do WhatsApp e silenciada. Ausentes = não.
+    var fixada: Bool? = nil
+    var silenciada: Bool? = nil
+    /// Só na origem "qr". A última mensagem é do dono (já respondeu): o painel tira a conversa da lista até o outro lado escrever. Ausente = não.
+    var ultimaMinha: Bool? = nil
 }
 
 // MARK: - Rotas (todas exigem o código de acesso, menos os arquivos da página e /api/parear)
@@ -352,17 +408,25 @@ struct ConversaWhatsApp: Codable, Equatable, Sendable {
 // POST /api/spotify/dispositivo?id=<id>   passa a reprodução para o aparelho (só conectado)
 // POST /api/spotify/curtir?v=1|0   curte ou descurte a faixa que toca (só conectado)
 // GET  /api/spotify/fila           -> FilaSpotify (só conectado)
+// GET  /api/spotify/recentes       -> RecentesSpotify (só conectado)
+// POST /api/spotify/pular?n=3[&uri=...]   toca a música na vez n da fila, pulando as de antes (só conectado)
 // POST /api/spotify/repetir?modo=faixa|nao|contexto   repetir só a música, nada ou a lista pela API (só conectado, senão 409).
 //                                  Sem `modo`, `repetir[?v=1|0]` segue sendo o do AppleScript acima.
 // GET  /api/capa                   PNG ou JPEG da capa atual
+// POST /api/github/abrir           <- {"id": "dono/repo#12"} abre o PR no navegador do Mac (só um id da última leitura) -> {"ok": true}
 // GET  /api/whatsapp               -> [ConversaWhatsApp] (vazia quando Estado.whatsapp.origem é "web": o navegador só dá o total)
 // GET  /api/whatsapp/foto/<arquivo> -> {"tipo", "dados" (base64)}  a foto de perfil (origem "qr"; 404 sem foto)
 // GET  /api/whatsapp/midia?chat=<id>&id=<mensagem> -> {"tipo", "dados" (base64)}  a foto ou o áudio de uma mensagem (origem "qr", até 8 MB, nunca visualização única)
 // POST /api/whatsapp/abrir         <- {"id": "<conversa>"}  abre a conversa no WhatsApp Web do Mac -> {"ok": true, "aviso"?}
 // GET  /api/agenda?de=AAAA-MM-DD&dias=N -> [Evento]
-// GET  /api/sessoes                -> [Sessao]
+// GET  /api/sessoes                -> [Sessao]  as que esperam resposta primeiro (com contexto), depois as outras (`situacao` e `passo`)
+// POST /api/aprovacoes/<id>        <- {"decisao": "allow"|"deny"}  responde um pedido de permissão do Claude Code (Estado.aprovacoes) -> {"ok": true}. Pedido vencido ou já respondido: 404.
 // POST /api/sessoes/<id>/abrir     traz para a frente o terminal da sessão no Mac -> SessaoAberta {"ok", "como": "terminal"|"pasta", "app"}
 // POST /api/reuniao/entrar         <- {"link": "https://..."} abre a reunião no Mac (Meet e Teams no navegador padrão, Zoom no app se houver). Só Meet, Zoom e Teams, senão 400.
+// GET  /api/meet                   -> EstadoMeet {"aberta", "naChamada"?, "microfone", "camera" (ligado|desligado|desconhecido|sem-reuniao), "aviso"?}  a central do Google Meet
+// POST /api/meet/entrar|microfone|camera|sair  traz a aba da reunião (ou abre o Meet), alterna o microfone ou a câmera, sai da chamada -> {"ok": true}
+// POST /api/app/instalacao         <- {"versao"?, "bundleId"?, "equipe"?, "venceEm"? (ISO 8601)}  o app do iPhone diz quem o instalou e quando o perfil vence -> {"ok": true}
+// POST /api/colar                 <- {"texto": "..."} (até 32 mil caracteres) cola no app em foco do Mac (prancheta, Cmd+V, devolve a prancheta) -> {"ok": true}. 409 sem app em foco aceitável, 422 sem Acessibilidade
 // POST /api/parear                 <- {"codigo": "<6 dígitos mostrados no Mac>"} -> {"codigoAcesso"}
 // GET  /ca.crt                     o certificado do CA do Deck (application/x-x509-ca-cert), sem código de acesso
 // GET  /<arquivo>                  a página do painel

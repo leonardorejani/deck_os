@@ -18,12 +18,14 @@ private struct ChavesConfig: CodingKey {
 }
 
 extension Blocos {
-    /// O Codable sintetizado ignora os valores padrão quando falta chave. Aqui falta = ligado.
+    /// O Codable sintetizado ignora os valores padrão quando falta chave. Aqui falta = ligado. O monitor só fica desligado se a
+    /// pessoa desligou de propósito (`monitorEscolhido`): o `false` que as configs da V1.1 gravaram sozinho não conta.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: ChavesConfig.self)
         func ler(_ nome: String, padrao: Bool = true) throws -> Bool { try c.decodeIfPresent(Bool.self, forKey: ChavesConfig(nome)) ?? padrao }
+        let escolhido = try ler("monitorEscolhido", padrao: false)
         self.init(spotify: try ler("spotify"), agenda: try ler("agenda"), whatsapp: try ler("whatsapp"),
-                  sessoes: try ler("sessoes"), uso: try ler("uso"), monitor: try ler("monitor", padrao: false))
+                  sessoes: try ler("sessoes"), uso: try ler("uso"), monitor: escolhido ? try ler("monitor") : true, monitorEscolhido: escolhido)
     }
 }
 
@@ -124,7 +126,9 @@ extension Config {
             codigoCriadoEm: try c.decodeIfPresent(Int.self, forKey: chave("codigoCriadoEm")) ?? Int(Date().timeIntervalSince1970),
             codigoAnterior: try c.decodeIfPresent(String.self, forKey: chave("codigoAnterior")),
             anteriorValeAte: try c.decodeIfPresent(Int.self, forKey: chave("anteriorValeAte")),
-            agendaPadrao: (try? c.decodeIfPresent(DestinoAgenda.self, forKey: chave("agendaPadrao"))) ?? nil
+            agendaPadrao: (try? c.decodeIfPresent(DestinoAgenda.self, forKey: chave("agendaPadrao"))) ?? nil,
+            regras: (try? c.decodeIfPresent(ListaDeRegras.self, forKey: chave("regras")))?.regras ?? Regra.exemplos,
+            regrasPausadas: (try? c.decodeIfPresent(Bool.self, forKey: chave("regrasPausadas"))) ?? false
         )
     }
 
@@ -196,6 +200,7 @@ extension Config {
         if let d = c.agendaPadrao, !DestinoAgenda.tipos.contains(d.tipo) || vazio(d.id) || d.id.count > 200 {
             return "O lugar padrão da agenda não é válido."
         }
+        if let erro = validarRegras(c.regras) { return erro }
         if !["a", "b", "c"].contains(c.comp) { return "A composição da tela deve ser A, B ou C." }
         if !(1024...65535).contains(c.porta) { return "A porta deve estar entre 1024 e 65535." }
         if c.codigoAcesso.count != tamanhoCodigo || !c.codigoAcesso.allSatisfy({ alfabetoCodigo.contains($0) }) {

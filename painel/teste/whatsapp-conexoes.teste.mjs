@@ -10,15 +10,15 @@ export default async function (h) {
   await h.cenario({ whatsappOrigem: 'qr', whatsappRico: true });
   let p = await h.pagina(); await pronta(h, p);
   await p.click('.tecla[data-id="whatsapp"]');
-  h.ok(await h.espera(p, () => document.querySelectorAll('#wa-lista .conversa').length === 4), 'tocar na tecla abre a folha, e a arquivada fica fora de Todas (4 de 5)');
+  h.ok(await h.espera(p, () => document.querySelectorAll('#wa-lista .conversa').length === 4), 'tocar na tecla abre a folha, e a arquivada fica fora de Todas (4 de 6)');
 
   /* ---------- (8) Arquivadas só no filtro delas ---------- */
   h.ok((await nomes(p)).join('|') === 'Ana Souza|+55 44 99999-0002|Louvor|Contato', `Todas não traz a arquivada (${(await nomes(p)).join('|')})`);
   h.ok((await filtro(p, 'contatos')).join('|') === 'Ana Souza|+55 44 99999-0002|Contato', 'Contatos não traz a arquivada');
-  h.ok((await filtro(p, 'grupos')).join('|') === 'Louvor', 'Grupos não traz a arquivada');
-  h.ok((await filtro(p, 'arquivadas')).join('|') === 'Bia Arquivada', 'o filtro Arquivadas traz só a arquivada');
+  h.ok((await filtro(p, 'grupos')).join('|') === 'Louvor', 'Grupos não traz o grupo arquivado, só os não arquivados');
+  h.ok((await filtro(p, 'arquivadas')).join('|') === 'Bia Arquivada|Promo Arquivada', 'o filtro Arquivadas traz só as arquivadas (contato e grupo)');
   h.ok(await p.evaluate(() => document.querySelector('#wa-filtro [data-f="arquivadas"]').getAttribute('aria-pressed')) === 'true', 'o filtro Arquivadas fica marcado');
-  h.ok(await texto(p, '#wa-titulo') === 'WhatsApp 7 não lidas em 4 conversas', `o total não conta a arquivada (${await texto(p, '#wa-titulo')})`);
+  h.ok(await texto(p, '#wa-titulo') === 'WhatsApp 7 não lidas em 4 conversas', `o total não conta as arquivadas (${await texto(p, '#wa-titulo')})`);
   await filtro(p, 'todas');
 
   /* ---------- (4) conversa sem nome nunca fica em branco ---------- */
@@ -90,5 +90,17 @@ export default async function (h) {
   await p.click('.tecla[data-id="whatsapp"]');
   await h.espera(p, () => document.querySelectorAll('#wa-lista .conversa').length === 5);
   h.ok(await p.evaluate(() => document.querySelector('#wa-filtro [data-f="arquivadas"]').hidden), 'pelo app do Mac o filtro Arquivadas não aparece (ele não entrega arquivadas)');
+  await p.context().close();
+
+  /* ---------- Responder no Mac demora mais que o prazo comum e não vira erro ---------- */
+  // O Mac traz a aba, acha a busca e digita: passa de 5 s. O prazo comum (aqui 400 ms no lugar dos 5 s) não pode valer.
+  await h.reset();
+  await h.cenario({ whatsappOrigem: 'qr', whatsappRico: true, abrirAtraso: 1200 });
+  p = await h.pagina({ ajustes: { tempoLimite: 400 } }); await pronta(h, p);
+  await p.click('.tecla[data-id="whatsapp"]');
+  await h.espera(p, () => document.querySelectorAll('#wa-lista .conversa').length >= 3);
+  await p.click('#wa-lista [data-wa="r2@lid"]');
+  await p.click('#wa-lista [data-wa-mac]');
+  h.ok(await h.espera(p, () => document.querySelector('#aviso-txt')?.textContent.includes('Abrindo a conversa'), undefined, 4000), `Responder no Mac que demora espera a resposta em vez de mostrar erro (${await texto(p, '#aviso-txt')})`);
   await p.context().close();
 }
