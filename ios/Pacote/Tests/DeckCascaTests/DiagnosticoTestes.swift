@@ -16,6 +16,8 @@ final class DiagnosticoTestes: XCTestCase {
         XCTAssertEqual(CausaDaConexao.identidadeMudou.texto(), "A identidade do Mac mudou. Pareie de novo.")
     }
 
+#if canImport(CryptoKit)
+    // Os dublês (RadioFalso, MacDeTeste) só existem onde há CryptoKit, como BluetoothTestes.swift.
     func testMacAusenteEspacaAsTentativasEmDegraus() async throws {
         let radio = RadioFalso(MacDeTeste(), anuncios: [])
         radio.recusaConectar = true
@@ -58,4 +60,5 @@ final class DiagnosticoTestes: XCTestCase {
         await esperar({ vistas.todas.contains(CausaDaConexao.identidadeMudou.texto()) }, segundos: 6)
         XCTAssertTrue(vistas.todas.contains("A identidade do Mac mudou. Pareie de novo."), "\(vistas.todas)")
     }
+#endif
 }
