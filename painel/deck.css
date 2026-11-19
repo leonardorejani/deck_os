@@ -94,6 +94,14 @@ button.cartao { font: inherit; color: inherit; text-align: left; border: 0; curs
 .medidor .trilho, .uso-tira .mini, .monitor-tira .mini, .progresso .trilho { height: 6px; border-radius: var(--raio-pilula); background: var(--superficie-2); overflow: hidden; display: block }
 .medidor .trilho i, .uso-tira .mini i, .monitor-tira .mini i, .progresso .trilho i { display: block; height: 100%; border-radius: var(--raio-pilula); background: var(--texto-2) }
 .medidor b { font-weight: 600; color: var(--texto); text-align: right }
+.medidor .trilho { position: relative; overflow: visible }
+.medidor .trilho u { position: absolute; top: -2px; bottom: -2px; width: 2px; margin-left: -1px; background: var(--texto); box-shadow: 0 0 0 1px var(--superficie); text-decoration: none } /* onde o uso deveria estar agora */
+.uso-tira .mini u { display: none } /* a marca só cabe na barra larga da faixa em pé */
+.vertical .uso-tira .mini { position: relative; overflow: visible }
+.vertical .uso-tira .mini u { display: block; position: absolute; top: -2px; bottom: -2px; width: 2px; margin-left: -1px; background: var(--texto); box-shadow: 0 0 0 1px var(--superficie); text-decoration: none }
+.renova-enche { display: none }
+.renova-col.tem-enche .renova { display: none }
+.renova-col.tem-enche .renova-enche { display: block; font-size: var(--texto-xs); color: var(--aviso); text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap }
 .medidor.alto .trilho i, .uso-tira .alto .mini i, .monitor-tira .alto .mini i { background: var(--aviso) }
 .medidor.alto b, .uso-tira .alto, .uso-tira .alto b, .monitor-tira .alto, .monitor-tira .alto b { color: var(--aviso) }
 .medidor.cheio .trilho i { background: var(--perigo) }

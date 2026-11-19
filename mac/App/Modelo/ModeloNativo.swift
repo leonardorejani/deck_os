@@ -29,6 +29,14 @@ struct RenovacaoDoApp: Equatable {
     /// Por que a última tentativa falhou, em português. nil = a última deu certo (ou ainda não houve).
     var motivo: String?
     var tentouEm: Date?
+    /// O que o iPhone leu do perfil do app que está instalado nele (POST /api/app/instalacao). nil = ainda não informou.
+    var bundleIdReal: String?
+    var equipeReal: String?
+    var venceReal: Date?
+
+    var informada: InstalacaoDoApp? {
+        bundleIdReal == nil && equipeReal == nil && venceReal == nil ? nil : InstalacaoDoApp(versao: versao, bundleId: bundleIdReal, equipe: equipeReal, venceEm: venceReal)
+    }
 
     static let validade: TimeInterval = 7 * 86_400
     static let intervalo: TimeInterval = AgendaDeRenovacao.intervalo
@@ -47,7 +55,8 @@ struct RenovacaoDoApp: Equatable {
     func estado(agora: Date = Date()) -> Estado {
         guard let renovadoEm else { return .semRegistro }
         let proxima = renovadoEm.addingTimeInterval(Self.intervalo)
-        let vence = renovadoEm.addingTimeInterval(Self.validade)
+        // O vencimento é o do perfil quando o iPhone informou. Quando o Deck renova, o dado velho sai (registrarRenovacao).
+        let vence = venceReal ?? renovadoEm.addingTimeInterval(Self.validade)
         if agora < proxima { return .emDia(proxima: proxima) }
         return agora < proxima.addingTimeInterval(Self.tolerancia) ? .tentandoDeNovo(venceEm: vence) : .apertando(venceEm: vence)
     }
@@ -57,16 +66,21 @@ struct RenovacaoDoApp: Equatable {
     private static let chaveRenovado = "appNativoRenovadoEm"
     private static let chaveMotivo = "appNativoMotivoDaFalha"
     private static let chaveTentou = "appNativoTentouEm"
+    private static let chavePacote = "appNativoPacoteReal"
+    private static let chaveEquipe = "appNativoEquipeReal"
+    private static let chaveVenceReal = "appNativoVenceReal"
 
     static func ler(_ defaults: UserDefaults) -> RenovacaoDoApp {
         RenovacaoDoApp(instaladoEm: defaults.object(forKey: chaveInstalado) as? Date, versao: defaults.string(forKey: chaveVersao),
                        renovadoEm: defaults.object(forKey: chaveRenovado) as? Date, motivo: defaults.string(forKey: chaveMotivo),
-                       tentouEm: defaults.object(forKey: chaveTentou) as? Date)
+                       tentouEm: defaults.object(forKey: chaveTentou) as? Date, bundleIdReal: defaults.string(forKey: chavePacote),
+                       equipeReal: defaults.string(forKey: chaveEquipe), venceReal: defaults.object(forKey: chaveVenceReal) as? Date)
     }
 
     func gravar(_ defaults: UserDefaults) {
         for (chave, valor) in [(Self.chaveInstalado, instaladoEm as Any?), (Self.chaveVersao, versao), (Self.chaveRenovado, renovadoEm),
-                                (Self.chaveMotivo, motivo), (Self.chaveTentou, tentouEm)] {
+                                (Self.chaveMotivo, motivo), (Self.chaveTentou, tentouEm),
+                                (Self.chavePacote, bundleIdReal), (Self.chaveEquipe, equipeReal), (Self.chaveVenceReal, venceReal)] {
             if let valor { defaults.set(valor, forKey: chave) } else { defaults.removeObject(forKey: chave) }
         }
     }
@@ -107,6 +121,31 @@ enum TextosDoNativo {
         "App nativo, \(n.canal.texto) desde \(formato("HH:mm").string(from: n.desde))"
     }
 
+    /// "Instalado por: Deck" ou "Instalado por: outro app (SideStore)".
+    static func instaladoPor(_ o: OrigemDaInstalacao) -> String {
+        switch o {
+        case .externa: return "outro app (SideStore)"
+        case .deck: return "Deck"
+        case .desconhecida: return "Deck"
+        }
+    }
+
+    static func instaladoPorApoio(_ o: OrigemDaInstalacao) -> String {
+        switch o {
+        case .externa: return "A cópia que está no iPhone não é a que o Deck instala. Quem renova é o outro app, e o Deck não mexe nela"
+        case .deck: return "O Deck instalou e renova este app"
+        case .desconhecida: return "O iPhone ainda não disse quem instalou. Abra o app no iPhone para ele informar"
+        }
+    }
+
+    /// "20 de novembro de 2026, 14h30" (o vencimento do perfil, lido do iPhone).
+    static func vencimentoReal(_ data: Date) -> String {
+        let hora = Calendar.current.component(.minute, from: data) == 0 ? "H'h'" : "H'h'mm"
+        return formato("d 'de' MMMM 'de' yyyy, " + hora).string(from: data)
+    }
+
+    static let vencimentoRealApoio = "Lido do perfil do app, direto do iPhone"
+
     /// "Instalado pelo Xcode em 10 de novembro de 2026" (a data só quando se sabe).
     static func instalado(_ r: RenovacaoDoApp) -> String {
         guard let em = r.instaladoEm else { return "Instalado pelo Xcode" }
@@ -128,6 +167,16 @@ enum TextosDoNativo {
     static func alertaDaRenovacao(_ vence: Date, agora: Date = Date()) -> String {
         "O app vence \(prazo(dias(ate: vence, agora: agora))) e a renovação não deu certo"
     }
+
+    /// O cartão de instalação externa: quem renova é o SideStore, o Deck só avisa.
+    static func alertaDaInstalacaoExterna(_ vence: Date, agora: Date = Date()) -> String {
+        vence <= agora ? "O app venceu. Abra o SideStore no iPhone para renovar." : "O app vence \(prazo(dias(ate: vence, agora: agora))). Abra o SideStore no iPhone para renovar."
+    }
+
+    static let alertaApoioExterna = "Este app foi instalado pelo SideStore. O Deck não renova nem instala por cima dele."
+    static let renovacaoExterna = "Pelo SideStore"
+    static let renovacaoApoioExterna = "O SideStore renova o app a cada 7 dias. O Deck só avisa quando o prazo está perto"
+    static let semRenovacaoExterna = "Este app foi instalado pelo SideStore. Abra o SideStore no iPhone para renovar"
 
     static let alertaApoio = "O Deck tenta de novo sozinho assim que o iPhone aparecer no cabo ou no Wi-Fi, ou for desbloqueado. Se puder, plugue e desbloqueie agora."
     static let renovacaoApoio = "O Deck renova sozinho a cada 5 dias, sem abrir nenhuma tela. A Apple faz o app vencer em 7. Se não der, tenta de novo quando o iPhone aparecer no cabo ou no Wi-Fi, ou for desbloqueado"
@@ -254,10 +303,38 @@ extension ModeloApp {
 
     var estadoDaRenovacao: RenovacaoDoApp.Estado { renovacao.estado(agora: agora) }
 
+    /// O DEVELOPMENT_TEAM com que o Deck instala o app (lido do project.yml do projeto, nunca guardado no repo do Deck).
+    var equipeDoDeck: String? {
+        guard let pasta = pastaDoProjeto, let yml = try? String(contentsOfFile: pasta + "/ios/project.yml", encoding: .utf8) else { return nil }
+        return DeteccaoDaInstalacao.equipe(doProjeto: yml)
+    }
+
+    /// Quem instalou a cópia do app que está no iPhone, pelo que o próprio iPhone leu do perfil dele.
+    var origemDaInstalacao: OrigemDaInstalacao {
+        DeteccaoDaInstalacao.detectar(informada: renovacao.informada, pacoteDoDeck: MotorDeRenovacao.idDoAppDoIphone,
+                                      equipeDoDeck: equipeDoDeck, instaladoEm: renovacao.renovadoEm)
+    }
+
+    /// O cartão amarelo que vale agora: a renovação do Deck que não deu certo, ou o aviso de que o outro app precisa renovar.
+    func cartaoDaRenovacao(agora: Date) -> CartaoDaRenovacao? {
+        var venceDoDeck: Date?
+        if case .apertando(let v) = renovacao.estado(agora: agora) { venceDoDeck = v }
+        return CartaoDaRenovacao.para(origem: origemDaInstalacao, venceEmDoDeck: venceDoDeck, venceReal: renovacao.venceReal, agora: agora)
+    }
+
     /// O prazo apertando com o app pareado: cartão amarelo, selo "1" na barra lateral e linha no menu.
-    var renovacaoApertando: Bool {
-        if nativo != nil, case .apertando = estadoDaRenovacao { return true }
-        return false
+    var renovacaoApertando: Bool { nativo != nil && cartaoDaRenovacao(agora: agora) != nil }
+
+    /// O iPhone leu o perfil do app instalado e contou: guarda a versão, o pacote, a equipe e o vencimento reais.
+    func instalacaoInformada(_ i: InstalacaoDoApp) {
+        let antes = origemDaInstalacao
+        if let v = i.versao { renovacao.versao = v }
+        renovacao.bundleIdReal = i.bundleId
+        renovacao.equipeReal = i.equipe
+        renovacao.venceReal = i.venceEm
+        renovacao.gravar(defaults)
+        let depois = origemDaInstalacao
+        if depois != antes { registrar("renovacao: instalação do app no iPhone lida como \(depois.externa ? "de outro app (o Deck não renova)" : "do Deck")") }
     }
 
     /// Sobe o cabo (usbmux) e o Bluetooth ao lado do HTTPS. Os três respondem pelo mesmo roteador.
@@ -334,6 +411,7 @@ extension ModeloApp {
     /// "Renovar agora". Sem renovador (testes e fotos) o Mac diz a verdade em vez de fingir.
     func renovarAppNativo() {
         guard renovador != nil else { avisar(TextosDoNativo.semRenovador, falha: true); return }
+        guard !origemDaInstalacao.externa else { avisar(TextosDoNativo.semRenovacaoExterna, falha: true); return }
         guard !renovando else { return }
         avisar("Renovando o app no iPhone...")
         Task { await executarRenovacao(manual: true) }
@@ -346,6 +424,10 @@ extension ModeloApp {
         renovacao.tentouEm = nil
         falhaDaRenovacao = nil
         if let versao { renovacao.versao = versao }
+        // Foi o Deck que instalou agora: o que o iPhone leu da cópia anterior não vale mais, ele informa de novo ao abrir.
+        renovacao.bundleIdReal = nil
+        renovacao.equipeReal = nil
+        renovacao.venceReal = nil
         if let instaladoEm { renovacao.instaladoEm = instaladoEm } else if renovacao.instaladoEm == nil { renovacao.instaladoEm = data }
         renovacao.gravar(defaults)
         if avisando { avisar("App renovado. Vale por mais 7 dias") }

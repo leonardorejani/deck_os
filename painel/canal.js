@@ -31,7 +31,7 @@
      entrarNaReuniao(link)     -> {ok: true}       abre no Mac o link de reunião do evento (Meet, Zoom ou Teams)
      agendaDestinos(pedir?)    -> {calendarios, listas, permissaoCalendario, permissaoLembretes, padrao}  onde dá para salvar um compromisso (404 em Mac antigo). pedir=true abre no Mac o pedido de acesso aos Lembretes
      criarCompromisso(dados)   -> {ok, padraoSalvo}  cria no Calendário ou nos Lembretes do Mac: {titulo, dia, diaTodo, inicio, fim, destino: {tipo, id}, alertaMin, padrao}
-     capaUrl(capaId)           -> endereço da imagem da capa
+     capaUrl(capaId, grande)  -> endereço da imagem da capa (grande: a da tela cheia, em 640 px, também pelo Bluetooth)
      apps()                    -> [{nome, valor, bundle, navegador}]  os apps instalados no Mac (404 em Mac antigo)
      acoesDoApp(bundle)        -> {bundle, acoes: [Acao]}  o que o app oferece além de abrir (ler as contas do Mail pode levar uns 8 s)
      appIconeUrl(bundle)       -> endereço do ícone do app
@@ -124,7 +124,7 @@ function criarCanalHttps() {
     acoesDoApp: bundle => pedir('GET', `/api/apps/${encodeURIComponent(bundle)}/acoes`, undefined, 15000), // o Mac lê a lista de dentro do app, e o macOS pode pedir permissão no meio
     appIconeUrl: bundle => `/api/apps/${encodeURIComponent(bundle)}/icone?codigo=${encodeURIComponent(codigo || '')}`,
     // <img> não manda cabeçalho: a capa leva o código na URL, e o capaId faz o navegador trocar a imagem só quando ela muda
-    capaUrl: capaId => `/api/capa?codigo=${encodeURIComponent(codigo || '')}&v=${encodeURIComponent(capaId || '')}`,
+    capaUrl: (capaId, grande) => `/api/capa?codigo=${encodeURIComponent(codigo || '')}&v=${encodeURIComponent(capaId || '')}${grande ? '&tam=grande' : ''}`,
     // Só no HTTPS (o app nativo pareia por cabo e Bluetooth). Troca os 6 dígitos que o Mac mostra pelo código de acesso.
     // A rota não pede código (o iPhone ainda não tem um), por isso não passa pelo pedir().
     async parear(digitos) {

@@ -103,6 +103,11 @@ final class PonteTestes: XCTestCase {
         XCTAssertEqual(p.cabecalhos["x-deck-codigo"], "CODIGOATUAL")
     }
 
+    func testTamanhoGrandeDaCapaChegaAoMac() throws {
+        let p = try XCTUnwrap(Ponte.pedidoDaCapa(try XCTUnwrap(URL(string: "deckcapa://capa/?codigo=X&v=1&tam=grande"))))
+        XCTAssertEqual(p.query["tam"], "grande")
+    }
+
     func testEnderecoDeOutroEsquemaNaoViraPedido() throws {
         XCTAssertNil(Ponte.pedidoDaCapa(try XCTUnwrap(URL(string: "https://exemplo.com/api/capa"))))
     }

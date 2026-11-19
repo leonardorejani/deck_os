@@ -316,9 +316,10 @@ final class ModeloApp: ObservableObject {
             avisar("Não achei a página do iPhone dentro do app.", falha: true)
             return
         }
-        let roteador = Ligacao.roteador(armazem: armazem, pareamento: pareamento, pagina: ArquivosPagina(raiz: pasta),
+        var roteador = Ligacao.roteador(armazem: armazem, pareamento: pareamento, pagina: ArquivosPagina(raiz: pasta),
                                         rodizio: rodizio, certificadoCA: GeradorCertificado().arquivos.ca, contaSpotify: spotify.conta,
                                         usoMedido: ModeloApp.usoMedidoPorToken(), ponteQR: whatsappQR.ponte, aprovacoes: aprovacoes, registrar: registrar)
+        roteador.aoInformarInstalacao = { [weak self] i in Task { @MainActor in self?.instalacaoInformada(i) } }
         // A bancada não tem iPhone: nada de cabo, Bluetooth nem gancho de aprovação.
         if Variante.atual.ligaIphone { ligarNativo(roteador: roteador); subirGancho() }
         let portaInicial = Variante.atual.portaFixa ?? config.porta

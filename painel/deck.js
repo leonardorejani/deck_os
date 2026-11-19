@@ -26,12 +26,12 @@ function conferirSobrepor(e) {
   if (sobrepor.perfilAtivo === e.perfilAtivo) delete sobrepor.perfilAtivo;
 }
 /* a capa que a tela mostra: a do Mac (capaId) ou, na troca otimista de faixa, a miniatura que a fila já tinha (capaUrl) */
-const capaSrc = s => s.capaUrl || (s.capaId ? canal.capaUrl(s.capaId) : '');
-const capaAttr = s => { const u = capaSrc(s); return u ? ` src="${esc(u)}"` : '' };
+const capaSrc = (s, grande) => s.capaUrl || (s.capaId ? canal.capaUrl(s.capaId, grande) : '');
+const capaAttr = (s, grande) => { const u = capaSrc(s, grande); return u ? ` src="${esc(u)}"` : '' };
 const reduzMov = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 /* troca a imagem só depois de a nova estar baixada: a capa não pisca em branco quando o Mac confirma a faixa. A que falhou ao baixar é pedida de novo no próximo passo */
 function sincronizarCapa(img, s) {
-  const quer = capaSrc(s); if (!img || !quer) return;
+  if (!img) return; const quer = capaSrc(s, img.classList.contains('capa-grande')); if (!quer) return;
   if (img.dataset.erro) { delete img.dataset.erro; img.dataset.quer = quer; img.src = quer; return }
   if (img.getAttribute('src') === quer || img.dataset.quer === quer) return;
   img.dataset.quer = quer;
@@ -149,17 +149,27 @@ const relogioHTML = () => `<div class="relogio" aria-label="Hora"><div class="pl
    algarismos na mesma placa que vira. O resto do relógio (tique, virarPlaca) é o mesmo das placas de um algarismo. */
 const relogioQHTML = () => `<div class="relogio relogio-q" aria-label="Hora"><div class="placa" data-i="h"></div><div class="placa" data-i="m"></div></div>`;
 const nivel = p => p == null ? '' : p >= 90 ? 'cheio' : p >= 70 ? 'alto' : '';
-const medidor = (rot, p) => `<div class="medidor ${nivel(p)}" aria-label="${rot}: ${p == null ? 'sem medição' : p + '%'}"><span class="trilho"><i style="width:${p ?? 0}%"></i></span><b>${p == null ? '-' : p + '%'}</b></div>`;
+/* esperado: onde o uso estaria se fosse parelho (ritmoSemana), uma marca fina na barra. Sem ele (poucas horas de janela) não há marca */
+const medidor = (rot, p, esperado) => `<div class="medidor ${nivel(p)}" aria-label="${rot}: ${p == null ? 'sem medição' : p + '%'}${esperado == null ? '' : `, o esperado agora é ${esperado}%`}"><span class="trilho"><i style="width:${p ?? 0}%"></i>${esperado == null ? '' : `<u style="left:${esperado}%"></u>`}</span><b>${p == null ? '-' : p + '%'}</b></div>`;
 /* o bloco todo é um botão: o toque abre o detalhe do uso (uso.js). O rótulo lê os números, já que o leitor de tela não entra no botão */
 const usoToque = () => `data-abrir-uso role="button" tabindex="0" aria-haspopup="dialog" aria-label="${esc('Uso das IAs: ' + usoVisivel().map(u => `${u.nome} ${u.conta} ${u.semana == null ? 'sem medição' : u.semana + '%'}`).join(', ') + '. Ver detalhes')}"`;
+/* só quando vai encher antes de renovar, o texto "enche 2 d" toma o lugar de "renova" na coluna (o cartão deitado não tem espaço para outra linha).
+   A coluna "renova" continua no DOM e no leitor de tela, que ouve as duas coisas. */
+function usoRenova(u) {
+  const r = ritmoSemana(u.semana, u.renova, V.ref), r0 = renovaEm(u.renova, true, V.ref);
+  const renova = `<span class="renova" aria-label="renova ${r0}">${r0}</span>`;
+  if (!r?.enche) return renova;
+  const t = contagemRenova(new Date(r.enche).toISOString(), V.ref);
+  return `<span class="renova-col tem-enche" aria-label="enche em ${t}, antes de renovar ${r0}">${renova}<span class="renova-enche" aria-hidden="true">enche ${t.split(' ').slice(0, 2).join(' ')}</span></span>`; // só a maior unidade (2 d, 5 h) na coluna estreita
+}
 function usoCartao() {
   if (!usoVisivel().length) return '';
   return `<div class="cartao uso depende" ${usoToque()}>${esconder('uso')}<div class="cartao-titulo"><span>Uso da semana</span><span class="renova-tit">renova</span></div>
-    ${usoVisivel().map(u => `<div class="uso-linha"><span class="uso-nome">${icServico(u.nome)}<span>${esc(u.nome)} <small>${esc(u.conta)}</small></span></span>${medidor('semana', u.semana)}<span class="renova" aria-label="renova ${renovaEm(u.renova, true, V.ref)}">${renovaEm(u.renova, true, V.ref)}</span></div>`).join('')}</div>`;
+    ${usoVisivel().map(u => `<div class="uso-linha"><span class="uso-nome">${icServico(u.nome)}<span>${esc(u.nome)} <small>${esc(u.conta)}</small></span></span>${medidor('semana', u.semana, ritmoSemana(u.semana, u.renova, V.ref)?.esperado)}${usoRenova(u)}</div>`).join('')}</div>`;
 }
 function usoTira() {
   if (!usoVisivel().length) return ''; // nenhuma conta para mostrar: a faixa some
-  return `<div class="uso-tira depende" ${usoToque()}>${esconder('uso')}${usoVisivel().map(u => { const p = u.semana, txt = p == null ? '-' : p + '%'; return `<span class="${nivel(p)}" aria-label="${esc(u.nome)} ${esc(u.conta)}: ${p == null ? 'sem medição' : txt}">${icServico(u.nome)}<span class="nome-u">${esc(u.nome === 'Claude' ? u.conta : u.nome)}</span> <span class="mini"><i style="width:${p ?? 0}%"></i></span><b>${txt}</b></span>` }).join('')}</div>`;
+  return `<div class="uso-tira depende" ${usoToque()}>${esconder('uso')}${usoVisivel().map(u => { const p = u.semana, txt = p == null ? '-' : p + '%'; const r = ritmoSemana(p, u.renova, V.ref); return `<span class="${nivel(p)}" aria-label="${esc(u.nome)} ${esc(u.conta)}: ${p == null ? 'sem medição' : txt}${r ? `, esperado agora ${r.esperado}%` : ''}${r?.enche ? `, enche em ${contagemRenova(new Date(r.enche).toISOString(), V.ref)}` : ''}">${icServico(u.nome)}<span class="nome-u">${esc(u.nome === 'Claude' ? u.conta : u.nome)}</span> <span class="mini"><i style="width:${p ?? 0}%"></i>${r ? `<u style="left:${r.esperado}%"></u>` : ''}</span><b>${txt}</b></span>` }).join('')}</div>`;
 }
 /* Monitor do Mac: uma faixa pequena com o que a pessoa deixou ligado nos Ajustes do Mac (`itens` do estado).
    Bateria some sozinha em Mac sem bateria. Processador, memória e rede ficam com "-" até a primeira medida. */
@@ -565,7 +575,7 @@ function midia(acao) {
    na API do Spotify), então não aparecem. */
 let cheioChave = '';
 function playerCheioHTML(s) {
-  const t = !!s.tocando, modos = temModos(s), capa = capaAttr(s);
+  const t = !!s.tocando, modos = temModos(s), capa = capaAttr(s, true);
   return `<div class="pc ${t ? '' : 'pausado'}">
     <img class="capa-grande"${capa} alt="Capa: ${esc(s.faixa)}" onerror="this.dataset.erro=1;this.removeAttribute('src')">
     <div class="pc-info">

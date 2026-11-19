@@ -100,14 +100,14 @@ const padrao = () => ({
 });
 let c = padrao();
 let T0 = Date.now(); // as sessões esperam desde um instante fixo (o Mac real manda sempre o mesmo `desde` até a sessão mudar)
-let cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, whatsapp: 0, whatsappV: [], whatsappIguais: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], criados: [], destinosPedidos: 0, controles: [], whatsappAbertas: [], midias: [], fotos: [], meetAcoes: [], meetLeituras: 0, usoDetalhe: [], configs: 0, aprovacoes: [] };
+let cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, capasTam: [], whatsapp: 0, whatsappV: [], whatsappIguais: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], criados: [], destinosPedidos: 0, controles: [], whatsappAbertas: [], midias: [], fotos: [], meetAcoes: [], meetLeituras: 0, usoDetalhe: [], configs: 0, aprovacoes: [] };
 let posicaoBase = { s: 132, desde: Date.now() };
 let perfilAtivo = 'trabalho';
 let criadosAgenda = [], padraoAgenda = null, lembretesAcesso = null, liberarEm = 0; // o que o iPhone criou na agenda, o destino padrão e o acesso aos Lembretes
 let codigoAtual = CODIGO, codigoAnterior = null; // rodízio: o atual, e o anterior que ainda vale (a folga de 10 min)
 let parearGasto = false, parearErros = 0; // o código de 6 dígitos serve uma vez e aguenta 5 erros
 let gravada = null; // o que o iPhone gravou: perfis e blocos, como o Mac guardaria no config.json
-const zerar = () => { parearGasto = false; parearErros = 0; codigoAtual = CODIGO; codigoAnterior = null; T0 = Date.now(); gravada = null; c = padrao(); cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, whatsapp: 0, whatsappV: [], whatsappIguais: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], criados: [], destinosPedidos: 0, controles: [], whatsappAbertas: [], midias: [], fotos: [], meetAcoes: [], meetLeituras: 0, usoDetalhe: [], configs: 0, aprovacoes: [] }; posicaoBase = { s: 132, desde: Date.now() }; perfilAtivo = 'trabalho'; criadosAgenda = []; padraoAgenda = null; lembretesAcesso = null };
+const zerar = () => { parearGasto = false; parearErros = 0; codigoAtual = CODIGO; codigoAnterior = null; T0 = Date.now(); gravada = null; c = padrao(); cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, capasTam: [], whatsapp: 0, whatsappV: [], whatsappIguais: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], criados: [], destinosPedidos: 0, controles: [], whatsappAbertas: [], midias: [], fotos: [], meetAcoes: [], meetLeituras: 0, usoDetalhe: [], configs: 0, aprovacoes: [] }; posicaoBase = { s: 132, desde: Date.now() }; perfilAtivo = 'trabalho'; criadosAgenda = []; padraoAgenda = null; lembretesAcesso = null };
 
 // com xss ligado, todo texto que a página mostra chega como HTML que tenta executar código
 const X = t => c.xss ? `"><img src=x onerror="window.__xss=(window.__xss||0)+1">${t}` : t;
@@ -151,7 +151,7 @@ function detalheUso(periodo) {
   const nome = t => c.usoDetalhe === 'xss' ? '<img src=x onerror=window.__xss=1>' : t;
   return { periodo, atualizadoEm: new Date(Date.now() - 90000).toISOString(), ...(c.usoDetalhe === 'calculando' ? { calculando: true } : {}), ate: ateHoje(),
     contas: [
-      { id: 'claude-leo', nome: 'Claude', conta: nome('leo'), janelas: semMed ? [] : [{ rotulo: 'Semana', percentual: 61, renova: emDias(3, 14), medidoEm: new Date(Date.now() - 180000).toISOString(), ritmo: { esperado: 55, projecao: 111, situacao: 'rapido' } }] },
+      { id: 'claude-leo', nome: 'Claude', conta: nome('leo'), janelas: semMed ? [] : [{ rotulo: 'Semana', percentual: 61, renova: emDias(3, 14), medidoEm: new Date(Date.now() - 180000).toISOString(), ritmo: { esperado: 55, projecao: 111, situacao: 'rapido', enche: new Date(Date.now() + (2 * 24 + 3) * 3600000).toISOString() } }] },
       { id: 'claude-equipe', nome: 'Claude', conta: 'equipe', janelas: semMed ? [] : [{ rotulo: 'Semana', percentual: 94, renova: emDias(1, 9), ritmo }] },
       { id: 'codex', nome: 'Codex', conta: 'pro', janelas: semMed ? [] : [{ rotulo: '5 horas', percentual: 20, renova: emDias(0, 23), medidoEm: new Date(Date.now() - 600000).toISOString(), ritmo: { esperado: 30, projecao: 66 } }, { rotulo: 'Semana', percentual: 4, renova: emDias(0, 23), ritmo: { esperado: 90, projecao: 5, situacao: 'sobra' } }],
         gasto: c.usoDetalhe === 'calculando' ? { ...gasto('c', 0), modelos: [] } : { ...gasto('c', .4), modelos: [{ nome: 'GPT-5.5-codex', tokens: Math.round(soma * .4), custo: 3.2, parte: 100 }] } },
@@ -540,7 +540,7 @@ async function api(req, res, url) {
     }
     return json(res, 404, { erro: 'Essa rota não existe.' });
   }
-  if (rota === '/api/capa') { cont.capas++; res.writeHead(200, { 'Content-Type': 'image/png' }); return res.end(fs.readFileSync(path.join(RAIZ, 'icones/deck.png'))) }
+  if (rota === '/api/capa') { cont.capas++; cont.capasTam.push(url.searchParams.get('tam') || 'pequena'); res.writeHead(200, { 'Content-Type': 'image/png' }); return res.end(fs.readFileSync(path.join(RAIZ, 'icones/deck.png'))) }
   if (rota === '/api/uso/detalhe') {
     const periodo = url.searchParams.get('periodo'); cont.usoDetalhe.push(periodo);
     if (c.usoDetalhe === 'antigo') return json(res, 404, { erro: 'Essa rota não existe.' });
