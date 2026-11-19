@@ -69,6 +69,7 @@ const padrao = () => ({
   spotifyRecusa: '',         // todo comando do Spotify é recusado (422) com esse motivo
   album: 'Artista Exemplo (Deluxe)', repetir: false, aleatorio: false,
   agendaLembretes: false,    // true: o dia 20 ganha um lembrete e um feriado, os dois na mesma cor roxa (a cor da lista e a do calendário podem ser iguais)
+  colar: 'normal',           // normal | antigo (Mac sem a rota: 404) | sem-app (nenhum app em foco: 409) | sem-acesso (sem Acessibilidade: 422)
   agendaCriar: 'normal',     // normal | antigo (Mac sem as rotas de criar: 404) | lembretes-pedir (Lembretes ainda sem acesso: o pedido abre no Mac) | recusa (o Mac recusa o compromisso, 409)
   reunioes: false,           // os eventos de Meet, Zoom e Teams chegam com o link da sala (Evento.link)
   reuniaoRecusa: '',         // POST /api/reuniao/entrar falha (422) com esse motivo
@@ -101,14 +102,14 @@ const padrao = () => ({
 });
 let c = padrao();
 let T0 = Date.now(); // as sessões esperam desde um instante fixo (o Mac real manda sempre o mesmo `desde` até a sessão mudar)
-let cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, capasTam: [], whatsapp: 0, whatsappV: [], whatsappIguais: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], criados: [], destinosPedidos: 0, controles: [], whatsappAbertas: [], midias: [], fotos: [], meetAcoes: [], meetLeituras: 0, usoDetalhe: [], configs: 0, aprovacoes: [] };
+let cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, capasTam: [], whatsapp: 0, whatsappV: [], whatsappIguais: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], criados: [], colados: [], destinosPedidos: 0, controles: [], whatsappAbertas: [], midias: [], fotos: [], meetAcoes: [], meetLeituras: 0, usoDetalhe: [], configs: 0, aprovacoes: [] };
 let posicaoBase = { s: 132, desde: Date.now() };
 let perfilAtivo = 'trabalho';
 let criadosAgenda = [], padraoAgenda = null, lembretesAcesso = null, liberarEm = 0; // o que o iPhone criou na agenda, o destino padrão e o acesso aos Lembretes
 let codigoAtual = CODIGO, codigoAnterior = null; // rodízio: o atual, e o anterior que ainda vale (a folga de 10 min)
 let parearGasto = false, parearErros = 0; // o código de 6 dígitos serve uma vez e aguenta 5 erros
 let gravada = null; // o que o iPhone gravou: perfis e blocos, como o Mac guardaria no config.json
-const zerar = () => { parearGasto = false; parearErros = 0; codigoAtual = CODIGO; codigoAnterior = null; T0 = Date.now(); gravada = null; c = padrao(); cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, capasTam: [], whatsapp: 0, whatsappV: [], whatsappIguais: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], criados: [], destinosPedidos: 0, controles: [], whatsappAbertas: [], midias: [], fotos: [], meetAcoes: [], meetLeituras: 0, usoDetalhe: [], configs: 0, aprovacoes: [] }; posicaoBase = { s: 132, desde: Date.now() }; perfilAtivo = 'trabalho'; criadosAgenda = []; padraoAgenda = null; lembretesAcesso = null };
+const zerar = () => { parearGasto = false; parearErros = 0; codigoAtual = CODIGO; codigoAnterior = null; T0 = Date.now(); gravada = null; c = padrao(); cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, capasTam: [], whatsapp: 0, whatsappV: [], whatsappIguais: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], criados: [], colados: [], destinosPedidos: 0, controles: [], whatsappAbertas: [], midias: [], fotos: [], meetAcoes: [], meetLeituras: 0, usoDetalhe: [], configs: 0, aprovacoes: [] }; posicaoBase = { s: 132, desde: Date.now() }; perfilAtivo = 'trabalho'; criadosAgenda = []; padraoAgenda = null; lembretesAcesso = null };
 
 // com xss ligado, todo texto que a página mostra chega como HTML que tenta executar código
 const X = t => c.xss ? `"><img src=x onerror="window.__xss=(window.__xss||0)+1">${t}` : t;
@@ -512,6 +513,15 @@ async function api(req, res, url) {
     if (n.destino.tipo === 'calendario') criadosAgenda.push({ ...n, calendario: n.destino.id === 'cal-pes' ? 'Pessoal' : 'Trabalho' });
     if (n.padrao) padraoAgenda = n.destino;
     return json(res, 200, { ok: true, padraoSalvo: !!n.padrao });
+  }
+  if (rota === '/api/colar' && m === 'POST') {
+    if (c.colar === 'antigo') return json(res, 404, { erro: 'Essa rota não existe.' });
+    const n = await lerCorpo(req);
+    if (typeof n.texto !== 'string' || !n.texto || n.texto.length > 32000) return json(res, 400, { erro: 'Escreva um texto de até 32 mil caracteres.' });
+    if (c.colar === 'sem-app') return json(res, 409, { erro: 'Nenhum app do Mac está pronto para receber texto. Abra o app e clique no campo.' });
+    if (c.colar === 'sem-acesso') return json(res, 422, { erro: 'O Deck precisa do acesso de Acessibilidade para teclar' });
+    cont.colados.push(n.texto);
+    return json(res, 200, { ok: true });
   }
   if (rota === '/api/reuniao/entrar' && m === 'POST') {
     const link = String((await lerCorpo(req)).link || '');

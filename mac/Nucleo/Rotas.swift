@@ -194,6 +194,8 @@ struct Roteador: Sendable {
     var aprovacoes: Aprovacoes? = nil
     /// O app do iPhone diz quem o instalou e quando vence (POST /api/app/instalacao). Nil: a rota não existe (404).
     var aoInformarInstalacao: (@Sendable (InstalacaoDoApp) -> Void)? = nil
+    /// "Escrever no Mac": cola o texto do iPhone no app em foco. Nil: a rota /api/colar não existe (404).
+    var colador: (any ColadorDeTexto)? = nil
 
     func responder(_ r: HttpRequisicao) -> RespostaRota {
         if r.caminho == "/api/parear" {
@@ -281,6 +283,9 @@ struct Roteador: Sendable {
         if r.caminho == "/api/agenda/criar" {
             return somente(["POST"], r) ?? criarNaAgenda(r)
         }
+        if r.caminho == "/api/colar" {
+            return somente(["POST"], r) ?? colarTexto(r)
+        }
         if r.caminho == "/api/reuniao/entrar" {
             return somente(["POST"], r) ?? entrarNaReuniao(r)
         }
@@ -364,6 +369,17 @@ struct Roteador: Sendable {
             return .erro(404, "Essa tecla não existe no perfil atual.")
         }
         if let erro = teclas.executar(tecla) { return .erro(422, erro) }
+        return .json(200, Data("{\"ok\":true}".utf8))
+    }
+
+    /// POST /api/colar, corpo {"texto": "..."} (até 32 mil caracteres): põe o texto na prancheta, manda Cmd+V para o app em
+    /// foco e devolve a prancheta como estava. Sem app aceitável em foco não cola nada. O texto nunca vai para o log.
+    private func colarTexto(_ r: HttpRequisicao) -> RespostaRota {
+        guard let colador else { return .erro(404, "Essa rota não existe.") }
+        guard let obj = (try? JSONSerialization.jsonObject(with: r.corpo)) as? [String: Any], let texto = obj["texto"] as? String else {
+            return .erro(400, "Mande o texto a escrever, por exemplo {\"texto\": \"...\"}.")
+        }
+        if let e = colador.colar(texto) { return .erro(e.status, e.texto) }
         return .json(200, Data("{\"ok\":true}".utf8))
     }
 

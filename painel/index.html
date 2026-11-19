@@ -84,6 +84,14 @@
         <div class="corpo" id="ct-corpo" aria-live="polite"></div>
       </section>
 
+      <section class="folha cheia escrever" id="f-escrever" role="dialog" aria-modal="true" aria-labelledby="es-titulo">
+        <header><h2 id="es-titulo">Escrever no Mac</h2><button class="btn primario" id="es-enviar" disabled>Enviar</button><button class="fechar" data-fechar aria-label="Fechar"></button></header>
+        <div class="corpo">
+          <textarea id="es-texto" class="es-texto" aria-label="Texto para colar no Mac" placeholder="Escreva ou dite. O texto vai para o app que estiver em foco no Mac." autocomplete="off" autocapitalize="sentences" enterkeyhint="enter"></textarea>
+          <p class="es-msg" id="es-msg" role="status" aria-live="polite"></p>
+        </div>
+      </section>
+
       <section class="folha cheia" id="f-meet" role="dialog" aria-modal="true" aria-labelledby="mt-titulo">
         <header><h2 id="mt-titulo">Google Meet</h2><button class="fechar" data-fechar aria-label="Fechar"></button></header>
         <div class="corpo" id="mt-corpo" aria-live="polite"></div>
@@ -162,6 +170,7 @@
 <script src="uso.js"></script>
 <script src="regras.js"></script>
 <script src="apps.js"></script>
+<script src="escrever.js"></script>
 <script src="deck.js"></script>
 <script src="pwa.js"></script>
 <script src="pareamento.js"></script>

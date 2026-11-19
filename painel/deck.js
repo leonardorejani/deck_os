@@ -134,7 +134,7 @@ const usoVisivel = () => V.uso;
 function abrirMenu(el) {
   const r = el.getBoundingClientRect(), t = tela.getBoundingClientRect(), k = t.width / tela.offsetWidth;
   const l = $('#lista-perfis');
-  l.innerHTML = `<button data-nova-tecla>Nova tecla</button><span class="rotulo-lista">Perfil</span><div role="listbox" aria-label="Perfis">${V.perfis.map(p => `<button role="option" data-perfil="${esc(p.id)}" aria-selected="${p.id === V.perfilAtivo}">${esc(p.nome)}<small>${p.n} teclas</small></button>`).join('')}</div>${V.perfis.length > 1 ? '<span class="dica-perfis">Crie e edite perfis no Mac</span>' : ''}`;
+  l.innerHTML = `<button data-nova-tecla>Nova tecla</button><button data-escrever>Escrever no Mac</button><span class="rotulo-lista">Perfil</span><div role="listbox" aria-label="Perfis">${V.perfis.map(p => `<button role="option" data-perfil="${esc(p.id)}" aria-selected="${p.id === V.perfilAtivo}">${esc(p.nome)}<small>${p.n} teclas</small></button>`).join('')}</div>${V.perfis.length > 1 ? '<span class="dica-perfis">Crie e edite perfis no Mac</span>' : ''}`;
   l.hidden = false;
   // ancorada na tecla: abre para cima, ou para baixo se faltar espaço. Sem espaço nos dois (B deitado), abre ao lado
   const w = l.offsetWidth, h = l.offsetHeight, H = tela.offsetHeight, W = tela.offsetWidth;
@@ -609,6 +609,7 @@ tela.addEventListener('click', ev => {
   const lp = $('#lista-perfis'), pf = ev.target.closest('[data-perfil]');
   if (pf) return ativarPerfil(pf.dataset.perfil);
   if (ev.target.closest('[data-nova-tecla]')) { lp.hidden = true; return abrirEditor('nova') }
+  if (ev.target.closest('[data-escrever]')) { lp.hidden = true; return abrirEscrever() }
   if (!lp.hidden && !ev.target.closest('#lista-perfis, .tecla.menu')) { lp.hidden = true; return }
   const eb = ev.target.closest('[data-esconder]'); if (eb && organizando) { ev.stopPropagation(); return trocarBloco(eb.dataset.esconder, false) }
   const mb = ev.target.closest('[data-mostrar]'); if (mb) return trocarBloco(mb.dataset.mostrar, true);
