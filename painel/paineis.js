@@ -725,7 +725,7 @@ $('#nc-destino').addEventListener('change', e => {
 /* ---------- Seletores próprios do Novo compromisso: Dia, Início e Fim abrem dentro da folha (nada de calendário nem lista nativos do iPhone) ----------
    Os inputs do formulário continuam sendo o valor guardado (escondidos): o seletor só escreve neles e o salvar segue igual. */
 const sl = { qual: '', mes: new Date(), voltar: null };
-const DURACOES = [15, 30, 45, 60, 90, 120, 180, 240, 360, 480];
+const DURACOES = [15, 30, 60, 120];
 const minDe = v => { const m = /^(\d{2}):(\d{2})$/.exec(v || ''); return m ? Number(m[1]) * 60 + Number(m[2]) : null };
 const horaDe = n => pad2(Math.floor(n / 60)) + ':' + pad2(n % 60);
 const textoDuracao = n => n < 60 ? n + ' min' : Math.floor(n / 60) + ' h' + (n % 60 ? ' ' + (n % 60) + ' min' : '');
@@ -740,7 +740,6 @@ function gravarFim(min) {
   const ini = minDe($('#nc-inicio').value) ?? 540, v = Math.min(1439, Math.max(ini + 5, min));
   gravarCampo('nc-fim', horaDe(v)); if (v === min) fo.dur = v - ini; // pedido cortado no teto ou no piso não vira a duração desejada
 }
-const passoCinco = (min, sinal) => sinal > 0 ? (Math.floor(min / 5) + 1) * 5 : (Math.ceil(min / 5) - 1) * 5;
 function abrirSeletor(qual) {
   if (fo.todo && qual !== 'dia') return;
   sl.qual = qual; sl.voltar = document.activeElement; sl.mes = qual === 'dia' ? new Date(diaDoCampo().getFullYear(), diaDoCampo().getMonth(), 1) : sl.mes;
@@ -758,7 +757,6 @@ function pintarSeletor(rolar) {
   const el = $('#sel-meio'), ini = minDe($('#nc-inicio').value), fim = minDe($('#nc-fim').value), rolagem = el.scrollTop;
   $('#ca-sel').dataset.qual = q;
   $('#sel-titulo').textContent = q === 'dia' ? 'Dia' : q === 'inicio' ? 'Início' : 'Fim';
-  const passo = '<div class="sel-passo"><button type="button" class="btn secundario" data-sel-passo="-5" aria-label="5 minutos antes">- 5 min</button><button type="button" class="btn secundario" data-sel-passo="5" aria-label="5 minutos depois">+ 5 min</button></div>';
   if (q === 'dia') {
     const d = diaDoCampo(), hoje = diaDe(new Date(V.ref)), amanha = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() + 1), m = sl.mes;
     const longo = d.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
@@ -776,43 +774,120 @@ function pintarSeletor(rolar) {
       + `<div class="sb-grade sd-grade">${g}</div>`;
     return;
   }
-  if (q === 'inicio') {
-    const v = ini ?? 540, hoje = mesmoDia(diaDoCampo(), new Date(V.ref)), agora = new Date(V.ref), agora30 = agora.getHours() * 60 + Math.floor(agora.getMinutes() / 30) * 30;
-    $('#sel-valor').textContent = horaDe(v); $('#sel-valor').className = 'sel-valor hora';
-    $('#sel-extra').innerHTML = passo;
-    let h = ''; for (let t = 0; t < 1440; t += 30) h += `<button type="button" class="sel-chip" data-sel-hora="${horaDe(t)}" aria-pressed="${t === v}">${horaDe(t)}</button>`;
-    el.className = 'sel-meio sel-horas'; el.innerHTML = h;
-    if (!rolar) el.scrollTop = rolagem;
-    if (rolar) { // abre no horário de agora (hoje) ou no que já está escolhido, sem esconder o escolhido
-      const alvo = el.querySelector(`[data-sel-hora="${horaDe(hoje ? agora30 : Math.floor(v / 30) * 30)}"]`), marcado = el.querySelector('[aria-pressed="true"]');
-      if (alvo) el.scrollTop = alvo.offsetTop - el.offsetTop;
-      if (marcado) { const a = marcado.offsetTop - el.offsetTop; if (a < el.scrollTop || a + marcado.offsetHeight > el.scrollTop + el.clientHeight) el.scrollTop = a }
-    }
-    return;
-  }
-  const v = fim ?? (ini ?? 540) + 60, dur = ini != null ? v - ini : null;
-  $('#sel-valor').innerHTML = `${horaDe(v)}${dur > 0 ? `<small>${textoDuracao(dur)} depois do início</small>` : ''}`; $('#sel-valor').className = 'sel-valor hora';
-  $('#sel-extra').innerHTML = passo + '<div class="sel-passo"><button type="button" class="btn secundario" data-sel-passo="-60" aria-label="1 hora antes">- 1 h</button><button type="button" class="btn secundario" data-sel-passo="60" aria-label="1 hora depois">+ 1 h</button></div>';
-  el.className = 'sel-meio sel-duracoes';
-  el.innerHTML = DURACOES.map(n => { const t = (ini ?? 540) + n, cabe = t <= 1439; return `<button type="button" class="sel-chip dur" data-sel-dur="${n}" aria-pressed="${n === dur}" ${cabe ? '' : 'disabled'}><b>${textoDuracao(n)}</b><small>${cabe ? 'até ' + horaDe(t) : 'passa da meia-noite'}</small></button>` }).join('');
+  // Início e Fim: só a roleta (o Fim ganha, acima dela, a fileira de durações que move a roleta)
+  $('#sel-extra').innerHTML = q === 'fim' ? `<div class="sel-chips" role="group" aria-label="Duração">${DURACOES.map(n => `<button type="button" class="sel-chip" data-sel-dur="${n}">${textoDuracao(n)}</button>`).join('')}</div>` : '';
+  $('#sel-valor').className = 'sel-valor hora';
+  el.className = 'sel-meio sel-roleta';
+  montarRoleta(el); sincronizarRoleta(false); pintarCabecalhoHora();
 }
+
+/* ---------- Roleta de horário (estilo despertador do iPhone): horas 00 a 23 e minutos de 5 em 5, com scroll-snap ----------
+   O dedo rola de verdade (momentum do navegador). Enquanto rola, cada passada de item grava o valor; quando para, a roleta
+   assenta no valor real (o Fim pode ter sido cortado em 23:59 ou depois do início). Mover a roleta por código (toque num vizinho,
+   duração, teclado) marca rol.auto e ignora os scrolls que isso provoca, para o valor não passar por horários do caminho. */
+const rol = { auto: false, tAuto: 0, tPara: 0, tocando: false, quadro: 0 };
+const MINUTOS = Array.from({ length: 12 }, (_, i) => i * 5);
+const colRoleta = k => $(`#sel-meio [data-rol="${k}"]`);
+const altItem = col => col.querySelector('[role="option"]')?.offsetHeight || 44;
+const listarRoleta = (col, itens) => { col.innerHTML = itens.map(([v, t]) => `<div role="option" id="rol-${col.dataset.rol}-${v}" data-v="${v}" aria-selected="false">${t}</div>`).join('') };
+const valoresMin = extra => extra ? [...MINUTOS, extra] : MINUTOS;
+function valorRoleta() {
+  const ini = minDe($('#nc-inicio').value) ?? 540;
+  return sl.qual === 'inicio' ? ini : minDe($('#nc-fim').value) ?? ini + 60;
+}
+function montarRoleta(el) {
+  el.innerHTML = '<div class="rol-faixa" aria-hidden="true"></div><div class="rol-col" data-rol="h" role="listbox" tabindex="0" aria-label="Hora"></div><span class="rol-sep" aria-hidden="true">:</span><div class="rol-col" data-rol="m" role="listbox" tabindex="0" aria-label="Minuto"></div>';
+  listarRoleta(colRoleta('h'), Array.from({ length: 24 }, (_, i) => [i, pad2(i)]));
+}
+// o 59 só existe como minuto quando o Fim foi cortado em 23:59 (não está na grade de 5 em 5)
+const extraMin = v => v % 5 ? v % 60 : 0;
+function sincronizarRoleta(suave) {
+  if (!sl.qual || sl.qual === 'dia') return;
+  const v = valorRoleta(), h = Math.floor(v / 60), m = v % 60, cm = colRoleta('m'), ch = colRoleta('h'); if (!cm || !ch) return;
+  const mins = valoresMin(extraMin(v));
+  if ([...cm.children].map(o => Number(o.dataset.v)).join() !== mins.join()) listarRoleta(cm, mins.map(n => [n, pad2(n)]));
+  rolarPara(ch, h, suave); rolarPara(cm, mins.indexOf(m), suave); marcarRoleta();
+}
+function rolarPara(col, idx, suave) {
+  const alvo = Math.max(0, idx) * altItem(col);
+  segurarAuto();
+  if (Math.abs(col.scrollTop - alvo) < 1) return;
+  col.scrollTo({ top: alvo, behavior: suave && !reduzido() ? 'smooth' : 'auto' });
+}
+function segurarAuto() { rol.auto = true; clearTimeout(rol.tAuto); rol.tAuto = setTimeout(() => { rol.auto = false }, 160) }
+// opacidade e escala pela distância até a faixa do meio, só opacity e transform (nada de layout por quadro)
+function marcarRoleta() {
+  for (const col of document.querySelectorAll('#sel-meio .rol-col')) {
+    const alt = altItem(col), pos = col.scrollTop / alt, sel = Math.round(pos);
+    for (const [i, o] of [...col.children].entries()) {
+      const d = Math.abs(i - pos);
+      o.style.opacity = d > 2.6 ? 0 : String(Math.max(.16, 1 - d * .36).toFixed(2));
+      o.style.transform = `scale(${(1 - Math.min(d, 2.5) * .07).toFixed(3)})`;
+      const ativo = i === sel; if (ativo !== (o.getAttribute('aria-selected') === 'true')) o.setAttribute('aria-selected', ativo);
+      if (ativo) col.setAttribute('aria-activedescendant', o.id);
+    }
+  }
+}
+const horaDaRoleta = () => {
+  const ch = colRoleta('h'), cm = colRoleta('m'); if (!ch || !cm) return null;
+  const h = Math.min(23, Math.max(0, Math.round(ch.scrollTop / altItem(ch)))), nm = [...cm.children].map(o => Number(o.dataset.v));
+  const m = nm[Math.min(nm.length - 1, Math.max(0, Math.round(cm.scrollTop / altItem(cm))))];
+  return h * 60 + m;
+};
+// o 59 só vale na hora 23: em qualquer outra, cai na grade de 5
+const normalizar = n => n % 5 && Math.floor(n / 60) !== 23 ? Math.floor(n / 5) * 5 : n;
+function escreverRoleta(n) {
+  n = normalizar(n);
+  if (n === valorRoleta()) return;
+  if (sl.qual === 'inicio') gravarInicio(Math.max(0, Math.min(1435, n))); else gravarFim(n);
+  pintarCabecalhoHora();
+}
+// valor grande e, no Fim, a duração e as durações que cabem antes da meia-noite
+function pintarCabecalhoHora() {
+  const ini = minDe($('#nc-inicio').value) ?? 540, v = valorRoleta();
+  if (sl.qual === 'inicio') $('#sel-valor').textContent = horaDe(v);
+  else {
+    const dur = v - ini;
+    $('#sel-valor').innerHTML = `${horaDe(v)}${dur > 0 ? `<small>${textoDuracao(dur)} depois do início</small>` : ''}`;
+    for (const b of document.querySelectorAll('#sel-extra [data-sel-dur]')) { const n = Number(b.dataset.selDur); b.setAttribute('aria-pressed', n === dur); b.disabled = ini + n > 1439 }
+  }
+}
+// escolhe um item da coluna (toque no vizinho ou seta do teclado): grava e leva a roleta até ele
+function escolherNaRoleta(chave, idx) {
+  const col = colRoleta(chave), v = valorRoleta(); if (!col) return;
+  const n = [...col.children].length; idx = Math.max(0, Math.min(n - 1, idx));
+  const valor = Number(col.children[idx].dataset.v);
+  escreverRoleta(chave === 'h' ? valor * 60 + Math.floor((v % 60) / 5) * 5 : Math.floor(v / 60) * 60 + valor);
+  sincronizarRoleta(true);
+}
+document.addEventListener('scroll', e => {
+  const col = e.target; if (!(col instanceof Element) || !col.matches?.('#sel-meio .rol-col')) return;
+  cancelAnimationFrame(rol.quadro); rol.quadro = requestAnimationFrame(marcarRoleta);
+  if (rol.auto) { segurarAuto(); clearTimeout(rol.tPara); rol.tPara = setTimeout(assentarRoleta, 200); return } // o navegador pode terminar o snap por cima do movimento do código: confere de novo quando parar
+  const n = horaDaRoleta(); if (n != null) escreverRoleta(n);
+  clearTimeout(rol.tPara); rol.tPara = setTimeout(assentarRoleta, 150);
+}, true);
+function assentarRoleta() { if (rol.tocando) return; const n = horaDaRoleta(); if (n != null && n !== valorRoleta() || colRoleta('m') && [...colRoleta('m').children].length !== valoresMin(extraMin(valorRoleta())).length) sincronizarRoleta(true) }
+document.addEventListener('touchstart', e => {  if (e.target.closest?.('#sel-meio .rol-col')) { rol.tocando = true; rol.auto = false; clearTimeout(rol.tAuto) } }, { passive: true, capture: true });
+const soltou = () => {  if (!rol.tocando) return; rol.tocando = false; clearTimeout(rol.tPara); rol.tPara = setTimeout(assentarRoleta, 150) };
+document.addEventListener('touchend', soltou, { passive: true, capture: true }); document.addEventListener('touchcancel', soltou, { passive: true, capture: true });
+document.addEventListener('keydown', e => {
+  const col = e.target.closest?.('#sel-meio .rol-col'); if (!col || e.altKey || e.ctrlKey || e.metaKey) return;
+  const k = col.dataset.rol, atual = [...col.children].findIndex(o => Number(o.dataset.v) === (k === 'h' ? Math.floor(valorRoleta() / 60) : valorRoleta() % 60)), mexe = { ArrowUp: -1, ArrowDown: 1, PageUp: -3, PageDown: 3 }[e.key];
+  if (mexe) { e.preventDefault(); escolherNaRoleta(k, atual + mexe) }
+  else if (e.key === 'Home' || e.key === 'End') { e.preventDefault(); escolherNaRoleta(k, e.key === 'Home' ? 0 : 99) }
+  else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { const o = colRoleta(k === 'h' ? 'm' : 'h'); if ((e.key === 'ArrowRight') === (k === 'h')) { e.preventDefault(); o.focus({ preventScroll: true }) } }
+});
 $('#ca-sel').addEventListener('click', e => {
   if (e.target.closest('[data-sel-ok]')) return fecharSeletor();
   const m = e.target.closest('[data-sel-mes]');
   if (m) { sl.mes = new Date(sl.mes.getFullYear(), sl.mes.getMonth() + Number(m.dataset.selMes), 1); return pintarSeletor() }
   const dia = e.target.closest('[data-sel-data], [data-sel-atalho]');
   if (dia) { gravarCampo('nc-dia', dia.dataset.selData || dia.dataset.selAtalho); return fecharSeletor() }
-  const hora = e.target.closest('[data-sel-hora]');
-  if (hora) { gravarInicio(minDe(hora.dataset.selHora)); return pintarSeletor() }
+  const opcao = e.target.closest('#sel-meio .rol-col [role="option"]');
+  if (opcao) return escolherNaRoleta(opcao.parentElement.dataset.rol, [...opcao.parentElement.children].indexOf(opcao));
   const dur = e.target.closest('[data-sel-dur]');
-  if (dur && !dur.disabled) { gravarFim((minDe($('#nc-inicio').value) ?? 540) + Number(dur.dataset.selDur)); return pintarSeletor() }
-  const p = e.target.closest('[data-sel-passo]');
-  if (p) {
-    const q = Number(p.dataset.selPasso), sinal = q > 0 ? 1 : -1, ini = minDe($('#nc-inicio').value) ?? 540;
-    if (sl.qual === 'inicio') gravarInicio(Math.max(0, Math.min(1435, passoCinco(ini, sinal))));
-    else { const fim = minDe($('#nc-fim').value) ?? ini + 60; gravarFim(Math.abs(q) === 60 ? fim + q : passoCinco(fim, sinal)) }
-    pintarSeletor();
-  }
+  if (dur && !dur.disabled) { gravarFim((minDe($('#nc-inicio').value) ?? 540) + Number(dur.dataset.selDur)); sincronizarRoleta(true); pintarCabecalhoHora() }
 });
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#ca-sel').hidden) { e.stopPropagation(); fecharSeletor() } }, true);
 
