@@ -43,6 +43,22 @@ final class GitHubTestes: XCTestCase {
         XCTAssertEqual(r.revisar.first?.numero, 1)
     }
 
+    func testContagemVerdadeiraAcimaDeCincoELinhaCurta() {
+        let oito = "[" + (1...8).map { Self.pr($0, "PR \($0)") }.joined(separator: ",") + "]"
+        let r = fonte(revisar: oito, falhando: oito).0.ler(agora: agora)
+        XCTAssertEqual(r.revisar.count, FonteGitHub.maxPorLista)
+        XCTAssertEqual(r.falhando.count, FonteGitHub.maxPorLista)
+        XCTAssertEqual(r.maisRevisar, 3)
+        XCTAssertEqual(r.maisFalhando, 3)
+        XCTAssertEqual(r.total, 16, "o selo conta tudo, não só o que a lista leva")
+    }
+
+    func testBuscaPedeOBastantePraContar() {
+        let (f, ex) = fonte()
+        _ = f.ler(agora: agora)
+        XCTAssertTrue(ex.comandos.contains { $0.contains("--limit \(FonteGitHub.maxBusca)") })
+    }
+
     func testSemGhEstadoClaroENenhumaBuscaFeita() {
         let (f, ex) = fonte(gh: 127)
         let r = f.ler(agora: agora)
@@ -152,6 +168,18 @@ final class GitHubTestes: XCTestCase {
         XCTAssertEqual(contador.valor, 1, "o estado pede a cada segundo, o gh só a cada poucos minutos")
         _ = ag.estado(config: cfg([tecla]), agora: agora.addingTimeInterval(Agregador.validadeDoGitHub + 1))
         XCTAssertEqual(contador.valor, 2)
+    }
+
+    func testSeloContaAlemDaListaEViraNoventaENoveMais() {
+        func selo(_ mais: Int) -> String? {
+            var f = Fontes.vivas(executor: ExecutorFalso([]), casa: "/nonexistent")
+            f.github = { _ in ResumoGitHub(estado: "ok", revisar: [ItemGitHub(id: "a/b#1", titulo: "t", repo: "a/b", numero: 1)], maisRevisar: mais) }
+            let tecla = Tecla(id: "gh", nome: "GitHub", tipo: "app", valor: TeclasDeFora.valorDoGitHub, estado: nil, icone: nil)
+            let c = Config(perfis: [Perfil(id: "p", nome: "P", teclas: [tecla])], perfilAtivo: "p", nomeMac: "Mac", codigoAcesso: "abcdefghjkmnpqrstuvw")
+            return Agregador(fontes: f).estado(config: c, agora: agora).selos["gh"]
+        }
+        XCTAssertEqual(selo(11), "12")
+        XCTAssertEqual(selo(150), "99+")
     }
 
     func testSemGhSemSeloEComEstadoNoResumo() {

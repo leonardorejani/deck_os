@@ -51,11 +51,13 @@ final class ArmazemDeAvisos: @unchecked Sendable {
     private let trava = NSLock()
     private var avisos: [(aviso: AvisoDeFora, chegou: Date)] = []
     private var valores: [String: (valor: ValorDeFora, ate: Date)] = [:]
-    private var proximoId = 1
+    private var proximoId: Int
     private var pedidos: [Date] = []
     private let fuso: TimeZone
 
-    init(fuso: TimeZone = .current) { self.fuso = fuso }
+    /// `primeiroId` é onde a contagem dos ids começa. O Deck passa o relógio em milissegundos: o iPhone guarda o maior id que
+    /// já mostrou e descarta os menores, então depois de reiniciar o Mac os ids novos têm de ser maiores que os de antes.
+    init(fuso: TimeZone = .current, primeiroId: Int = 1) { self.fuso = fuso; self.proximoId = primeiroId }
 
     // MARK: Taxa
 
@@ -159,13 +161,15 @@ struct RoteadorDeFora: Sendable {
     let chave: @Sendable () -> String
 
     func responder(_ r: HttpRequisicao, agora: Date = Date()) -> RespostaRota {
-        // A taxa vem antes de tudo, inclusive da chave: chute de chave também gasta a vaga.
-        if let espera = armazem.pedirVaga(agora: agora) {
-            return .erro(429, "Pedidos demais. Tente de novo em \(espera) s.", extras: ["Retry-After": String(espera)])
-        }
+        // A chave vem antes da taxa: pedido sem a chave certa nunca gasta vaga, senão qualquer processo (ou página) que
+        // chutasse a porta esgotaria a cota e travaria os scripts de verdade. A chave tem 32 letras sorteadas, então
+        // chutar não adianta, e a taxa existe para proteger o armazém de quem tem a chave.
         let esperada = chave()
         guard !esperada.isEmpty, let recebida = r.cabecalhos["x-deck-chave"], Autenticacao.igual(recebida, esperada) else {
             return .erro(401, "Chave ausente ou incorreta. Copie a chave nos Ajustes do Deck, em Este Mac.")
+        }
+        if let espera = armazem.pedirVaga(agora: agora) {
+            return .erro(429, "Pedidos demais. Tente de novo em \(espera) s.", extras: ["Retry-After": String(espera)])
         }
         guard r.caminho == "/aviso" || r.caminho == "/valor" else { return .erro(404, "Essa rota não existe. Use /aviso ou /valor.") }
         guard r.metodo == "POST" else { return .erro(405, "Use POST.", extras: ["Allow": "POST"]) }

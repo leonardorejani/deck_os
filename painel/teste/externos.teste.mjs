@@ -37,6 +37,26 @@ export default async function (h) {
   h.ok((await aviso(p)).erro, 'nível erro usa o estilo de erro');
   await p.context().close();
 
+  /* ---------- o Mac reiniciou: os ids voltam a contar e o aviso novo ainda aparece ---------- */
+  await h.reset(); await h.cenario({});
+  p = await h.pagina(); await pronta(h, p);
+  await h.cenario({ avisosDeFora: [{ id: 5, titulo: 'Antes de reiniciar', texto: '', nivel: 'info', em: agoraIso() }] });
+  await h.espera(p, () => document.querySelector('#aviso-txt').textContent === 'Antes de reiniciar');
+  await h.cenario({ avisosDeFora: [{ id: 1, titulo: 'Depois de reiniciar', texto: '', nivel: 'info', em: agoraIso() }] });
+  h.ok(await h.espera(p, () => document.querySelector('#aviso-txt').textContent === 'Depois de reiniciar', undefined, 8000), 'depois de o Mac reiniciar (id 1 de novo), o aviso novo ainda vira toast');
+  await p.context().close();
+
+  /* ---------- aviso de fora não pisa no Desfazer de outra ação ---------- */
+  await h.reset(); await h.cenario({});
+  p = await h.pagina(); await pronta(h, p);
+  await p.evaluate(() => avisar('Tecla excluída', { desfazer: () => {} }));
+  await h.cenario({ avisosDeFora: [{ id: 1, titulo: 'Build pronto', texto: '', nivel: 'ok', em: agoraIso() }] });
+  await h.dormir(2200);
+  const emCima = await p.evaluate(() => ({ txt: document.querySelector('#aviso-txt').textContent, desfazer: !document.querySelector('#aviso-acao').hidden }));
+  h.ok(emCima.txt === 'Tecla excluída' && emCima.desfazer, `o aviso de fora espera e o Desfazer continua na tela (${JSON.stringify(emCima)})`);
+  h.ok(await h.espera(p, () => document.querySelector('#aviso-txt').textContent === 'Build pronto', undefined, 9000), 'passada a janela do Desfazer, o aviso de fora aparece');
+  await p.context().close();
+
   /* ---------- aviso velho não volta ao abrir a página ---------- */
   await h.reset(); await h.cenario({ avisosDeFora: [{ id: 5, titulo: 'De ontem', texto: '', nivel: 'info', em: agoraIso(-300000) }] });
   p = await h.pagina(); await pronta(h, p); await h.dormir(1500);
@@ -109,6 +129,17 @@ export default async function (h) {
   p = await h.pagina(); await pronta(h, p); await abrirGh(h, p);
   await p.click('#gh-corpo .gh-linha');
   h.ok(await h.espera(p, () => document.querySelector('#aviso').classList.contains('erro') && /não conseguiu abrir/.test(document.querySelector('#aviso-txt').textContent)), 'se o Mac não abre o PR, o toast diz o motivo');
+  await p.context().close();
+
+  /* ---------- GitHub: contagem verdadeira acima de cinco ---------- */
+  const muitos = n => Array.from({ length: 5 }, (_, i) => ({ id: `dono/app#${n + i}`, titulo: `PR ${n + i}`, repo: 'dono/app', numero: n + i }));
+  await h.reset(); await h.cenario({ comGitHub: true, github: { estado: 'ok', lidoEm: agoraIso(), revisar: muitos(1), falhando: muitos(20), maisRevisar: 7, maisFalhando: 3 } });
+  p = await h.pagina(); await pronta(h, p);
+  h.ok(await p.evaluate(() => document.querySelector('.tecla[data-id="github"] .selo')?.textContent) === '20', 'o selo conta além da lista (12 + 8 = 20)');
+  await abrirGh(h, p);
+  const t2 = await p.evaluate(() => [...document.querySelectorAll('#gh-corpo .gh-grupo h3')].map(x => x.textContent).join('|') + '#' + [...document.querySelectorAll('#gh-corpo .gh-mais')].map(x => x.textContent).join('|') + '#' + document.querySelectorAll('#gh-corpo .gh-linha').length);
+  h.ok(t2 === 'Esperando sua revisão12|CI falhando8#e mais 7 no GitHub|e mais 3 no GitHub#10', `a folha mostra 5 por grupo, a contagem real e quantos faltam (${t2})`);
+  await h.dormir(700); await h.foto(p, 'avisos-github-github-mais');
   await p.context().close();
 
   for (const [rotulo, github, texto] of [

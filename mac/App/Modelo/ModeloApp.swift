@@ -92,7 +92,7 @@ final class ModeloApp: ObservableObject {
     private var vigia: VigiaConfig?
     private var servidorHttps: ServidorHttps?
     /// Avisos e valores que scripts deste Mac mandam pela porta de fora. A mesma memória alimenta o estado do iPhone.
-    let avisosDeFora = ArmazemDeAvisos()
+    let avisosDeFora = ArmazemDeAvisos(primeiroId: Int(Date().timeIntervalSince1970 * 1000))
     /// A chave da porta de fora. Nos testes mora numa pasta temporária: nunca grava na pasta do Deck de verdade.
     let chaveDeFora = ChaveDeAvisos(pasta: AmbienteDeTeste.ativo ? FileManager.default.temporaryDirectory.appendingPathComponent("deck-teste-chave-de-fora") : Variante.atual.pastaDeDados())
     /// A porta em que a porta de fora abriu (nil: ainda não, ou não abriu).

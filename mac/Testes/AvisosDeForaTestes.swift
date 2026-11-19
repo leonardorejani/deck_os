@@ -148,10 +148,21 @@ final class AvisosDeForaTestes: XCTestCase {
         XCTAssertEqual(pedir(r, "/aviso", #"{"titulo":"a"}"#, em: agora.addingTimeInterval(ArmazemDeAvisos.janela + 1)).status, 200)
     }
 
-    func testChuteDeChaveTambemGastaAVaga() {
+    func testPedidoSemAChaveCertaNaoGastaVagaEOsScriptsDeVerdadeContinuamPassando() {
         let (r, _) = roteador()
-        for _ in 0..<ArmazemDeAvisos.pedidosPorJanela { XCTAssertEqual(pedir(r, "/aviso", "{}", chave: "x").status, 401) }
-        XCTAssertEqual(pedir(r, "/aviso", #"{"titulo":"a"}"#).status, 429, "nem a chave certa passa depois do limite")
+        for _ in 0..<(ArmazemDeAvisos.pedidosPorJanela * 3) { XCTAssertEqual(pedir(r, "/aviso", "{}", chave: "x").status, 401) }
+        XCTAssertEqual(pedir(r, "/aviso", #"{"titulo":"a"}"#).status, 200, "a rajada sem chave não pode gastar a cota")
+    }
+
+    func testIdsRecomecamDoPrimeiroIdPedidoParaNaoVoltarAUmDepoisDeReiniciar() {
+        let antes = ArmazemDeAvisos(primeiroId: 5000)
+        guard case .success(let a) = antes.registrarAviso(titulo: "a", texto: nil, nivel: nil, agora: agora),
+              case .success(let b) = antes.registrarAviso(titulo: "b", texto: nil, nivel: nil, agora: agora) else { return XCTFail() }
+        XCTAssertEqual([a.id, b.id], [5000, 5001])
+        // Um Mac reiniciado cria o armazém de novo com o relógio: o id novo tem de passar o maior id que o iPhone já viu.
+        let depois = ArmazemDeAvisos(primeiroId: 6000)
+        guard case .success(let c) = depois.registrarAviso(titulo: "c", texto: nil, nivel: nil, agora: agora) else { return XCTFail() }
+        XCTAssertGreaterThan(c.id, b.id)
     }
 
     // MARK: Chave em arquivo

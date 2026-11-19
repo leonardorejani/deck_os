@@ -8,6 +8,6 @@ Camadas tocadas: SPEC, núcleo (mac/Nucleo), app do Mac (mac/App), painel (paine
 
 Decisões:
 
-- A porta de fora é HTTP simples em 127.0.0.1, com chave própria em arquivo 0600, para o curl de um script não depender de certificado nem do código do iPhone. O pedido gasta uma vaga de taxa antes de a chave ser conferida, para chute de chave também ser limitado.
+- A porta de fora é HTTP simples em 127.0.0.1, com chave própria em arquivo 0600, para o curl de um script não depender de certificado nem do código do iPhone. A chave é conferida antes da taxa: só pedido com a chave certa gasta vaga, para quem chuta a porta não esgotar a cota dos scripts de verdade.
 - GitHub vira tecla de fábrica (como Controles e Meet), não bloco novo: o Mac só chama o gh quando o perfil ativo tem a tecla, e só quando o iPhone pede o estado, com cache de 3 minutos.
 - O endereço do PR nunca vai para o iPhone. O iPhone manda o id e o Mac só abre o que acabou de ler, e só endereço https do github.com.

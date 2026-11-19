@@ -13,6 +13,9 @@ const af = { visto: 0, fila: [], ocupado: false, primeira: true };
 function processarAvisosDeFora(e) {
   const lista = Array.isArray(e?.avisosDeFora) ? e.avisosDeFora : [];
   const ref = Date.parse(e.agora) || Date.now();
+  // O Mac reiniciou e a contagem dele voltou: se tudo o que ele manda é menor que o que já vi, recomeço do zero
+  const ids = lista.filter(a => a && Number.isInteger(a.id)).map(a => a.id);
+  if (ids.length && Math.max(...ids) < af.visto) af.visto = 0;
   const novos = lista.filter(a => a && Number.isInteger(a.id) && a.id > af.visto);
   if (!novos.length) { af.primeira = false; return }
   af.visto = Math.max(af.visto, ...novos.map(a => a.id));
@@ -24,7 +27,10 @@ function processarAvisosDeFora(e) {
 }
 function tocarFila() {
   if (af.ocupado) return;
-  const a = af.fila.shift(); if (!a) return;
+  if (!af.fila.length) return;
+  // Já há um aviso na tela (o Desfazer de uma ação, um erro de verdade): o de fora espera a vez e não o cobre
+  if ($('#aviso')?.classList.contains('visivel')) { af.ocupado = true; setTimeout(() => { af.ocupado = false; tocarFila() }, 500); return }
+  const a = af.fila.shift();
   af.ocupado = true;
   avisar(a.texto ? `${a.titulo}. ${a.texto}` : a.titulo, { erro: a.nivel === 'erro' });
   setTimeout(() => { af.ocupado = false; tocarFila() }, TEMPO_TOAST);
@@ -52,8 +58,8 @@ function abrirValores() { vl.chave = ''; pintarValores(); abrirFolha('#f-valores
 
 /* ---------- GitHub ---------- */
 const gh = { chave: '', ocupado: false };
-const grupoGh = (titulo, itens, classe) => `<section class="gh-grupo ${classe}" aria-label="${esc(titulo)}"><h3>${esc(titulo)}<small>${itens.length}</small></h3>${itens.map(i =>
-  `<button class="gh-linha" data-gh="${esc(i.id)}"><span class="gh-tx"><b>${esc(i.titulo)}</b><small>${esc(i.repo)} #${i.numero}</small></span><span class="gh-seta" aria-hidden="true">${SVG.dir}</span></button>`).join('')}</section>`;
+const grupoGh = (titulo, itens, classe, mais = 0) => `<section class="gh-grupo ${classe}" aria-label="${esc(titulo)}"><h3>${esc(titulo)}<small>${itens.length + mais}</small></h3>${itens.map(i =>
+  `<button class="gh-linha" data-gh="${esc(i.id)}"><span class="gh-tx"><b>${esc(i.titulo)}</b><small>${esc(i.repo)} #${i.numero}</small></span><span class="gh-seta" aria-hidden="true">${SVG.dir}</span></button>`).join('')}${mais > 0 ? `<p class="gh-lido gh-mais">e mais ${mais} no GitHub</p>` : ''}</section>`;
 function githubHTML() {
   const g = V?.github;
   if (!g) return '<div class="vazio-bloco" style="min-height:160px"><strong>Lendo o GitHub</strong><span>Um instante.</span></div>';
@@ -64,7 +70,7 @@ function githubHTML() {
   const revisar = g.revisar || [], falhando = g.falhando || [];
   if (!revisar.length && !falhando.length) return '<div class="vazio-bloco" style="min-height:160px"><strong>Tudo em dia</strong><span>Nenhum PR esperando você e nenhum seu com a CI falhando.</span></div>';
   const lido = g.lidoEm ? new Date(g.lidoEm) : null;
-  return `<div class="gh-grupos">${revisar.length ? grupoGh('Esperando sua revisão', revisar, 'revisar') : ''}${falhando.length ? grupoGh('CI falhando', falhando, 'falhando') : ''}</div>${lido && !isNaN(lido) ? `<p class="gh-lido">Lido às ${hhmm(lido)}</p>` : ''}`;
+  return `<div class="gh-grupos">${revisar.length ? grupoGh('Esperando sua revisão', revisar, 'revisar', g.maisRevisar | 0) : ''}${falhando.length ? grupoGh('CI falhando', falhando, 'falhando', g.maisFalhando | 0) : ''}</div>${lido && !isNaN(lido) ? `<p class="gh-lido">Lido às ${hhmm(lido)}</p>` : ''}`;
 }
 function pintarGitHub() {
   const corpo = $('#gh-corpo'); if (!corpo || !V) return;

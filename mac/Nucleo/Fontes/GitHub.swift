@@ -19,12 +19,15 @@ struct ResumoGitHub: Codable, Equatable, Sendable {
     var revisar: [ItemGitHub] = []
     /// PRs abertos da pessoa com a CI falhando.
     var falhando: [ItemGitHub] = []
+    /// Quantos PRs a mais existem além dos que a lista leva (a lista é curta, a contagem é a verdadeira).
+    var maisRevisar: Int = 0
+    var maisFalhando: Int = 0
     /// Só quando o estado é "erro" ou "sem-login": o que fazer, em português.
     var aviso: String? = nil
     /// Quando foi lido, ISO 8601.
     var lidoEm: String? = nil
 
-    var total: Int { revisar.count + falhando.count }
+    var total: Int { revisar.count + maisRevisar + falhando.count + maisFalhando }
 }
 
 protocol ProvedorDeGitHub: Sendable {
@@ -36,6 +39,8 @@ struct FonteGitHub: Sendable {
     let executor: any Executor
     /// Quantos itens cada lista leva para o iPhone (a tela é de olhar, não de trabalhar).
     static let maxPorLista = 5
+    /// Quantos PRs cada busca traz só para contar (o selo mostra 99+ acima disso).
+    static let maxBusca = 100
     static let segundos = 15
     /// O app do Mac não herda o PATH do terminal: o gh do Homebrew mora em /opt/homebrew/bin (ou /usr/local/bin no Mac Intel).
     static let caminho = "PATH=/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
@@ -61,16 +66,17 @@ struct FonteGitHub: Sendable {
         let login = executor.rodar(Shell.limitado("\(Self.caminho) gh auth status", segundos: Self.segundos))
         guard login.status == 0 else { return ResumoGitHub(estado: "sem-login", aviso: Self.semLogin, lidoEm: carimbo) }
 
-        let campos = "--json number,title,url,repository --limit \(Self.maxPorLista + 1)"
+        let campos = "--json number,title,url,repository --limit \(Self.maxBusca)"
         let pedir = executor.rodar(Shell.limitado("\(Self.caminho) gh search prs --review-requested=@me --state=open \(campos)", segundos: Self.segundos))
         let falhar = executor.rodar(Shell.limitado("\(Self.caminho) gh search prs --author=@me --state=open \(campos) -- status:failure", segundos: Self.segundos))
         guard pedir.status == 0, falhar.status == 0, let a = Self.itens(pedir.saida), let b = Self.itens(falhar.saida) else {
             return ResumoGitHub(estado: "erro", aviso: "Não consegui ler o GitHub agora. Confira a internet e o gh auth status.", lidoEm: carimbo)
         }
         var urls: [String: String] = [:]
-        for i in a + b { urls[i.item.id] = i.url }
+        for i in a.prefix(Self.maxPorLista) + b.prefix(Self.maxPorLista) { urls[i.item.id] = i.url }
         guardado.trocar(urls)
-        return ResumoGitHub(estado: "ok", revisar: a.prefix(Self.maxPorLista).map(\.item), falhando: b.prefix(Self.maxPorLista).map(\.item), lidoEm: carimbo)
+        return ResumoGitHub(estado: "ok", revisar: a.prefix(Self.maxPorLista).map(\.item), falhando: b.prefix(Self.maxPorLista).map(\.item),
+                             maisRevisar: max(0, a.count - Self.maxPorLista), maisFalhando: max(0, b.count - Self.maxPorLista), lidoEm: carimbo)
     }
 
     /// Um PR com o endereço dele (que nunca sai do Mac).

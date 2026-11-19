@@ -300,7 +300,7 @@ function estado() {
   const semMed = c.uso === 'sem-medicao';
   const selos = { whatsapp: c.xss ? X('23') : '23' };
   if (c.agenda === 'sem') selos.calendario = '!';
-  const nGh = c.github ? (c.github.revisar?.length || 0) + (c.github.falhando?.length || 0) : 0;
+  const nGh = c.github ? (c.github.revisar?.length || 0) + (c.github.falhando?.length || 0) + (c.github.maisRevisar || 0) + (c.github.maisFalhando || 0) : 0;
   if (c.comGitHub && nGh > 0) selos.github = String(nGh);
   if (c.comValores && c.valoresDeFora.length) selos.valores = String(c.valoresDeFora.length);
   return {
