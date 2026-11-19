@@ -85,7 +85,23 @@ struct EditorDeTecla: View {
             case .tecla: PassoTeclado(tela: tela, tecla: tecla)
             case .comando: PassoComando(tela: tela, tecla: tecla)
             }
+            TesteDaTecla(tela: tela, tecla: tecla)
             if tipo != .app { EscolhaDeIcone(tela: tela, tecla: tecla) }
+        }
+    }
+}
+
+/// "Testar": executa a tecla como se tocada no iPhone e mostra o resultado (ok ou o erro em uma linha).
+private struct TesteDaTecla: View {
+    @ObservedObject var tela: ModeloTeclas
+    var tecla: Tecla
+
+    var body: some View {
+        HStack(spacing: Tema.Espaco.item) {
+            Text(tela.saidaDoTeste).font(.system(size: Tema.Texto.xs, design: .monospaced)).foregroundColor(Tema.Cor.texto2).lineLimit(1)
+                .accessibilityLabel("Resultado do teste")
+            Spacer(minLength: 0)
+            Button(tecla.ligaEDesliga ? "Testar (liga ou desliga)" : "Testar", action: tela.testarComando).buttonStyle(EstiloDoBotao())
         }
     }
 }
@@ -511,11 +527,6 @@ private struct PassoComando: View {
                 .overlay { RoundedRectangle(cornerRadius: Tema.Raio.sm, style: .continuous).strokeBorder(Tema.Cor.borda, lineWidth: Tema.Traco.fino) }
                 .accessibilityLabel(ligaEDesliga ? "Comando para ligar" : "Comando")
             LigaEDesliga(tela: tela, tecla: tecla)
-            HStack(spacing: Tema.Espaco.item) {
-                Text(tela.saidaDoTeste).font(.system(size: Tema.Texto.xs, design: .monospaced)).foregroundColor(Tema.Cor.texto2).lineLimit(2)
-                Spacer(minLength: 0)
-                Button(ligaEDesliga ? "Testar (liga ou desliga)" : "Testar agora", action: tela.testarComando).buttonStyle(EstiloDoBotao())
-            }
             ajuda("Roda no zsh do Mac. Prontos para usar:")
             Quebra(espaco: Tema.Espaco.item) {
                 ForEach(Self.exemplos, id: \.0) { n, v in Chip(texto: n) { tela.escolherComando(v, nome: n) } }
