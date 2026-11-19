@@ -13,12 +13,12 @@ import Foundation
 public final class GerenteBluetooth: @unchecked Sendable {
     /// Espera entre tentativas de reconectar. Cresce até o teto e volta ao mínimo quando conecta.
     static let esperaMinima: TimeInterval = 1
-    static let esperaMaxima: TimeInterval = 15
+    static let esperaMaxima: TimeInterval = 30
     /// Rodadas seguidas sem achar nenhum Mac (desligado, fora de alcance) depois das quais o iPhone passa a descansar mais:
     /// a cada rodada o rádio varre e conecta por uns 14 s, e a tela nunca apaga. Conectar ou `retomar()` volta ao mínimo.
     /// Quem volta rápido é o Mac, que conecta no iPhone anunciando (sentido invertido), sem depender deste descanso.
     static let rodadasParaRecuar = 10
-    static let esperaMaximaSemMac: TimeInterval = 45
+    static let esperaMaximaSemMac: TimeInterval = 30
     /// Rejeitado pelo Mac (código de acesso que ele não reconhece): não adianta insistir a cada segundo.
     static let esperaSeNaoPareado: TimeInterval = 30
     /// Quantas vezes seguidas o Mac já conhecido pode recusar este iPhone antes de o pareamento valer como acabado.
@@ -292,13 +292,25 @@ public final class GerenteBluetooth: @unchecked Sendable {
         var recusados = Set<String>()
         var recusasSeguidas = 0
         var cifragensSeguidas = 0
+        /// Falhas seguidas de conectar: escolhem o degrau da espera (1, 2, 4, 8, 16, 30 s). Conectar zera.
+        var falhasSeguidas = 0
         var tentativa = 0
+        /// Por que a última tentativa falhou, quando dá para dizer (o Mac recusou o código, ou só há outros Macs por perto).
+        var causa: CausaDaConexao?
+        /// Conta mais uma falha e devolve o degrau da espera. Se um Mac conectou ou o app voltou ao primeiro plano durante a
+        /// rodada (retomadas mudou), a falha de uma rodada que já nasceu velha não herda o recuo: conta de novo do 1.
+        func esperaDaFalha(rodada retomadasDaRodada: Int, teto: TimeInterval) -> TimeInterval {
+            if trava.withLock({ retomadas != retomadasDaRodada }) { falhasSeguidas = 0 }
+            falhasSeguidas += 1
+            return min(EscalaDeEspera.degrau(falhasSeguidas), teto)
+        }
         defer { trava.withLock { if geracao == g { laco = nil } } }
         while !Task.isCancelled, trava.withLock({ geracao == g }) {
             guard let pareado = cofre.ler() else { break }
             if trava.withLock({ conexao != nil }) {
                 // Conexão de pé (por qualquer sentido): o recuo de quando o Mac sumia não vale para a próxima queda.
                 espera = Self.esperaMinima
+                falhasSeguidas = 0
                 try? await Task.sleep(nanoseconds: 500_000_000)
                 continue
             }
@@ -313,9 +325,10 @@ public final class GerenteBluetooth: @unchecked Sendable {
             var alvoAtual: String?
             var viaProcura = false
             tentativa += 1
+            let retomadasDaRodada = trava.withLock { retomadas }
             radio.confiarNoNome(pareado.nomeMac)
             log("bluetooth: tentativa \(tentativa) (id guardado \(pareado.idBluetooth.map { String($0.prefix(8)) } ?? "nenhum"), Mac pareado \"\(pareado.nomeMac)\", recusados \(recusados.count), rádio pronto=\(radio.pronto))")
-            if let motivo = radio.indisponivel { situar(motivo) } else { situar("Procurando o Mac pelo Bluetooth. Tentativa \(tentativa).") }
+            if let motivo = radio.indisponivel { situar(motivo) } else { situar(causa?.texto() ?? "Procurando o Mac pelo Bluetooth. Tentativa \(tentativa).") }
             do {
                 let (id, fluxo, achadoPelaProcura) = try await conectarNoMac(pareado, excluindo: recusados)
                 alvoAtual = id
@@ -331,6 +344,8 @@ public final class GerenteBluetooth: @unchecked Sendable {
                 recusados = []
                 recusasSeguidas = 0
                 cifragensSeguidas = 0
+                causa = nil
+                falhasSeguidas = 0
                 cofre.guardarBluetooth(id)
                 tentativa = 0
                 trava.withLock { rodadasSemMac = 0 }
@@ -354,6 +369,8 @@ public final class GerenteBluetooth: @unchecked Sendable {
                     // Mac já conhecido que não reconhece o código: o Mac desconectou este iPhone. Sem canal nenhum, a
                     // página nunca leva um 401 e ficaria em "Mac desconectado" para sempre. Confirma uma vez e avisa.
                     recusasSeguidas += 1
+                    causa = .codigoExpirou
+                    situar(CausaDaConexao.codigoExpirou.texto())
                     if recusasSeguidas >= Self.recusasParaEsquecer {
                         log("bluetooth: o Mac recusou este iPhone \(recusasSeguidas) vezes, o pareamento acabou")
                         let aviso = trava.withLock { aoNaoReconhecidoBt }
@@ -382,13 +399,15 @@ public final class GerenteBluetooth: @unchecked Sendable {
                     espera = Self.esperaSeCifragemFalha
                 } else {
                     log("bluetooth: tentativa \(tentativa) falhou na cifragem do enlace (CBError \(erro.codigo)), \(cifragensSeguidas) de \(Self.cifragensParaAvisar) antes de avisar")
-                    espera = min(espera * 2, Self.esperaMaxima)
-                    situar("Não achei o Mac pelo Bluetooth. Tentando de novo. Tentativa \(tentativa).")
+                    espera = esperaDaFalha(rodada: retomadasDaRodada, teto: Self.esperaMaxima)
+                    situar(CausaDaConexao.macIndisponivel.texto(tentativa: tentativa))
                 }
             } catch ErroSemCandidato.todosRecusaram where pareado.idBluetooth != nil {
                 // O Mac conhecido não respondeu no id guardado e só há outros Macs por perto, que não conhecem este iPhone.
                 // Não é o Mac dele recusando: não conta para esquecer o pareamento.
                 recusados = []
+                causa = .identidadeMudou
+                situar(CausaDaConexao.identidadeMudou.texto())
                 espera = Self.esperaMinima
             } catch ErroSemCandidato.todosRecusaram {
                 // Pareado só pelo cabo (id do Bluetooth ainda desconhecido): cada Mac por perto já recusou este iPhone nesta
@@ -404,10 +423,11 @@ public final class GerenteBluetooth: @unchecked Sendable {
                 espera = Self.esperaSeNaoPareado
             } catch {
                 log("bluetooth: tentativa \(tentativa) falhou: \(error)")
+                causa = nil
                 let semMac = trava.withLock { rodadasSemMac += 1; return rodadasSemMac }
-                espera = min(espera * 2, semMac >= Self.rodadasParaRecuar ? Self.esperaMaximaSemMac : Self.esperaMaxima)
+                espera = esperaDaFalha(rodada: retomadasDaRodada, teto: semMac >= Self.rodadasParaRecuar ? Self.esperaMaximaSemMac : Self.esperaMaxima)
                 if let motivo = radio.indisponivel { situar(motivo) } else if !(error is CancellationError) {
-                    situar("Não achei o Mac pelo Bluetooth. Tentando de novo. Tentativa \(tentativa).")
+                    situar(CausaDaConexao.macIndisponivel.texto(tentativa: tentativa))
                 }
             }
             // Em fatias: o app voltar ao primeiro plano (retomar) acorda o descanso, que pode ser longo.
@@ -418,7 +438,7 @@ public final class GerenteBluetooth: @unchecked Sendable {
                 try? await Task.sleep(nanoseconds: UInt64(fatia * 1_000_000_000))
                 resta -= fatia
             }
-            if trava.withLock({ retomadas != retomadasAntes }) { espera = Self.esperaMinima }
+            if trava.withLock({ retomadas != retomadasAntes }) { espera = Self.esperaMinima; falhasSeguidas = 0 }
         }
     }
 

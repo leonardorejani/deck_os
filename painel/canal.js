@@ -44,7 +44,25 @@
    falhasParaOffline e msParaOffline: a tela "Mac desconectado" só fecha quando o Mac sumiu de fato, com essas falhas
    seguidas E esse tempo desde a última resposta boa. Com o Mac pendurado (cada pedido espera o tempo limite inteiro),
    falhasTravado e msTravado fecham mais cedo, senão a tela ficaria uns 16 s com cara de ao vivo. Um tropeço (pedido lento, Mac reiniciando) não pisca a tela. */
-const AJUSTES = Object.assign({ tempoLimite: 5000, intervalo: 1000, deslocamento: 180000, falhasParaOffline: 3, msParaOffline: 5000, falhasTravado: 2, msTravado: 10000, semToqueMs: 10000 }, window.DECK_AJUSTES);
+const AJUSTES = Object.assign({ tempoLimite: 5000, intervalo: 1000, deslocamento: 180000, falhasParaOffline: 3, msParaOffline: 5000, falhasTravado: 2, msTravado: 10000, semToqueMs: 10000,
+  esperasOffline: [1000, 2000, 4000, 8000, 16000, 30000] }, window.DECK_AJUSTES);
+
+/* Por que o Mac não responde, em vez de um erro genérico (ideia de docs/SECURE_CONNECTIONS.md do WinDock, MIT, reescrita aqui).
+   O app nativo diz as mesmas frases pelo Swift (ios/Pacote/Sources/DeckCasca/Diagnostico.swift).
+   A identidade do Mac que mudou só o Bluetooth do app sabe dizer: pelo HTTPS, certificado trocado e Mac desligado falham igual. */
+const CAUSAS = {
+  macIndisponivel: 'Mac indisponível. Confira se ele está ligado e no mesmo Wi-Fi.',
+  codigoExpirou: 'O código expirou. Leia o QR de novo no Mac.',
+  pareamentoPausado: 'Pareamento pausado. Gere um código novo no Mac.',
+};
+function causaDaFalha(e) {
+  if (e?.status === 401) return e.semCodigo ? 'naoPareado' : 'codigoExpirou';
+  if (e?.status === 429) return 'pareamentoPausado';
+  return 'macIndisponivel';
+}
+/* Quando o Mac sumiu, as novas tentativas se espaçam em 1, 2, 4, 8, 16 e 30 s e ficam em 30: sem rajada de pedidos.
+   `n` é a tentativa depois de a tela fechar (1 é a primeira). Voltar para a frente ou a rede mudar recomeçam do 1. */
+const esperaOffline = n => AJUSTES.esperasOffline[Math.min(Math.max(n, 1), AJUSTES.esperasOffline.length) - 1];
 
 /* a lista do WhatsApp pelo Bluetooth (uns 25 KB/s) leva mais que os 5 s dos outros pedidos: com 5 s ela nunca chegava */
 const TEMPO_WHATSAPP = AJUSTES.tempoLimite * 5;
@@ -68,7 +86,7 @@ function lerCodigo() {
 function criarCanalHttps() {
   let codigo = lerCodigo();
   async function pedir(metodo, caminho, corpo, limite = AJUSTES.tempoLimite) {
-    if (!codigo) throw erroDeCanal('Abra o Deck no Mac e leia o QR de novo.', 401);
+    if (!codigo) throw Object.assign(erroDeCanal('Abra o Deck no Mac e leia o QR de novo.', 401), { semCodigo: true });
     const ctl = new AbortController(), tempo = setTimeout(() => ctl.abort(), limite);
     try {
       let r;
@@ -136,7 +154,7 @@ function criarCanalHttps() {
       } catch { throw erroDeCanal('Não deu para falar com o Mac.', 0, true) } finally { clearTimeout(tempo) }
       let dados = null;
       try { dados = await r.json() } catch {}
-      if (!r.ok || !dados?.codigoAcesso) throw erroDeCanal(dados?.erro || 'O Mac não aceitou o código.', r.status);
+      if (!r.ok || !dados?.codigoAcesso) throw erroDeCanal(r.status === 429 ? CAUSAS.pareamentoPausado : dados?.erro || 'O Mac não aceitou o código.', r.status);
       codigo = dados.codigoAcesso; guardar('deck-codigo', codigo);
     },
   };
