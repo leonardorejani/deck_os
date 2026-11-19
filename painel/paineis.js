@@ -784,8 +784,8 @@ function pintarSeletor(rolar) {
 /* ---------- Roleta de horário (estilo despertador do iPhone): horas 00 a 23 e minutos de 5 em 5, com scroll-snap ----------
    O dedo rola de verdade (momentum do navegador). Enquanto rola, cada passada de item grava o valor; quando para, a roleta
    assenta no valor real (o Fim pode ter sido cortado em 23:59 ou depois do início). Mover a roleta por código (toque num vizinho,
-   duração, teclado) marca rol.auto e ignora os scrolls que isso provoca, para o valor não passar por horários do caminho. */
-const rol = { auto: false, tAuto: 0, tPara: 0, tocando: false, quadro: 0 };
+   duração, teclado) marca a coluna (_alvo) e ignora os scrolls que isso provoca, para o valor não passar por horários do caminho. */
+const rol = { tPara: 0, tocando: false, quadro: 0 };
 const MINUTOS = Array.from({ length: 12 }, (_, i) => i * 5);
 const colRoleta = k => $(`#sel-meio [data-rol="${k}"]`);
 const altItem = col => col.querySelector('[role="option"]')?.offsetHeight || 44;
@@ -810,11 +810,11 @@ function sincronizarRoleta(suave) {
 }
 function rolarPara(col, idx, suave) {
   const alvo = Math.max(0, idx) * altItem(col);
-  segurarAuto();
-  if (Math.abs(col.scrollTop - alvo) < 1) return;
+  if (Math.abs(col.scrollTop - alvo) < 1) { col._alvo = null; return }
+  col._alvo = alvo; // enquanto a coluna não chega aqui, os scrolls dela são do código e não do dedo (não gravam valor)
   col.scrollTo({ top: alvo, behavior: suave && !reduzido() ? 'smooth' : 'auto' });
+  clearTimeout(rol.tPara); rol.tPara = setTimeout(assentarRoleta, 450); // se o navegador cancelar este movimento (snap de soltar o dedo), ninguém mais avisa: confere
 }
-function segurarAuto() { rol.auto = true; clearTimeout(rol.tAuto); rol.tAuto = setTimeout(() => { rol.auto = false }, 160) }
 // opacidade e escala pela distância até a faixa do meio, só opacity e transform (nada de layout por quadro)
 function marcarRoleta() {
   for (const col of document.querySelectorAll('#sel-meio .rol-col')) {
@@ -863,12 +863,15 @@ function escolherNaRoleta(chave, idx) {
 document.addEventListener('scroll', e => {
   const col = e.target; if (!(col instanceof Element) || !col.matches?.('#sel-meio .rol-col')) return;
   cancelAnimationFrame(rol.quadro); rol.quadro = requestAnimationFrame(marcarRoleta);
-  if (rol.auto) { segurarAuto(); clearTimeout(rol.tPara); rol.tPara = setTimeout(assentarRoleta, 200); return } // o navegador pode terminar o snap por cima do movimento do código: confere de novo quando parar
+  if (col._alvo != null) { // movimento do código: não grava. Chegou? solta a coluna. O navegador pode ter terminado o snap por cima: confere de novo quando parar
+    if (Math.abs(col.scrollTop - col._alvo) < 1) col._alvo = null;
+    clearTimeout(rol.tPara); rol.tPara = setTimeout(assentarRoleta, 200); return;
+  }
   const n = horaDaRoleta(); if (n != null) escreverRoleta(n);
   clearTimeout(rol.tPara); rol.tPara = setTimeout(assentarRoleta, 150);
 }, true);
-function assentarRoleta() { if (rol.tocando) return; const n = horaDaRoleta(); if (n != null && n !== valorRoleta() || colRoleta('m') && [...colRoleta('m').children].length !== valoresMin(extraMin(valorRoleta())).length) sincronizarRoleta(true) }
-document.addEventListener('touchstart', e => {  if (e.target.closest?.('#sel-meio .rol-col')) { rol.tocando = true; rol.auto = false; clearTimeout(rol.tAuto) } }, { passive: true, capture: true });
+function assentarRoleta() { if (rol.tocando) return; for (const c of document.querySelectorAll('#sel-meio .rol-col')) c._alvo = null; const n = horaDaRoleta(); if (n != null && n !== valorRoleta() || colRoleta('m') && [...colRoleta('m').children].length !== valoresMin(extraMin(valorRoleta())).length) sincronizarRoleta(true) }
+document.addEventListener('touchstart', e => {  if (e.target.closest?.('#sel-meio .rol-col')) { rol.tocando = true; for (const c of document.querySelectorAll('#sel-meio .rol-col')) c._alvo = null } }, { passive: true, capture: true });
 const soltou = () => {  if (!rol.tocando) return; rol.tocando = false; clearTimeout(rol.tPara); rol.tPara = setTimeout(assentarRoleta, 150) };
 document.addEventListener('touchend', soltou, { passive: true, capture: true }); document.addEventListener('touchcancel', soltou, { passive: true, capture: true });
 document.addEventListener('keydown', e => {

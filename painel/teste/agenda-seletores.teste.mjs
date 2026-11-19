@@ -220,7 +220,7 @@ export default async function (h) {
     await abrirRoleta(h, p, 'fim');
     h.ok(await naFaixa(p) === '23:59' && /23:59/.test(await p.textContent('#sel-valor')), `${nome}: a roleta do Fim mostra 23:59 (${await naFaixa(p)})`);
     for (const [chave, itens] of [['m', -1], ['m', 1], ['h', -1], ['h', 1]]) {
-      await arrastar(p, ctx, chave, itens); await h.dormir(800);
+      await arrastar(p, ctx, chave, itens); await h.dormir(1500);
       const v = await valor(p, 'nc-fim');
       h.ok(v === '23:59' && /23:59/.test(await p.textContent('#nc-fim-val')) && await naFaixa(p) === '23:59' && await assentada(p), `${nome}: no teto, arrastar ${chave === 'h' ? 'as horas' : 'os minutos'} ${itens > 0 ? 'para cima' : 'para baixo'} mantém 23:59 e a roleta volta (campo "${v}", roleta "${await naFaixa(p)}")`);
     }
