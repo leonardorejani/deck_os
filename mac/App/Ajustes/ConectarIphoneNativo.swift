@@ -123,36 +123,53 @@ private struct AppNativoPareado: View {
     var body: some View {
         // O relógio vem de Conexões (5 s): "agora" vira "há 1 min" sem ninguém mexer.
         let estado = modelo.renovacao.estado(agora: agora)
+        let origem = modelo.origemDaInstalacao
+        let cartao = modelo.cartaoDaRenovacao(agora: agora)
         VStack(alignment: .leading, spacing: Tema.Espaco.grade) {
-            if case .apertando(let vence) = estado, modelo.nativo != nil {
-                AlertaDaRenovacao(vence: vence, agora: agora) { modelo.renovarAppNativo() }
+            if let cartao, modelo.nativo != nil {
+                AlertaDaRenovacao(cartao: cartao, agora: agora) { modelo.renovarAppNativo() }
             }
             LinhasDeAjuste {
-                LinhaDeAjuste(titulo: "App no iPhone", apoio: TextosDoNativo.instalado(modelo.renovacao)) {
+                LinhaDeAjuste(titulo: "App no iPhone", apoio: origem.externa ? "Instalado fora do Deck" : TextosDoNativo.instalado(modelo.renovacao)) {
                     if let v = modelo.renovacao.versao { ValorDeAjuste(v) }
+                }
+                LinhaDeAjuste(titulo: "Instalado por", apoio: TextosDoNativo.instaladoPorApoio(origem), divisoria: true) {
+                    ValorDeAjuste(TextosDoNativo.instaladoPor(origem))
+                }
+                if let vence = modelo.renovacao.venceReal {
+                    LinhaDeAjuste(titulo: "Vence em", apoio: TextosDoNativo.vencimentoRealApoio, divisoria: true) {
+                        ValorDeAjuste(TextosDoNativo.vencimentoReal(vence))
+                    }
                 }
                 LinhaDeAjuste(titulo: "Último canal", apoio: TextosDoNativo.canalApoio, divisoria: true) {
                     ValorDeAjuste(TextosDoNativo.ultimoCanal(nativo, agora: agora))
                 }
-                LinhaDeAjuste(titulo: "Renovação automática", apoio: TextosDoNativo.renovacaoApoio, divisoria: true) {
-                    HStack(spacing: Tema.Espaco.item) {
-                        if case .apertando = estado {
-                            Text(TextosDoNativo.renovacao(estado, agora: agora)).tatile(Tema.Texto.sm, .regular, Tema.Cor.aviso)
-                        } else {
-                            ValorDeAjuste(TextosDoNativo.renovacao(estado, agora: agora))
+                if origem.externa {
+                    LinhaDeAjuste(titulo: "Renovação", apoio: TextosDoNativo.renovacaoApoioExterna, divisoria: true) {
+                        ValorDeAjuste(TextosDoNativo.renovacaoExterna)
+                    }
+                } else {
+                    LinhaDeAjuste(titulo: "Renovação automática", apoio: TextosDoNativo.renovacaoApoio, divisoria: true) {
+                        HStack(spacing: Tema.Espaco.item) {
+                            if case .apertando = estado {
+                                Text(TextosDoNativo.renovacao(estado, agora: agora)).tatile(Tema.Texto.sm, .regular, Tema.Cor.aviso)
+                            } else {
+                                ValorDeAjuste(TextosDoNativo.renovacao(estado, agora: agora))
+                            }
+                            BotaoDeAjuste(texto: "Renovar agora", estilo: .secundario) { modelo.renovarAppNativo() }
                         }
-                        BotaoDeAjuste(texto: "Renovar agora", estilo: .secundario) { modelo.renovarAppNativo() }
                     }
                 }
             }
-            NotaDeAjuste(TextosDoNativo.renovacaoCondicoes)
+            if !origem.externa { NotaDeAjuste(TextosDoNativo.renovacaoCondicoes) }
         }
     }
 }
 
-/// O cartão amarelo (`.alerta-linha`): só aparece com o prazo apertando sem a renovação ter dado certo.
+/// O cartão amarelo (`.alerta-linha`): só aparece com o prazo apertando. Instalado pelo Deck, a renovação não deu certo e
+/// há "Tentar agora". Instalado por outro app (SideStore), só avisa para abrir o SideStore: o Deck não renova essa cópia.
 private struct AlertaDaRenovacao: View {
-    var vence: Date
+    var cartao: CartaoDaRenovacao
     var agora: Date
     var tentar: () -> Void
 
@@ -160,16 +177,28 @@ private struct AlertaDaRenovacao: View {
         HStack(spacing: Tema.Espaco.icone) {
             Svg(Icone.alerta, lado: Tema.Medida.icSec).foregroundColor(Tema.Cor.aviso)
             VStack(alignment: .leading, spacing: Tema.Espaco.fino) {
-                Text(TextosDoNativo.alertaDaRenovacao(vence, agora: agora)).tatile(Tema.Texto.sm, .bold, Tema.Cor.texto, linhas: nil)
-                Text(TextosDoNativo.alertaApoio).tatile(Tema.Texto.xs, .regular, Tema.Cor.texto2, linhas: nil)
+                Text(titulo).tatile(Tema.Texto.sm, .bold, Tema.Cor.texto, linhas: nil)
+                Text(apoio).tatile(Tema.Texto.xs, .regular, Tema.Cor.texto2, linhas: nil)
                     .lineSpacing(Tema.Texto.xs * (Tema.Texto.altura - 1.2))
             }
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity, alignment: .leading)
-            BotaoDeAjuste(texto: "Tentar agora", estilo: .primario, acao: tentar)
+            if case .falhou = cartao { BotaoDeAjuste(texto: "Tentar agora", estilo: .primario, acao: tentar) }
         }
         .padding(Tema.Espaco.pad)
         .frame(maxWidth: .infinity, alignment: .leading)
         .superficie()
+    }
+
+    private var titulo: String {
+        switch cartao {
+        case .falhou(let v): return TextosDoNativo.alertaDaRenovacao(v, agora: agora)
+        case .externa(let v): return TextosDoNativo.alertaDaInstalacaoExterna(v, agora: agora)
+        }
+    }
+
+    private var apoio: String {
+        if case .externa = cartao { return TextosDoNativo.alertaApoioExterna }
+        return TextosDoNativo.alertaApoio
     }
 }

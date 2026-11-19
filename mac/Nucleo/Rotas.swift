@@ -188,6 +188,8 @@ struct Roteador: Sendable {
     var processos: (any ProcessosDoMac)? = nil
     /// A central do Google Meet (estado, entrar, microfone, câmera e sair). Nil: as rotas /api/meet não existem (404).
     var meet: (any MeetDoMac)? = nil
+    /// O app do iPhone diz quem o instalou e quando vence (POST /api/app/instalacao). Nil: a rota não existe (404).
+    var aoInformarInstalacao: (@Sendable (InstalacaoDoApp) -> Void)? = nil
 
     func responder(_ r: HttpRequisicao) -> RespostaRota {
         if r.caminho == "/api/parear" {
@@ -284,6 +286,9 @@ struct Roteador: Sendable {
             // O que a pessoa desligou na tecla Controles do Mac não sai daqui: a barra some no iPhone, como a que o Mac não oferece.
             return somente(["GET"], r) ?? controles.map { .codificar(200, $0.estado().somente(config.ler().controles)) } ?? .erro(404, "Essa rota não existe.")
         }
+        if r.caminho == "/api/app/instalacao" {
+            return somente(["POST"], r) ?? informarInstalacao(r)
+        }
         if r.caminho == "/api/meet" {
             return somente(["GET"], r) ?? meet.map { .codificar(200, $0.estado()) } ?? .erro(404, "Essa rota não existe.")
         }
@@ -323,6 +328,13 @@ struct Roteador: Sendable {
     }
 
     // MARK: Rotas
+
+    private func informarInstalacao(_ r: HttpRequisicao) -> RespostaRota {
+        guard let aviso = aoInformarInstalacao else { return .erro(404, "Essa rota não existe.") }
+        guard let i = InstalacaoDoApp.decodificar(r.corpo) else { return .erro(400, "Não entendi os dados da instalação.") }
+        aviso(i)
+        return .json(200, Data("{\"ok\":true}".utf8))
+    }
 
     private func botao(_ id: String, _ atual: Config) -> RespostaRota {
         let perfil = atual.perfis.first { $0.id == atual.perfilAtivo }
