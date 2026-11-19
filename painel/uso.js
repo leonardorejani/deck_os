@@ -38,9 +38,9 @@ function horaExata(iso) {
   return d.toLocaleString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).replace('.,', ',').replace('.', '');
 }
 const usoRef = () => V?.ref ?? Date.now();
-function textoRitmo(r) {
+function textoRitmo(r, ref) {
   if (!r) return '';
-  const base = r.situacao === 'rapido' ? 'Passa do limite antes de renovar' : r.situacao === 'sobra' ? 'Vai sobrar muito' : r.projecao != null ? `Chega a ${r.projecao}% ao renovar` : '';
+  const base = r.enche ? `No ritmo atual, enche em ${contagemRenova(r.enche, ref)}` : r.situacao === 'rapido' ? 'Passa do limite antes de renovar' : r.situacao === 'sobra' ? 'Vai sobrar muito' : r.projecao != null ? 'No ritmo atual, dá até a renovação' : '';
   return `${base ? base + '. ' : ''}Esperado agora: ${r.esperado}%`;
 }
 
@@ -110,7 +110,7 @@ function preencherUso(corpo, d, animar) {
     const m = el('m', k); m.hidden = !j.ritmo; if (j.ritmo) m.style.left = `${Math.max(0, Math.min(100, j.ritmo.esperado))}%`;
     const r = j.renova ? (us.hora ? `Renova ${horaExata(j.renova)}` : `Renova em ${contagemRenova(j.renova, ref)}`) : '';
     txt(`${k}.renova`, r); el('t', `${k}.renova`).hidden = !r;
-    txt(`${k}.ritmo`, textoRitmo(j.ritmo));
+    txt(`${k}.ritmo`, textoRitmo(j.ritmo, ref));
     txt(`${k}.med`, j.medidoEm ? `Medido há ${haQuanto(j.medidoEm, ref).texto}` : '');
   };
 

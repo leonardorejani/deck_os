@@ -233,10 +233,16 @@ final class UsoDetalheTestes: XCTestCase {
         let renova = agora.addingTimeInterval(3.5 * 86_400) // metade da semana
         var r = RitmoDeUso.calcular(percentual: 80, renova: renova, agora: agora, duracao: 7 * 86_400)!
         XCTAssertEqual(r.esperado, 50); XCTAssertEqual(r.projecao, 160); XCTAssertEqual(r.situacao, "rapido")
+        // 80% em metade da semana: os 20% que faltam levam um quarto de semana (0,875 d) a esse ritmo
+        XCTAssertEqual(Datas.ler(r.enche ?? "")?.timeIntervalSince(agora) ?? 0, 0.875 * 86_400, accuracy: 1, "diz quando enche")
         r = RitmoDeUso.calcular(percentual: 40, renova: renova, agora: agora, duracao: 7 * 86_400)!
         XCTAssertEqual(r.projecao, 80); XCTAssertNil(r.situacao)
+        XCTAssertNil(r.enche, "quem chega à renovação com folga não enche")
         r = RitmoDeUso.calcular(percentual: 30, renova: agora.addingTimeInterval(3 * 3600), agora: agora, duracao: 7 * 86_400)!
         XCTAssertEqual(r.situacao, "sobra")
+        XCTAssertNil(r.enche)
+        XCTAssertNil(RitmoDeUso.calcular(percentual: 100, renova: renova, agora: agora, duracao: 7 * 86_400)?.enche, "já cheio não tem quando encher")
+        XCTAssertNil(RitmoDeUso.calcular(percentual: 90, renova: agora.addingTimeInterval(7 * 86_400 - 60), agora: agora, duracao: 7 * 86_400)?.enche, "nos primeiros 5% da janela não se projeta")
         XCTAssertNil(RitmoDeUso.calcular(percentual: 5, renova: agora.addingTimeInterval(-1), agora: agora, duracao: 7 * 86_400), "janela que já renovou não tem ritmo")
         XCTAssertNil(RitmoDeUso.calcular(percentual: 5, renova: agora.addingTimeInterval(7 * 86_400 - 60), agora: agora, duracao: 7 * 86_400)?.projecao, "no começo da janela não se projeta")
     }

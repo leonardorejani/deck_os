@@ -9,6 +9,8 @@ struct RitmoDeUso: Codable, Equatable, Sendable {
     var projecao: Int?
     /// "rapido" (vai passar de 100% antes de renovar) ou "sobra" (renova em menos de 24 h com mais da metade sem usar).
     var situacao: String?
+    /// Quando o uso chega a 100% se o ritmo de agora continuar (ISO 8601). Só vem quando "rapido" e ainda abaixo de 100%.
+    var enche: String?
 
     static func calcular(percentual: Int, renova: Date?, agora: Date, duracao: TimeInterval) -> RitmoDeUso? {
         guard let renova, duracao > 0, renova > agora else { return nil }
@@ -20,6 +22,12 @@ struct RitmoDeUso: Codable, Equatable, Sendable {
         var situacao: String?
         if let p = projecao, p > 100 { situacao = "rapido" }
         else if percentual < 50, renova.timeIntervalSince(agora) < 86_400 { situacao = "sobra" }
-        return RitmoDeUso(esperado: esperado, projecao: projecao, situacao: situacao)
+        var enche: String?
+        if situacao == "rapido", percentual > 0, percentual < 100 {
+            // taxa = percentual / tempo decorrido, então falta (100 - percentual) / taxa para encher
+            let falta = (100 - Double(percentual)) / Double(percentual) * agora.timeIntervalSince(inicio)
+            enche = Datas.iso(agora.addingTimeInterval(falta), fuso: TimeZone(identifier: "UTC")!)
+        }
+        return RitmoDeUso(esperado: esperado, projecao: projecao, situacao: situacao, enche: enche)
     }
 }
