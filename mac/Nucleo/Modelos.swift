@@ -419,6 +419,7 @@ struct ConversaWhatsApp: Codable, Equatable, Sendable {
 // GET  /api/meet                   -> EstadoMeet {"aberta", "naChamada"?, "microfone", "camera" (ligado|desligado|desconhecido|sem-reuniao), "aviso"?}  a central do Google Meet
 // POST /api/meet/entrar|microfone|camera|sair  traz a aba da reunião (ou abre o Meet), alterna o microfone ou a câmera, sai da chamada -> {"ok": true}
 // POST /api/app/instalacao         <- {"versao"?, "bundleId"?, "equipe"?, "venceEm"? (ISO 8601)}  o app do iPhone diz quem o instalou e quando o perfil vence -> {"ok": true}
+// POST /api/colar                 <- {"texto": "..."} (até 32 mil caracteres) cola no app em foco do Mac (prancheta, Cmd+V, devolve a prancheta) -> {"ok": true}. 409 sem app em foco aceitável, 422 sem Acessibilidade
 // POST /api/parear                 <- {"codigo": "<6 dígitos mostrados no Mac>"} -> {"codigoAcesso"}
 // GET  /ca.crt                     o certificado do CA do Deck (application/x-x509-ca-cert), sem código de acesso
 // GET  /<arquivo>                  a página do painel
