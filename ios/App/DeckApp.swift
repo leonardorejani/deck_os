@@ -49,7 +49,7 @@ enum Montagem {
         let bluetooth = GerenteBluetooth(cofre: cofre, nomeDoIphone: UIDevice.current.name, log: log)
         let semCabo = args.contains("-prova-sem-cabo")
         let casca = Casca(pareador: PareadorCompleto(cabo: gerente, bluetooth: bluetooth), cofre: cofre, vibrar: { vibrador.vibrar() },
-                          cabo: semCabo ? nil : gerente, bluetooth: bluetooth)
+                          cabo: semCabo ? nil : gerente, bluetooth: bluetooth, instalacao: { Montagem.instalacao() })
         casca.iniciar()
         if let i = args.firstIndex(of: "-prova-cabo-sai-em"), i + 1 < args.count, let s = Double(args[i + 1]) {
             // Faz o que o cabo puxado faz: a conexão com o Mac cai de repente.
@@ -60,6 +60,18 @@ enum Montagem {
             }
         }
         return casca
+    }
+}
+
+extension Montagem {
+    /// O perfil de provisionamento que veio dentro do app (o iOS o põe lá ao instalar) e a versão e o pacote do próprio app.
+    static func instalacao() -> InstalacaoDoApp {
+        let info = Bundle.main.infoDictionary
+        let curta = info?["CFBundleShortVersionString"] as? String
+        let compilacao = info?["CFBundleVersion"] as? String
+        let versao = curta.map { v in compilacao.map { "\(v) (\($0))" } ?? v }
+        let perfil = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision").flatMap { try? Data(contentsOf: $0) }
+        return PerfilDeProvisionamento.instalacao(perfil: perfil, versao: versao, bundleId: Bundle.main.bundleIdentifier)
     }
 }
 
