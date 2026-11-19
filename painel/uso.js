@@ -9,7 +9,7 @@
 const CHAVE_PERIODO_USO = 'deck-uso-periodo';
 const PERIODOS_USO = [['dia', 'Dia'], ['semana', 'Semana'], ['mes', 'Mês']];
 const periodoGuardado = () => { const p = lerGuardado(CHAVE_PERIODO_USO); return PERIODOS_USO.some(x => x[0] === p) ? p : 'semana' };
-const us = { periodo: 'semana', dados: null, erro: '', semRota: false, seq: 0, lendo: false, resta: false, hora: false, chave: '', sel: {}, hov: null, graf: {} };
+const us = { periodo: 'semana', dados: null, erro: '', semRota: false, seq: 0, lendo: false, resta: false, hora: false, chave: '', graf: {} };
 
 /* ---------- formatos ---------- */
 const usoTexto = h => h.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
@@ -96,7 +96,7 @@ function estruturaUso(d) {
   return { html: `<div class="us-secoes">${html}</div><p class="us-rodape" id="us-rodape" aria-live="polite"></p>`, chave: partes.join('#') };
 }
 
-/* ---------- gráfico: toque (ou mouse em cima) numa barra diz o dia e o valor ---------- */
+/* ---------- gráfico: todas as barras acesas, sem seleção (no celular não há hover); o topo mostra o período atual ---------- */
 const usoNum = n => usoTexto(usoTokens(n)).replace(/,0 /, ' '); // "27,0 mi" -> "27 mi" nas linhas de grade
 function rotuloBarra(info, i) {
   const n = info.g.serie.length;
@@ -108,35 +108,11 @@ const valorBarra = (info, i) => info.g.serie[i] ? usoTexto(usoTokens(info.g.seri
 function pintarGrafico(corpo, k) {
   const info = us.graf[k], c = corpo.querySelector(`[data-c="${k}.graf"]`); if (!info || !c) return;
   const graf = $('.us-grafico', c), barras = $$('i', graf);
-  const ativo = us.hov?.k === k ? us.hov.i : us.sel[k] ?? null;
-  barras.forEach((b, i) => { b.classList.toggle('sel', i === ativo); b.setAttribute('aria-label', `${rotuloBarra(info, i)}: ${valorBarra(info, i)}`) });
-  graf.classList.toggle('tem-sel', ativo != null);
-  const i = ativo ?? info.agora, topo = $('[data-t$=".pico"]', c), t = `${ativo == null ? (info.periodo === 'dia' ? 'Agora' : 'Hoje') : rotuloBarra(info, i)} · ${valorBarra(info, i)}`;
+  barras.forEach((b, i) => b.setAttribute('aria-label', `${rotuloBarra(info, i)}: ${valorBarra(info, i)}`));
+  const topo = $('[data-t$=".pico"]', c), t = `${info.periodo === 'dia' ? 'Agora' : 'Hoje'} · ${valorBarra(info, info.agora)}`;
   if (topo.textContent !== t) topo.textContent = t;
   const gl = (q, f) => { const e = $(`[data-gl="${q}"]`, graf); e.style.bottom = `${f * 100}%`; e.firstChild.textContent = info.g.total ? usoNum(info.max * f) : ''; e.hidden = !info.g.total };
   gl('topo', 1); gl('meio', .5);
-}
-const barraDoToque = (graf, x) => { const r = graf.getBoundingClientRect(), n = $$('i', graf).length; return Math.max(0, Math.min(n - 1, Math.floor((x - r.left) / r.width * n))) };
-{
-  const corpo = $('#us-corpo');
-  corpo.addEventListener('pointerdown', e => {
-    const graf = e.target.closest('.us-grafico'); if (!graf) return;
-    const k = graf.closest('[data-c]').dataset.c.replace(/\.graf$/, '');
-    us.sel[k] = barraDoToque(graf, e.clientX); us.hov = null; pintarGrafico(corpo, k);
-  });
-  corpo.addEventListener('pointermove', e => {
-    if (e.pointerType !== 'mouse' || e.buttons) return;
-    const graf = e.target.closest('.us-grafico'), antes = us.hov;
-    if (!graf) { if (antes) { us.hov = null; pintarGrafico(corpo, antes.k) } return }
-    const k = graf.closest('[data-c]').dataset.c.replace(/\.graf$/, ''), i = barraDoToque(graf, e.clientX);
-    if (antes?.k === k && antes.i === i) return;
-    us.hov = { k, i }; pintarGrafico(corpo, k);
-  });
-  corpo.addEventListener('pointerleave', () => { const antes = us.hov; if (antes) { us.hov = null; pintarGrafico(corpo, antes.k) } });
-  corpo.addEventListener('click', e => { // tocar fora do gráfico solta a seleção
-    if (e.target.closest('.us-grafico')) return;
-    const ks = Object.keys(us.sel); if (!ks.length) return; us.sel = {}; ks.forEach(k => pintarGrafico(corpo, k));
-  });
 }
 
 /* ---------- valores (a cada leitura, nos mesmos elementos) ---------- */
@@ -213,7 +189,7 @@ function pintarUso(animar) {
     return;
   }
   const est = estruturaUso(d), refez = est.chave !== us.chave;
-  if (refez) { us.chave = est.chave; us.sel = {}; us.hov = null; us.graf = {}; manterRolagem(corpo, est.html) }
+  if (refez) { us.chave = est.chave; us.graf = {}; manterRolagem(corpo, est.html) }
   corpo.classList.remove('us-carregando');
   preencherUso(corpo, d, !!animar && !refez);
 }

@@ -243,9 +243,8 @@ html, body { background: var(--cena-base) }
 .us-grafico { height: auto; min-height: 72px }
 .us-tipos { grid-template-rows: 1fr 1fr; align-content: stretch; align-items: center; min-height: 0 }
 .us-modelos { align-content: center; min-height: 0 }
-.us-grafico i { background: rgb(var(--c-claude) / .55); border-radius: 3px 3px 0 0 }
+.us-grafico i { background: rgb(var(--c-claude)); border-radius: 3px 3px 0 0 }
 .us-grafico i.agora { background: rgb(var(--c-claude)); box-shadow: 0 0 10px rgb(var(--c-claude) / .6) }
-.us-grafico i.sel { background: rgb(var(--c-claude)); box-shadow: 0 0 10px rgb(var(--c-claude) / .6) }
 .us-janela .us-ritmo { color: var(--texto-2) }
 
 /* anel de uso (a barra vira anel: o usado e, em branco, a marca do ritmo) */
