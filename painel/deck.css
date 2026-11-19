@@ -283,6 +283,17 @@ button.cartao { font: inherit; color: inherit; text-align: left; border: 0; curs
 .aviso button { font: inherit; font-weight: 600; color: var(--destaque); background: none; border: 0; padding: 0; min-height: var(--alvo-sm); cursor: pointer }
 
 /* ---------- Folhas (editor, WhatsApp, sessões, agenda) ---------- */
+/* regras automáticas: cartão com contagem antes de trocar sozinho (base: navCard do PhoneBox, MIT) */
+.cartao-regra { position: absolute; left: 50%; width: max-content; bottom: max(var(--secao), var(--seguro-baixo)); translate: -50% var(--secao); opacity: 0; visibility: hidden; z-index: 23; display: flex; align-items: center; gap: var(--icone); max-width: calc(100% - var(--secao) * 2); padding: var(--item) var(--item) var(--item) var(--icone); background: var(--superficie-2); box-shadow: var(--sombra-3); border-radius: var(--raio-card); font-size: var(--texto-base); transition: opacity var(--mov-sai-padrao) var(--curva-sai), translate var(--mov-sai-padrao) var(--curva-sai), visibility 0s linear var(--mov-sai-padrao) }
+.cartao-regra.visivel { opacity: 1; visibility: visible; translate: -50% 0; transition: opacity var(--mov-padrao) var(--curva-entra), translate var(--mov-padrao) var(--curva-entra) }
+.cr-anel { flex: none; width: var(--alvo-sm); height: var(--alvo-sm); rotate: -90deg }
+.cr-anel circle { fill: none; stroke: var(--borda); stroke-width: 4 }
+.cr-anel .cr-volta { stroke: var(--destaque); stroke-linecap: round; stroke-dasharray: 100; animation: cr-anel var(--cr-dur, 3s) linear forwards }
+@keyframes cr-anel { from { stroke-dashoffset: 0 } to { stroke-dashoffset: 100 } }
+@media (prefers-reduced-motion: reduce) { .cr-anel .cr-volta { animation: none } }
+.cr-texto { flex: 1; font-weight: 600; min-width: 0; overflow-wrap: anywhere; text-wrap: balance; font-variant-numeric: tabular-nums }
+.cartao-regra .btn { flex: none }
+.cartao-regra .btn.secundario { background: none; color: var(--texto-2) }
 .veu { position: absolute; inset: 0; background: var(--veu-modal); opacity: 0; pointer-events: none; transition: opacity var(--mov-sai-lento) var(--curva-sai); z-index: 16 }
 .com-folha .veu { opacity: 1; pointer-events: auto; transition: opacity var(--mov-lento) var(--curva-entra) }
 .folha { position: absolute; left: var(--seguro-esq); right: var(--seguro-dir); bottom: 0; height: calc(100% - var(--icone)); background: var(--superficie); border-radius: var(--raio-card) var(--raio-card) 0 0; box-shadow: var(--sombra-3); z-index: 17; translate: 0 105%; transition: translate var(--mov-sai-lento) var(--curva-sai); display: grid; grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden; overscroll-behavior: contain }
@@ -415,6 +426,20 @@ button.cartao { font: inherit; color: inherit; text-align: left; border: 0; curs
 .detalhe-sessao .contexto { background: var(--superficie); border-radius: var(--raio-card); padding: var(--pad) }
 .detalhe-sessao .texto-contexto { display: grid; gap: var(--icone) }
 .detalhe-sessao .texto-contexto p { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; font-size: var(--texto-sm); line-height: 1.55; color: var(--texto) }
+/* resumo das sessões que não esperam (no título do bloco) e a lista delas na folha: só leitura, sem competir com o que pede você */
+.cartao-titulo .lado { display: inline-flex; align-items: center; gap: var(--icone); min-width: 0 }
+.cartao-titulo .outras { color: var(--texto-2); font-size: var(--texto-xs); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0 }
+#se-lista .vazio-bloco { height: auto }
+.outras-sessoes { display: grid; margin-top: var(--secao) }
+.outras-sessoes .rotulo-lista { padding: 0 0 var(--item) }
+.linha-sessao { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--icone); padding: var(--icone) 0; border-top: 1px solid var(--borda) }
+.linha-sessao > div { display: grid; gap: var(--micro-gap); min-width: 0 }
+.linha-sessao b { font-size: var(--texto-sm); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.linha-sessao small { color: var(--texto-2); font-size: var(--texto-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums }
+.linha-sessao p { margin: 0; color: var(--texto-2); font-size: var(--texto-xs); line-height: 1.45; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden }
+.estado-sessao { flex: none; color: var(--texto-2); background: var(--superficie-2); font-size: var(--texto-xs); font-weight: 600; padding: var(--micro-gap) var(--icone); border-radius: var(--raio-pilula) }
+.linha-sessao.trabalhando .estado-sessao { color: var(--destaque); background: var(--destaque-suave) }
+.linha-sessao.concluida .estado-sessao { color: var(--sucesso) }
 .detalhe-sessao .nota-sessao { margin: 0; color: var(--texto-2); font-size: var(--texto-sm); text-align: center }
 #f-sessoes > footer { border-top: 0; padding: var(--item) 0 calc(var(--item) + var(--seguro-baixo)) }
 #f-sessoes.detalhe .corpo { padding-bottom: 0 }
@@ -600,25 +625,31 @@ button.cartao { font: inherit; color: inherit; text-align: left; border: 0; curs
 .sel-valor.hora { font-size: 44px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1 }
 .sel-valor small { display: block; margin-top: var(--item); font-size: var(--texto-sm); font-weight: 400; color: var(--texto-2); font-variant-numeric: normal }
 .sel-extra { display: grid; gap: var(--item) }
-.sel-chips, .sel-passo { display: flex; flex-wrap: wrap; gap: var(--item) }
-.sel-passo .btn { flex: 1 1 0; min-width: 0; padding: 0 var(--icone) }
+.sel-chips { display: flex; flex-wrap: wrap; gap: var(--item) }
 .sel-chip { font: inherit; font-size: var(--texto-base); font-weight: 600; min-height: var(--alvo); padding: 0 var(--pad); border: 0; border-radius: var(--raio-pilula); background: var(--superficie-2); color: var(--texto); cursor: pointer; touch-action: manipulation; font-variant-numeric: tabular-nums; transition: transform var(--mov-rapido) var(--curva-move) }
 .sel-chip:active:not(:disabled) { transform: scale(.97) }
 .sel-chip[aria-pressed="true"] { background: var(--destaque); color: var(--destaque-texto) }
 .sel-chip:disabled { opacity: .4; cursor: default }
 .sel-meio { min-height: 0; min-width: 0; overflow: auto; overscroll-behavior: contain; scrollbar-width: none; align-content: start }
 .sel-meio::-webkit-scrollbar { display: none }
-.sel-horas { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: var(--item) }
-.sel-duracoes { display: grid; grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); gap: var(--item) }
-.sel-chip.dur { display: grid; gap: var(--micro-gap); justify-items: center; align-content: center; min-height: 60px; border-radius: var(--raio); padding: var(--item) var(--icone) }
-.sel-chip.dur small { font-size: var(--texto-xs); font-weight: 400; opacity: .8 }
+/* roleta de horário: duas colunas que rolam com o dedo e assentam (scroll-snap) na faixa do meio. 5 linhas de 44 pt, o valor escolhido fica na faixa e os vizinhos esmaecem (opacity e transform, pelo JS) */
+.sel-roleta { --rol-h: calc(var(--alvo) * 5); position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; align-self: center; justify-self: center; width: min(100%, 320px); height: var(--rol-h); overflow: hidden; column-gap: var(--item); user-select: none; -webkit-user-select: none }
+.rol-faixa { position: absolute; left: 0; right: 0; top: 50%; height: var(--alvo); transform: translateY(-50%); border-radius: var(--raio); background: var(--superficie-2); pointer-events: none }
+.rol-col { position: relative; z-index: 1; height: var(--rol-h); overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; scroll-snap-type: y mandatory; touch-action: pan-y; scrollbar-width: none; border-radius: var(--raio); outline: none; -webkit-overflow-scrolling: touch }
+.rol-col::-webkit-scrollbar { display: none }
+.rol-col::before, .rol-col::after { content: ""; display: block; height: calc((var(--rol-h) - var(--alvo)) / 2) }
+.rol-col:focus-visible { box-shadow: 0 0 0 2px var(--destaque) }
+.rol-col [role="option"] { height: var(--alvo); display: flex; align-items: center; justify-content: center; scroll-snap-align: center; font-size: var(--texto-lg); font-weight: 600; font-variant-numeric: tabular-nums; cursor: pointer; will-change: opacity, transform }
+.rol-col [role="option"][aria-selected="true"] { color: var(--texto) }
+.rol-sep { position: relative; z-index: 1; font-size: var(--texto-lg); font-weight: 700; color: var(--texto) }
+@media (max-height: 380px) { .sel-roleta { --rol-h: calc(var(--alvo) * 3) } }
 .sel-mes { display: grid; grid-template-rows: auto auto auto; align-content: start; gap: var(--item); overflow: hidden }
 .sel-mes .sd-grade { grid-auto-rows: var(--dia-cal); align-items: center; row-gap: 0 }
 .sel-mes .sb-dia.hoje { background: none; color: var(--cal-vermelho) }
 .sel-mes .sb-dia.sel { background: var(--destaque); color: var(--destaque-texto) }
 .sel-mes .sb-dia { font-size: var(--texto-lg) }
 .sel-mes .mes-topo h2 { font-size: var(--texto-lg) }
-@media (prefers-reduced-motion: reduce) { .sel-chip, .sel-chip:active:not(:disabled) { transition: none; transform: none } }
+@media (prefers-reduced-motion: reduce) { .sel-chip, .sel-chip:active:not(:disabled) { transition: none; transform: none } .rol-col [role="option"] { will-change: auto } }
 
 /* Lembrete (do app Lembretes) com barra laranja e o círculo do app, para não se misturar com evento de calendário de cor parecida */
 .ev-linha.lem > i { background: var(--lembrete) }
@@ -1043,6 +1074,28 @@ button.item-lista.com-capa:active .capa-fila svg, button.item-lista.com-capa:foc
 .mt-bloco.esq { background: var(--superficie-2); opacity: .6 }
 @media (prefers-reduced-motion: reduce) { .mt-bloco { transition: none } .mt-bloco:active:not(:disabled) { transform: none } }
 
+/* ---------- Pedido de permissão do Claude Code (aprovacao.js) ---------- */
+/* abaixo do aviso (25), para o "já foi respondido" aparecer por cima */
+.aprovacao { position: absolute; inset: 0; z-index: 24; display: grid; place-items: center; padding: var(--pad) var(--seguro-dir) var(--seguro-baixo) var(--seguro-esq); background: var(--veu-modal); overscroll-behavior: contain }
+.ap-caixa { position: relative; overflow: hidden; display: grid; gap: var(--item); width: min(100%, 560px); background: var(--superficie); box-shadow: var(--sombra-3); border-radius: var(--raio-card); padding: var(--pad) var(--pad) var(--pad) calc(var(--pad) + var(--item)) }
+.ap-caixa::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 4px; background: var(--aviso) }
+.ap-caixa .rotulo { display: flex; align-items: center; gap: var(--item); color: var(--aviso); font-size: var(--texto-xs); font-weight: 600 }
+.ap-n { font-weight: 600; color: var(--texto-2); font-variant-numeric: tabular-nums }
+.ap-caixa h2 { margin: 0; font-size: var(--texto-md); line-height: 1.3 }
+.ap-projeto { color: var(--texto-2); font-size: var(--texto-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.ap-resumo { margin: 0; padding: var(--icone); background: var(--superficie-2); border-radius: var(--raio); overflow-wrap: anywhere; white-space: pre-wrap; font-size: var(--texto-sm); line-height: 1.45; }
+.ap-rodape { display: flex; align-items: center; gap: var(--icone); margin-top: var(--item) }
+.ap-tempo { flex: 1; color: var(--texto-2); font-size: var(--texto-sm); font-variant-numeric: tabular-nums }
+.ap-rodape .btn { position: relative; min-width: 112px }
+.ap-rodape .btn::after { content: ''; position: absolute; inset: calc(-1 * var(--toque)) } /* 44 pt de toque também com a tela reduzida */
+/* ---------- Escrever no Mac: o campo ocupa a folha, o Enviar fica no topo (o teclado do iPhone cobre o pé da tela) ---------- */
+.folha.escrever { grid-template-rows: auto minmax(0, 1fr) }
+.folha.cheia.escrever .corpo { display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: var(--item); overflow: hidden }
+.es-texto { font: inherit; font-size: var(--texto-campo); line-height: 1.4; resize: none; width: 100%; min-height: 0; box-sizing: border-box; border-radius: var(--raio-sm); border: 1px solid var(--borda); background: var(--fundo); color: var(--texto); padding: var(--icone) }
+.es-texto:focus-visible { outline: 2px solid var(--destaque); outline-offset: 1px }
+.es-msg { margin: 0; min-height: calc(var(--texto-sm) * 1.3); font-size: var(--texto-sm); line-height: 1.3; color: var(--texto-2) }
+.es-msg.erro { color: var(--perigo) }
+#es-enviar:disabled { opacity: .5 }
 /* ---------- GitHub e Valores (externos.js) ---------- */
 .gh-grupos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--grade); align-items: start; padding-bottom: var(--pad) }
 .vertical .gh-grupos { grid-template-columns: minmax(0, 1fr) }

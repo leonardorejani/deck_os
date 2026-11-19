@@ -126,7 +126,9 @@ extension Config {
             codigoCriadoEm: try c.decodeIfPresent(Int.self, forKey: chave("codigoCriadoEm")) ?? Int(Date().timeIntervalSince1970),
             codigoAnterior: try c.decodeIfPresent(String.self, forKey: chave("codigoAnterior")),
             anteriorValeAte: try c.decodeIfPresent(Int.self, forKey: chave("anteriorValeAte")),
-            agendaPadrao: (try? c.decodeIfPresent(DestinoAgenda.self, forKey: chave("agendaPadrao"))) ?? nil
+            agendaPadrao: (try? c.decodeIfPresent(DestinoAgenda.self, forKey: chave("agendaPadrao"))) ?? nil,
+            regras: (try? c.decodeIfPresent(ListaDeRegras.self, forKey: chave("regras")))?.regras ?? Regra.exemplos,
+            regrasPausadas: (try? c.decodeIfPresent(Bool.self, forKey: chave("regrasPausadas"))) ?? false
         )
     }
 
@@ -198,6 +200,7 @@ extension Config {
         if let d = c.agendaPadrao, !DestinoAgenda.tipos.contains(d.tipo) || vazio(d.id) || d.id.count > 200 {
             return "O lugar padrão da agenda não é válido."
         }
+        if let erro = validarRegras(c.regras) { return erro }
         if !["a", "b", "c"].contains(c.comp) { return "A composição da tela deve ser A, B ou C." }
         if !(1024...65535).contains(c.porta) { return "A porta deve estar entre 1024 e 65535." }
         if c.codigoAcesso.count != tamanhoCodigo || !c.codigoAcesso.allSatisfy({ alfabetoCodigo.contains($0) }) {

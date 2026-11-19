@@ -77,7 +77,7 @@ function mac(atrasoDoRodizio) {
     whatsapp: [7], whatsappFoto: ['f 1.jpg'], whatsappMidia: ['c@1', 'm 2'], abrirConversa: ['x@1'], agenda: ['2026-11-16', 3],
     sessoes: [], usoDetalhe: ['semana'], abrirSessao: ['s/1'], entrarNaReuniao: ['https://meet.google.com/abc'], controles: [],
     controle: ['volume', 40], meet: [], meetAcao: ['microfone'], agendaDestinos: [true], criarCompromisso: [{ titulo: 't' }], apps: [],
-    acoesDoApp: ['com.apple.mail'], abrirGitHub: ['dono/app#12'],
+    acoesDoApp: ['com.apple.mail'], aprovar: ['ab12', 'allow'], abrirGitHub: ['dono/app#12'],
   };
   const semPedido = new Set(['nativo', 'codigo', 'vibrar', 'capaUrl', 'appIconeUrl']);
   const crono = fn => { const atrasos = []; const st = (f, ms) => { atrasos.push(ms); return setTimeout(f, ms) }; return { atrasos, st, clear: clearTimeout, fn } };

@@ -24,6 +24,24 @@ final class FontesAgregadorTestes: XCTestCase {
         )
     }
 
+    func testEstadoSeparaAsSessoesQueEsperamDasOutras() {
+        let esperando = Sessao(id: "e", nome: "e", projeto: "p", pergunta: "?", desde: "2026-11-10T10:00:00Z", contexto: "longo")
+        let rodando = Sessao(id: "r", nome: "r", projeto: "p", pergunta: "", desde: "2026-11-10T10:00:00Z", situacao: "trabalhando", passo: "lendo")
+        var f = fontes()
+        f.sessoes = { Leitura(valor: [esperando, rodando], aviso: nil) }
+        let cfg = config(perfil: [tecla("a")])
+        let est = Agregador(fontes: f).estado(config: cfg, agora: agora)
+        XCTAssertEqual(est.sessoes.map(\.id), ["e"])
+        XCTAssertNil(est.sessoes.first?.contexto)
+        XCTAssertEqual(est.outrasSessoes?.map(\.id), ["r"])
+        f.sessoes = { Leitura(valor: [esperando], aviso: nil) }
+        XCTAssertNil(Agregador(fontes: f).estado(config: cfg, agora: agora).outrasSessoes, "sem outras o campo nem vai")
+        var desligado = cfg
+        desligado.blocos.sessoes = false
+        f.sessoes = { Leitura(valor: [esperando, rodando], aviso: nil) }
+        XCTAssertNil(Agregador(fontes: f).estado(config: desligado, agora: agora).outrasSessoes, "bloco desligado no Mac: o iPhone não pede")
+    }
+
     func testEstadoTrazOCarimboDaConfigESoMudaQuandoOQueOPainelLeMuda() {
         var cfg = config(perfil: [tecla("a")])
         let ag = Agregador(fontes: fontes())

@@ -22,6 +22,10 @@ const padrao = () => ({
   spotify: 'tocando',        // tocando | pausado | fechado
   agenda: 'normal',          // normal | vazia | sem | muitas (um dia lotado) | erro (a rota falha)
   sessoes: 5,                // 0 a 12
+  aprovacoes: [],            // pedidos de permissão do Claude Code esperando: {id, projeto, ferramenta, titulo, resumo, segundos}. O tempo conta a partir do primeiro estado que os traz
+  aprovacaoVencida: false,   // POST /api/aprovacoes/<id> responde 404 (venceu, ou o terminal respondeu antes)
+  aprovacaoFalha: false,     // POST /api/aprovacoes/<id> responde 500 (o pedido não chegou ao Mac)
+  outrasSessoes: [],         // sessões que não esperam: {id, nome, projeto, situacao: trabalhando|parada|concluida, passo?, desde?}
   sessaoMuda: false,         // a primeira sessão chega com outra pergunta (ela mudou)
   whatsapp: 'normal',        // normal | vazio | muitas (30 conversas) | erro (a rota falha)
   whatsappFotos: 0,          // quantas conversas extras com foto de perfil (para medir o pico de pedidos juntos)
@@ -46,6 +50,7 @@ const padrao = () => ({
   teclas: 'poucas',          // poucas (4) | muitas (12)
   perfis: 'um',              // um | dois
   comp: 'a',
+  regras: null,              // lista de regras valendo agora (estado.regras): [{ id, nome, seq, tipo, alvo, texto, durar, segundos }]. null: o Mac não manda a chave
   blocos: { spotify: true, agenda: true, whatsapp: true, sessoes: true, uso: true },
   monitorItens: { cpu: true, memoria: true, bateria: true, rede: true, gpu: true, disco: true, energia: true, ventoinhas: true, dispositivos: true }, // o que a pessoa deixou ligado nos Ajustes do Mac
   monitor: { cpu: 12, memoria: 63, bateria: 81, naTomada: false, baixa: 1258291, sobe: 40960, gpu: 27, discoLivre: 412000000000, discoTotal: 994000000000, watts: 11.4, carregando: false, ventoinhas: [2400, 2600], ventoinhaMax: 6000, dispositivos: 3 }, // o que o Mac mediu (sem `bateria` = Mac de mesa, e o que falta some)
@@ -64,6 +69,7 @@ const padrao = () => ({
   spotifyRecusa: '',         // todo comando do Spotify é recusado (422) com esse motivo
   album: 'Artista Exemplo (Deluxe)', repetir: false, aleatorio: false,
   agendaLembretes: false,    // true: o dia 20 ganha um lembrete e um feriado, os dois na mesma cor roxa (a cor da lista e a do calendário podem ser iguais)
+  colar: 'normal',           // normal | antigo (Mac sem a rota: 404) | sem-app (nenhum app em foco: 409) | sem-acesso (sem Acessibilidade: 422)
   agendaCriar: 'normal',     // normal | antigo (Mac sem as rotas de criar: 404) | lembretes-pedir (Lembretes ainda sem acesso: o pedido abre no Mac) | recusa (o Mac recusa o compromisso, 409)
   reunioes: false,           // os eventos de Meet, Zoom e Teams chegam com o link da sala (Evento.link)
   reuniaoRecusa: '',         // POST /api/reuniao/entrar falha (422) com esse motivo
@@ -100,14 +106,14 @@ const padrao = () => ({
 });
 let c = padrao();
 let T0 = Date.now(); // as sessões esperam desde um instante fixo (o Mac real manda sempre o mesmo `desde` até a sessão mudar)
-let cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, whatsapp: 0, whatsappV: [], whatsappIguais: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], criados: [], destinosPedidos: 0, controles: [], whatsappAbertas: [], midias: [], fotos: [], meetAcoes: [], meetLeituras: 0, usoDetalhe: [], configs: 0, githubAbertos: [] };
+let cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, capasTam: [], whatsapp: 0, whatsappV: [], whatsappIguais: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], criados: [], colados: [], destinosPedidos: 0, controles: [], whatsappAbertas: [], midias: [], fotos: [], meetAcoes: [], meetLeituras: 0, usoDetalhe: [], configs: 0, aprovacoes: [], githubAbertos: [] };
 let posicaoBase = { s: 132, desde: Date.now() };
 let perfilAtivo = 'trabalho';
 let criadosAgenda = [], padraoAgenda = null, lembretesAcesso = null, liberarEm = 0; // o que o iPhone criou na agenda, o destino padrão e o acesso aos Lembretes
 let codigoAtual = CODIGO, codigoAnterior = null; // rodízio: o atual, e o anterior que ainda vale (a folga de 10 min)
 let parearGasto = false, parearErros = 0; // o código de 6 dígitos serve uma vez e aguenta 5 erros
 let gravada = null; // o que o iPhone gravou: perfis e blocos, como o Mac guardaria no config.json
-const zerar = () => { parearGasto = false; parearErros = 0; codigoAtual = CODIGO; codigoAnterior = null; T0 = Date.now(); gravada = null; c = padrao(); cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, whatsapp: 0, whatsappV: [], whatsappIguais: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], criados: [], destinosPedidos: 0, controles: [], whatsappAbertas: [], midias: [], fotos: [], meetAcoes: [], meetLeituras: 0, usoDetalhe: [], configs: 0, githubAbertos: [] }; posicaoBase = { s: 132, desde: Date.now() }; perfilAtivo = 'trabalho'; criadosAgenda = []; padraoAgenda = null; lembretesAcesso = null };
+const zerar = () => { parearGasto = false; parearErros = 0; codigoAtual = CODIGO; codigoAnterior = null; T0 = Date.now(); gravada = null; c = padrao(); cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, capasTam: [], whatsapp: 0, whatsappV: [], whatsappIguais: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], criados: [], colados: [], destinosPedidos: 0, controles: [], whatsappAbertas: [], midias: [], fotos: [], meetAcoes: [], meetLeituras: 0, usoDetalhe: [], configs: 0, aprovacoes: [], githubAbertos: [] }; posicaoBase = { s: 132, desde: Date.now() }; perfilAtivo = 'trabalho'; criadosAgenda = []; padraoAgenda = null; lembretesAcesso = null };
 
 // com xss ligado, todo texto que a página mostra chega como HTML que tenta executar código
 const X = t => c.xss ? `"><img src=x onerror="window.__xss=(window.__xss||0)+1">${t}` : t;
@@ -286,6 +292,7 @@ function estadoSpotify() {
     ...(c.spotifyExtras === 'nao' ? {} : { volume: c.volume, ...(c.spotifyExtras === 'volume' ? {} : { volumeMac: c.volumeMac }),
       ...(c.spotifyExtras === 'login' ? { conectado: true, ...(c.spotifyLimite ? { limitadoAte: Math.ceil(Date.now() / 1000) + c.spotifyLimite } : {}), curtida: c.curtida, repetirFaixa: c.repetirFaixa, aparelho: aparelhos().find(a => a.ativo).nome } : { conectado: false }) }) };
 }
+const outras = () => c.outrasSessoes.map(o => ({ pergunta: '', desde: new Date(Date.now() - 120000).toISOString(), projeto: 'deck', ...o }));
 function estado() {
   const semMed = c.uso === 'sem-medicao';
   const selos = { whatsapp: c.xss ? X('23') : '23' };
@@ -294,7 +301,7 @@ function estado() {
   if (c.comGitHub && nGh > 0) selos.github = String(nGh);
   if (c.comValores && c.valoresDeFora.length) selos.valores = String(c.valoresDeFora.length);
   return {
-    agora: new Date(Date.now() + c.relogioMs).toISOString(), nomeMac: X(c.nomeMac), perfilAtivo: configCompleta().perfilAtivo, comp: c.comp, blocos: c.blocos, ...(c.semCarimbo ? {} : { configVersao: createHash('sha1').update(JSON.stringify(configCompleta())).digest('hex').slice(0, 12) }),
+    agora: new Date(Date.now() + c.relogioMs).toISOString(), nomeMac: X(c.nomeMac), perfilAtivo: configCompleta().perfilAtivo, comp: c.comp, blocos: c.blocos, ...(c.regras ? { regras: c.regras } : {}), ...(c.semCarimbo ? {} : { configVersao: createHash('sha1').update(JSON.stringify(configCompleta())).digest('hex').slice(0, 12) }),
     ...(c.blocos.monitor ? { monitor: { ...c.monitor, itens: Object.keys(c.monitorItens).filter(k => c.monitorItens[k]) } } : {}),
     spotify: estadoSpotify(),
     uso: [
@@ -303,6 +310,8 @@ function estado() {
       { id: 'codex', nome: 'Codex', conta: 'pro', semana: semMed ? null : 4, renova: emDias(0, 23) },
     ],
     sessoes: SESSOES().slice(0, c.sessoes).map(({ contexto, ...leve }) => leve), // o Mac de verdade só manda o contexto em /api/sessoes
+    ...(c.outrasSessoes.length ? { outrasSessoes: outras() } : {}),
+    ...(c.aprovacoes.length ? { aprovacoes: c.aprovacoes.map(a => { a._t ??= Date.now(); const { segundos, _t, ...resto } = a; return { ...resto, restante: Math.max(0, Math.ceil((segundos ?? 90) - (Date.now() - _t) / 1000)) } }) } : {}),
     whatsapp: c.whatsappOrigem === 'web' ? { total: 23, conversas: 0, origem: 'web', navegador: 'Google Chrome', aberto: true }
       : c.whatsappOrigem === 'qr' && c.whatsappTudo ? { total: 6, conversas: 2, origem: 'qr', aberto: true }
       : c.whatsappOrigem === 'qr' ? { total: 23, conversas: 5, origem: 'qr', aberto: true }
@@ -383,6 +392,7 @@ async function api(req, res, url) {
     const erro = c.rejeitar || validar(nova);
     if (erro) return json(res, 422, { erro });
     if (nova.perfilAtivo) perfilAtivo = nova.perfilAtivo;
+    if (['a', 'b', 'c'].includes(nova.comp)) c.comp = nova.comp;
     gravada = { perfis: nova.perfis };
     if (nova.blocos) c.blocos = nova.blocos;
     return json(res, 200, { ...nova, versao: 1, porta: 4777 });
@@ -516,6 +526,15 @@ async function api(req, res, url) {
     if (n.padrao) padraoAgenda = n.destino;
     return json(res, 200, { ok: true, padraoSalvo: !!n.padrao });
   }
+  if (rota === '/api/colar' && m === 'POST') {
+    if (c.colar === 'antigo') return json(res, 404, { erro: 'Essa rota não existe.' });
+    const n = await lerCorpo(req);
+    if (typeof n.texto !== 'string' || !n.texto || n.texto.length > 32000) return json(res, 400, { erro: 'Escreva um texto de até 32 mil caracteres.' });
+    if (c.colar === 'sem-app') return json(res, 409, { erro: 'Nenhum app do Mac está pronto para receber texto. Abra o app e clique no campo.' });
+    if (c.colar === 'sem-acesso') return json(res, 422, { erro: 'O Deck precisa do acesso de Acessibilidade para teclar' });
+    cont.colados.push(n.texto);
+    return json(res, 200, { ok: true });
+  }
   if (rota === '/api/reuniao/entrar' && m === 'POST') {
     const link = String((await lerCorpo(req)).link || '');
     if (!/^https:\/\/(meet\.google\.com|([a-z0-9-]+\.)?zoom\.us|teams\.microsoft\.com|teams\.live\.com)\//.test(link)) return json(res, 400, { erro: 'Esse link não é de uma reunião do Meet, do Zoom ou do Teams.' });
@@ -553,14 +572,24 @@ async function api(req, res, url) {
     }
     return json(res, 404, { erro: 'Essa rota não existe.' });
   }
-  if (rota === '/api/capa') { cont.capas++; res.writeHead(200, { 'Content-Type': 'image/png' }); return res.end(fs.readFileSync(path.join(RAIZ, 'icones/deck.png'))) }
+  if (rota === '/api/capa') { cont.capas++; cont.capasTam.push(url.searchParams.get('tam') || 'pequena'); res.writeHead(200, { 'Content-Type': 'image/png' }); return res.end(fs.readFileSync(path.join(RAIZ, 'icones/deck.png'))) }
   if (rota === '/api/uso/detalhe') {
     const periodo = url.searchParams.get('periodo'); cont.usoDetalhe.push(periodo);
     if (c.usoDetalhe === 'antigo') return json(res, 404, { erro: 'Essa rota não existe.' });
     if (c.usoDetalhe === 'erro') return json(res, 500, { erro: 'O Mac não conseguiu ler o uso.' });
     return json(res, 200, detalheUso(['dia', 'semana', 'mes'].includes(periodo) ? periodo : 'semana'));
   }
-  if (rota === '/api/sessoes') { cont.sessoes++; return json(res, 200, SESSOES().slice(0, c.sessoes)) }
+  if (rota === '/api/sessoes') { cont.sessoes++; return json(res, 200, [...SESSOES().slice(0, c.sessoes), ...outras()]) }
+  const aprova = rota.match(/^\/api\/aprovacoes\/([^/]+)$/);
+  if (aprova && m === 'POST') {
+    const id = decodeURIComponent(aprova[1]), decisao = (await lerCorpo(req)).decisao;
+    if (!['allow', 'deny'].includes(decisao)) return json(res, 400, { erro: 'A decisão tem que ser allow ou deny.' });
+    if (c.aprovacaoFalha) return json(res, 500, { erro: 'O Mac não conseguiu responder o pedido.' });
+    if (c.aprovacaoVencida || !c.aprovacoes.some(a => a.id === id)) return json(res, 404, { erro: 'Esse pedido já foi respondido ou venceu.' });
+    cont.aprovacoes.push({ id, decisao });
+    c.aprovacoes = c.aprovacoes.filter(a => a.id !== id);
+    return json(res, 200, { ok: true });
+  }
   if ((rota === '/api/whatsapp' || rota === '/api/agenda') && c.atrasoListas) await new Promise(r => setTimeout(r, c.atrasoListas));
   if (c.whatsappRico && rota.startsWith('/api/whatsapp/foto/') && m === 'GET') {
     const arq = rota.split('/').pop(); cont.fotos.push(arq);

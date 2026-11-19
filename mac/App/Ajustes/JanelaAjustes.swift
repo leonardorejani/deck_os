@@ -249,6 +249,7 @@ private struct Conteudo: View {
     @ViewBuilder private var corpo: some View {
         switch modelo.secao {
         case .teclas: SuasTeclas(modelo: modelo)
+        case .regras: Regras(modelo: modelo)
         case .uso: UsoIAs(modelo: modelo)
         case .iphone: ConectarIphone(modelo: modelo)
         case .permissoes: Acessos(modelo: modelo)

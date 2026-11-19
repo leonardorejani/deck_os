@@ -26,12 +26,12 @@ function conferirSobrepor(e) {
   if (sobrepor.perfilAtivo === e.perfilAtivo) delete sobrepor.perfilAtivo;
 }
 /* a capa que a tela mostra: a do Mac (capaId) ou, na troca otimista de faixa, a miniatura que a fila já tinha (capaUrl) */
-const capaSrc = s => s.capaUrl || (s.capaId ? canal.capaUrl(s.capaId) : '');
-const capaAttr = s => { const u = capaSrc(s); return u ? ` src="${esc(u)}"` : '' };
+const capaSrc = (s, grande) => s.capaUrl || (s.capaId ? canal.capaUrl(s.capaId, grande) : '');
+const capaAttr = (s, grande) => { const u = capaSrc(s, grande); return u ? ` src="${esc(u)}"` : '' };
 const reduzMov = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 /* troca a imagem só depois de a nova estar baixada: a capa não pisca em branco quando o Mac confirma a faixa. A que falhou ao baixar é pedida de novo no próximo passo */
 function sincronizarCapa(img, s) {
-  const quer = capaSrc(s); if (!img || !quer) return;
+  if (!img) return; const quer = capaSrc(s, img.classList.contains('capa-grande')); if (!quer) return;
   if (img.dataset.erro) { delete img.dataset.erro; img.dataset.quer = quer; img.src = quer; return }
   if (img.getAttribute('src') === quer || img.dataset.quer === quer) return;
   img.dataset.quer = quer;
@@ -87,6 +87,8 @@ function vistaReal() {
     spotify: blocos.spotify === false ? null : spotifyOtimista(e.spotify || null),
     uso: blocos.uso === false ? [] : (e.uso || []).filter(u => mostrar(u.id)),
     sessoes: [...(e.sessoes || [])].filter(s => !dispensada(s)).sort((a, b) => Date.parse(b.desde) - Date.parse(a.desde)),
+    outras: blocos.sessoes === false ? [] : e.outrasSessoes || [], // trabalhando, paradas e as que acabaram de terminar: só um resumo no bloco
+    aprovacoes: e.aprovacoes || [], // pedidos de permissão do Claude Code esperando Permitir ou Negar (aprovacao.js)
     teclas: perfil?.teclas || [], perfilAtivo: perfilId,
     perfis: (config?.perfis || []).map(p => ({ id: p.id, nome: p.nome, n: p.teclas.length })),
     acesas: acesasOtimistas(e.acesas || []), selos: e.selos || {}, agenda: e.agenda || null, reuniao: e.reuniao || null,
@@ -133,7 +135,7 @@ const usoVisivel = () => V.uso;
 function abrirMenu(el) {
   const r = el.getBoundingClientRect(), t = tela.getBoundingClientRect(), k = t.width / tela.offsetWidth;
   const l = $('#lista-perfis');
-  l.innerHTML = `<button data-nova-tecla>Nova tecla</button><span class="rotulo-lista">Perfil</span><div role="listbox" aria-label="Perfis">${V.perfis.map(p => `<button role="option" data-perfil="${esc(p.id)}" aria-selected="${p.id === V.perfilAtivo}">${esc(p.nome)}<small>${p.n} teclas</small></button>`).join('')}</div>${V.perfis.length > 1 ? '<span class="dica-perfis">Crie e edite perfis no Mac</span>' : ''}`;
+  l.innerHTML = `<button data-nova-tecla>Nova tecla</button><button data-escrever>Escrever no Mac</button><span class="rotulo-lista">Perfil</span><div role="listbox" aria-label="Perfis">${V.perfis.map(p => `<button role="option" data-perfil="${esc(p.id)}" aria-selected="${p.id === V.perfilAtivo}">${esc(p.nome)}<small>${p.n} teclas</small></button>`).join('')}</div>${V.perfis.length > 1 ? '<span class="dica-perfis">Crie e edite perfis no Mac</span>' : ''}`;
   l.hidden = false;
   // ancorada na tecla: abre para cima, ou para baixo se faltar espaço. Sem espaço nos dois (B deitado), abre ao lado
   const w = l.offsetWidth, h = l.offsetHeight, H = tela.offsetHeight, W = tela.offsetWidth;
@@ -228,11 +230,11 @@ const ESCONDE = { spotify: 'Spotify', sessoes: 'Sessões', uso: 'Uso das IAs' };
 const esconder = b => `<span class="esconder-bloco" role="button" tabindex="0" data-esconder="${b}" aria-label="Esconder ${ESCONDE[b]}">${SVG.menos}</span>`;
 function sessoesHTML() {
   if (V.blocos.sessoes === false) return '';
-  const n = V.sessoes.length;
+  const n = V.sessoes.length, resumo = resumoOutras(V.outras);
   const corpo = n === 0 ? `<div class="vazio-rico"><img src="icones/claude.png" alt=""><div><strong>Tudo respondido</strong><span>Nenhuma sessão do Claude esperando você.</span></div></div>`
     : V.sessoes.slice(0, 7).map(s => { const h = haQuanto(s.desde, V.ref); return `<div class="sessao"><b>${esc(s.nome)}</b><span>${esc(s.pergunta)}</span><time class="${h.velha ? 'velha' : ''}">${h.texto}</time></div>` }).join('');
   // o bloco inteiro é um alvo só: linha pequena demais para acertar no dedo
-  return `<button class="cartao sessoes depende" data-painel="sessoes" aria-label="Sessões esperando: ${n}">${esconder('sessoes')}<div class="cartao-titulo"><span>${icServico('Claude')}Sessões esperando</span>${n ? `<span class="conta">${n}</span>` : ''}</div>${corpo}</button>`;
+  return `<button class="cartao sessoes depende" data-painel="sessoes" aria-label="Sessões esperando: ${n}${resumo ? `, ${esc(resumo)}` : ''}">${esconder('sessoes')}<div class="cartao-titulo"><span>${icServico('Claude')}Sessões esperando</span>${resumo || n ? `<span class="lado">${resumo ? `<small class="outras">${esc(resumo)}</small>` : ''}${n ? `<span class="conta">${n}</span>` : ''}</span>` : ''}</div>${corpo}</button>`;
 }
 /* horário do próximo evento na tecla da Agenda: "14:00", "amanhã 10:30", "qui 20:00" */
 function horaDoEvento(ev) {
@@ -574,7 +576,7 @@ function midia(acao) {
    na API do Spotify), então não aparecem. */
 let cheioChave = '';
 function playerCheioHTML(s) {
-  const t = !!s.tocando, modos = temModos(s), capa = capaAttr(s);
+  const t = !!s.tocando, modos = temModos(s), capa = capaAttr(s, true);
   return `<div class="pc ${t ? '' : 'pausado'}">
     <img class="capa-grande"${capa} alt="Capa: ${esc(s.faixa)}" onerror="this.dataset.erro=1;this.removeAttribute('src')">
     <div class="pc-info">
@@ -608,6 +610,7 @@ tela.addEventListener('click', ev => {
   const lp = $('#lista-perfis'), pf = ev.target.closest('[data-perfil]');
   if (pf) return ativarPerfil(pf.dataset.perfil);
   if (ev.target.closest('[data-nova-tecla]')) { lp.hidden = true; return abrirEditor('nova') }
+  if (ev.target.closest('[data-escrever]')) { lp.hidden = true; return abrirEscrever() }
   if (!lp.hidden && !ev.target.closest('#lista-perfis, .tecla.menu')) { lp.hidden = true; return }
   const eb = ev.target.closest('[data-esconder]'); if (eb && organizando) { ev.stopPropagation(); return trocarBloco(eb.dataset.esconder, false) }
   const mb = ev.target.closest('[data-mostrar]'); if (mb) return trocarBloco(mb.dataset.mostrar, true);
@@ -928,6 +931,7 @@ async function passo() {
     }
     avisarFalhasDeComando(); processarAvisosDeFora(e);
     pintarGlobal(); mostrarVista();
+    regrasPasso(e);
   } catch (er) {
     if (er.status === 401) semAcesso = true;
     // Com o painel já aberto, o Mac só "sumiu" depois de várias falhas seguidas E de um tempo sem resposta boa: um tropeço
@@ -944,6 +948,7 @@ function mostrarVista() {
   const eraEsqueleto = !!V?.carregando, eraParcial = !!V?.parcial; // parcial já mostra as teclas reais: sem fade por cima delas
   V = vistaReal(); guardarForma(); esqueletoDesde = 0;
   atualizar();
+  pintarAprovacoes(); notarSessoes();
   if (eraEsqueleto && !eraParcial) $('#conteudo').animate([{ opacity: 0 }, { opacity: 1 }], { duration: parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--mov-rapido')) || 180 });
 }
 let emVoo = null, acordar = null, lacoAtivo = false;

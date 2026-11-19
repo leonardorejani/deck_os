@@ -142,4 +142,67 @@ final class FontesSessoesTestes: XCTestCase {
         XCTAssertFalse(tudo.contains(gh) || tudo.contains("hunter2") || tudo.contains(sk))
         XCTAssertTrue(tudo.contains("[oculto]"))
     }
+
+    // MARK: Sessões que não esperam resposta (trabalhando, paradas, concluídas)
+
+    let agora = Date(timeIntervalSince1970: 1_794_400_000) // 2026-11-12T...Z, o relógio dos testes
+    func iso(_ atras: TimeInterval) -> String { Datas.iso(agora.addingTimeInterval(-atras), fuso: TimeZone(identifier: "UTC")!) }
+
+    func testTrabalhandoTrazOUltimoPassoEOProjeto() throws {
+        let json = #"{"state":"working","name":"melhorias","detail":"rodando os testes do painel","originCwd":"/a/b/deck","cwd":"/a/b/deck/.claude/worktrees/x","updatedAt":"\#(iso(60))"}"#
+        let s = try XCTUnwrap(FonteSessoes.parseOutra(Data(json.utf8), pasta: "j1", agora: agora))
+        XCTAssertEqual(s.situacao, "trabalhando")
+        XCTAssertEqual(s.passo, "rodando os testes do painel")
+        XCTAssertEqual(s.projeto, "deck")
+        XCTAssertEqual(s.nome, "melhorias")
+    }
+
+    func testParadaNaoRepeteOEstadoComoPasso() throws {
+        let json = #"{"state":"stopped","name":"n","detail":"stopped","updatedAt":"\#(iso(3600))"}"#
+        let s = try XCTUnwrap(FonteSessoes.parseOutra(Data(json.utf8), pasta: "j2", agora: agora))
+        XCTAssertEqual(s.situacao, "parada")
+        XCTAssertNil(s.passo)
+    }
+
+    func testPassoSemSegredoECortado() throws {
+        let longo = String(repeating: "x", count: 400)
+        let json = #"{"state":"working","name":"n","detail":"usando token=abc123def456 e \#(longo)","updatedAt":"\#(iso(5))"}"#
+        let s = try XCTUnwrap(FonteSessoes.parseOutra(Data(json.utf8), pasta: "j3", agora: agora))
+        XCTAssertFalse(s.passo?.contains("abc123def456") ?? true)
+        XCTAssertLessThanOrEqual(s.passo?.count ?? 999, FonteSessoes.limitePasso + 3)
+    }
+
+    func testValidadeDeCadaSituacao() {
+        func lido(_ estado: String, _ atras: TimeInterval) -> Sessao? {
+            FonteSessoes.parseOutra(Data(#"{"state":"\#(estado)","name":"n","updatedAt":"\#(iso(atras))"}"#.utf8), pasta: "j", agora: agora)
+        }
+        XCTAssertNotNil(lido("done", 5 * 60), "terminou há pouco: serve para o aviso")
+        XCTAssertNil(lido("done", 11 * 60), "terminada há tempo some")
+        XCTAssertNotNil(lido("stopped", 23 * 3600))
+        XCTAssertNil(lido("stopped", 25 * 3600))
+        XCTAssertNotNil(lido("working", 11 * 3600))
+        XCTAssertNil(lido("working", 13 * 3600), "diz que trabalha mas não mexe há horas: job morto")
+        XCTAssertNil(lido("blocked", 1), "bloqueada é de `parse`, não daqui")
+        XCTAssertNil(lido("failed", 1))
+    }
+
+    func testLeAPastaComEsperandoPrimeiroDepoisAsOutrasEmOrdem() throws {
+        let raiz = try pastaTemporaria()
+        defer { try? FileManager.default.removeItem(at: raiz) }
+        func gravar(_ id: String, _ json: String) throws {
+            let p = raiz.appendingPathComponent(id)
+            try FileManager.default.createDirectory(at: p, withIntermediateDirectories: true)
+            try json.write(to: p.appendingPathComponent("state.json"), atomically: true, encoding: .utf8)
+        }
+        try gravar("esp", #"{"state":"blocked","name":"esp","detail":"?","updatedAt":"\#(iso(100))"}"#)
+        try gravar("trab-velha", #"{"state":"working","name":"tv","detail":"a","updatedAt":"\#(iso(500))"}"#)
+        try gravar("trab-nova", #"{"state":"working","name":"tn","detail":"b","updatedAt":"\#(iso(50))"}"#)
+        try gravar("parada", #"{"state":"stopped","name":"p","detail":"stopped","updatedAt":"\#(iso(200))"}"#)
+        try gravar("fim", #"{"state":"done","name":"f","detail":"pronto","updatedAt":"\#(iso(30))"}"#)
+        try gravar("antiga", #"{"state":"done","name":"a","detail":"x","updatedAt":"\#(iso(7200))"}"#)
+        let r = FonteSessoes.ler(raiz: raiz, agora: agora)
+        XCTAssertEqual(r.valor.map(\.id), ["esp", "trab-nova", "trab-velha", "parada", "fim"])
+        XCTAssertEqual(FonteSessoes.esperando(r.valor).map(\.id), ["esp"])
+        XCTAssertEqual(FonteSessoes.outras(r.valor).count, 4)
+    }
 }

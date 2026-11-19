@@ -45,6 +45,7 @@ struct EsteMac: View {
                     }
                 }
             }
+            if Variante.atual.ligaIphone { AjusteDeAprovacao(modelo: modelo) }
             // O Monitor mora aqui, e não só na tecla do app: quem não tem a tecla do Monitor de Atividade também liga e desliga.
             AjustesDoMonitor(modelo: modelo)
             AjustesAvisosDeFora(modelo: modelo)
@@ -74,6 +75,30 @@ struct EsteMac: View {
         modelo.marcarConfiguracaoInicialFeita(false)
         NSApp.activate(ignoringOtherApps: true)
         abrirJanela(id: "inicial")
+    }
+}
+
+/// "Aprovar pedidos do Claude pelo iPhone": instala ou remove o gancho no settings.json do Claude Code.
+struct AjusteDeAprovacao: View {
+    @ObservedObject var modelo: ModeloApp
+
+    var body: some View {
+        GrupoDeAjuste(titulo: "Claude Code", nota: nil) {
+            LinhasDeAjuste {
+                LinhaDeAjuste(titulo: "Aprovar pedidos do Claude pelo iPhone", apoio: Self.apoio(modelo.ganchoDoClaude)) {
+                    ChaveDeAjuste(rotulo: "Aprovar pedidos do Claude pelo iPhone", ligada: modelo.ganchoDoClaude == .instalado) { modelo.definirGancho($0) }
+                }
+            }
+        }
+        .onAppear { modelo.lerGancho() }
+    }
+
+    static func apoio(_ s: GanchoInstalador.Situacao) -> String {
+        switch s {
+        case .instalado: return "Ligado. Sem resposta em 90 segundos, o terminal pergunta como sempre"
+        case .naoInstalado: return "Permitir ou negar no iPhone o que o Claude Code pede para fazer"
+        case .formatoInesperado: return "O arquivo de configuração do Claude Code não está no formato esperado. Nada foi mudado"
+        }
     }
 }
 

@@ -307,12 +307,13 @@ final class Agregador: @unchecked Sendable {
 
         return Estado(
             agora: Datas.iso(agora), nomeMac: config.nomeMac, perfilAtivo: config.perfilAtivo, comp: config.comp, blocos: b,
-            spotify: leituraSpotify.valor, uso: leituraUso.valor, sessoes: FonteSessoes.semContexto(leituraSessoes.valor), whatsapp: resumoWhats,
+            spotify: leituraSpotify.valor, uso: leituraUso.valor, sessoes: FonteSessoes.semContexto(FonteSessoes.esperando(leituraSessoes.valor)), whatsapp: resumoWhats,
             agenda: leituraAgenda.valor, acesas: acesas, selos: selos, avisos: avisos,
             monitor: b.monitor && config.monitor.algum ? (fm ?? cacheMonitor.ultimo())?.valor : nil,
             reuniao: leituraReuniao?.valor,
             andamento: andamentoDasTeclas.isEmpty ? nil : andamentoDasTeclas,
             configVersao: config.carimbo,
+            outrasSessoes: b.sessoes ? FonteSessoes.outras(leituraSessoes.valor).nilSeVazio : nil,
             avisosDeFora: externos.avisos.isEmpty ? nil : externos.avisos,
             valoresDeFora: temValores ? externos.valores : nil,
             github: resumoGitHub
@@ -327,4 +328,8 @@ final class Agregador: @unchecked Sendable {
         cacheSessoes.obter(chave: 0, agora: agora) { fontes.sessoes() }.valor
     }
     func capa() -> Data? { fontes.capa() }
+}
+
+private extension Array {
+    var nilSeVazio: [Element]? { isEmpty ? nil : self }
 }
