@@ -1123,3 +1123,19 @@ button.item-lista.com-capa:active .capa-fila svg, button.item-lista.com-capa:foc
 .vertical .vl-grade { grid-template-columns: repeat(2, minmax(0, 1fr)) }
 .vl-grade .mt-bloco { cursor: default }
 .vl-grade .mt-valor.longo { font-size: var(--texto-lg) }
+
+/* ---------- cortina de controles rápidos (cortina.js) ---------- */
+.cortina { position: absolute; inset: 0; z-index: 18; pointer-events: none; visibility: hidden }
+.cortina.visivel { pointer-events: auto; visibility: visible }
+.cx-fundo { position: absolute; inset: 0; background: var(--veu-modal); opacity: 0 }
+.cx-painel { position: absolute; left: 0; right: 0; top: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 36%); gap: var(--grade); padding: calc(var(--pad) + var(--seguro-cima)) var(--seguro-dir) 0 var(--seguro-esq); background: var(--superficie); border-radius: 0 0 var(--raio-card) var(--raio-card); box-shadow: var(--sombra-3); translate: 0 -105% }
+.cx-painel.sem-midia { grid-template-columns: minmax(0, 1fr) }
+.cx-cartoes { min-width: 0 }
+.cx-painel .ctl-grade { min-height: 0; grid-auto-rows: 120px; padding-bottom: 0 }
+.vertical .cx-painel .ctl-grade { grid-auto-rows: 120px }
+.cx-painel .ctl-cartao.esq { min-height: 120px }
+.cx-midia { grid-column: auto; display: grid; place-content: center; justify-items: center; gap: var(--item); padding: var(--pad); text-align: center; color: var(--texto) }
+.cx-midia[hidden] { display: none }
+.cx-faixa { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--texto-sm); color: var(--texto-2) }
+.cx-alca { grid-column: 1 / -1; justify-self: center; width: 44px; height: 4px; margin: var(--item) 0 var(--pad); border-radius: var(--raio-pilula); background: var(--borda) }
+.vertical .cx-painel { grid-template-columns: minmax(0, 1fr) }

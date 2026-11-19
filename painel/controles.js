@@ -25,10 +25,10 @@ const mudoCtl = () => {
   if (performance.now() > o.ate || real === o.v) { delete otmCtl.mudo; return real }
   return o.v;
 };
-const oferecidos = () => CONTROLES.filter(c => Number.isInteger(ct.dados?.[c.id]));
+const oferecidos = corpo => CONTROLES.filter(c => Number.isInteger(ct.dados?.[c.id]) && !(corpo.id === 'cx-corpo' && c.id === 'teclado')); // a cortina rápida não leva a luz do teclado
 
 function abrirControles() {
-  ct.dados = null; ct.erro = ''; ct.forma = ''; ct.mexendo = false;
+  ct.dados = null; ct.erro = ''; ct.mexendo = false; $('#ct-corpo').dataset.forma = '';
   pintarControles(); abrirFolha('#f-controles'); lerControles();
 }
 async function lerControles() {
@@ -54,17 +54,18 @@ const cartaoCtl = c => `<div class="ctl-cartao" data-ctl="${c.id}" role="slider"
 const cartaoMudo = () => `<button class="ctl-cartao ctl-mudo" data-mudo aria-pressed="false" aria-label="Mudo"><span class="ctl-mic" aria-hidden="true">${SVG.volume}</span><b class="ctl-estado">Som ligado</b></button>`;
 const esqueletoCtl = () => '<div class="ctl-grade" data-n="4" aria-hidden="true">' + '<div class="ctl-cartao esq"><i class="barra" style="width:40%"></i><i class="barra" style="width:70%"></i></div>'.repeat(4) + '</div>';
 
-function pintarControles() {
-  const corpo = $('#ct-corpo');
+/* a folha dos Controles e a cortina de controles rápidos (cortina.js) mostram os mesmos cartões, do mesmo dado */
+function pintarControles() { $$(cortinaVisivel() ? '#ct-corpo, #cx-corpo' : '#ct-corpo').forEach(pintarCorpoCtl) } // fechada, a cortina não guarda cartões (nada duplicado no documento)
+function pintarCorpoCtl(corpo) {
   if (!ct.dados) {
     corpo.setAttribute('aria-busy', String(!ct.erro));
     corpo.innerHTML = ct.erro ? `<div class="vazio-bloco" style="min-height:160px"><strong>Não deu para ler</strong><span>${esc(ct.erro)}</span><button class="btn secundario pequeno" data-ct-tentar style="justify-self:start">Tentar de novo</button></div>` : esqueletoCtl();
-    ct.forma = ''; return;
+    corpo.dataset.forma = ''; return;
   }
   corpo.setAttribute('aria-busy', 'false');
-  const lista = oferecidos(), comMudo = typeof ct.dados.mudo === 'boolean', forma = JSON.stringify([lista.map(c => c.id), comMudo]);
-  if (forma !== ct.forma) { // o que o Mac oferece mudou: refaz os cartões (senão só mexe nos valores, sem soltar o dedo do cartão)
-    ct.forma = forma;
+  const lista = oferecidos(corpo), comMudo = typeof ct.dados.mudo === 'boolean', forma = JSON.stringify([lista.map(c => c.id), comMudo]);
+  if (forma !== corpo.dataset.forma) { // o que o Mac oferece mudou: refaz os cartões (senão só mexe nos valores, sem soltar o dedo do cartão)
+    corpo.dataset.forma = forma;
     // ordem: Volume, Mudo, Brilho, Luz do teclado
     const cartoes = lista.map(cartaoCtl); if (comMudo) cartoes.splice(lista[0]?.id === 'volume' ? 1 : 0, 0, cartaoMudo());
     corpo.innerHTML = cartoes.length ? `<div class="ctl-grade" data-n="${cartoes.length}">${cartoes.join('')}</div>` : '<div class="vazio-bloco" style="min-height:160px"><strong>Nada para controlar</strong><span>Este Mac não oferece volume, brilho nem luz de teclado, ou as barras estão desligadas na tecla Controles do Mac, nos Ajustes do Deck.</span></div>';
@@ -83,9 +84,11 @@ function pintarControles() {
 }
 /* `animar` é para o que o Mac mudou e para o toque (o branco sobe e o número conta). Com o dedo arrastando tudo acompanha na hora */
 function pintarLinhaCtl(id, v, animar = false) {
-  const el = $(`#ct-corpo [data-ctl="${id}"]`); if (!el || !Number.isFinite(v)) return;
-  el.style.setProperty('--nivel', v); el.setAttribute('aria-valuenow', v); el.setAttribute('aria-valuetext', v + '%');
-  $$('.ctl-num', el).forEach(n => mostrarNumero(n, v, pctCtl, animar));
+  if (!Number.isFinite(v)) return;
+  for (const el of $$(`#ct-corpo [data-ctl="${id}"], #cx-corpo [data-ctl="${id}"]`)) {
+    el.style.setProperty('--nivel', v); el.setAttribute('aria-valuenow', v); el.setAttribute('aria-valuetext', v + '%');
+    $$('.ctl-num', el).forEach(n => mostrarNumero(n, v, pctCtl, animar));
+  }
 }
 
 async function enviarCtl(id, v) {
@@ -131,13 +134,13 @@ document.addEventListener('keydown', ev => {
   const n = ev.key === 'Home' ? 0 : ev.key === 'End' ? 100 : d ? limCtl(v + d) : null;
   if (n == null || !Number.isFinite(v)) return; ev.preventDefault(); pintarLinhaCtl(id, n, true); enviarCtl(id, n);
 });
-$('#f-controles').addEventListener('click', ev => {
+for (const raiz of $$('#f-controles, #cortina')) raiz.addEventListener('click', ev => {
   if (ev.target.closest('[data-mudo]')) return alternarMudo();
   if (ev.target.closest('[data-ct-tentar]')) { ct.erro = ''; ct.dados = null; pintarControles(); lerControles() }
 });
 
 /* aberta, a folha acompanha o Mac a cada 2 s (o volume e o brilho também mudam pelas teclas do próprio Mac) */
 setInterval(() => {
-  if (document.hidden || !V || V.carregando || semAcesso || offline || folhaAberta?.id !== 'f-controles' || arrCtl) return;
+  if (document.hidden || !V || V.carregando || semAcesso || offline || (folhaAberta?.id !== 'f-controles' && !cortinaVisivel()) || arrCtl) return;
   lerControles();
 }, 2000);

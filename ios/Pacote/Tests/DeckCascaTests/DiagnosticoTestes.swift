@@ -5,17 +5,19 @@ import XCTest
 /// 1, 2, 4, 8, 16 e 30 s. A ordem dos degraus e o texto de cada causa são os mesmos do painel (painel/canal.js).
 @MainActor
 final class DiagnosticoTestes: XCTestCase {
-    func testEscalaDeEsperaSobeEFicaEmTrintaSegundos() {
+    func testEscalaDeEsperaSobeEFicaEmTrintaSegundos() async {
         XCTAssertEqual((1...8).map { EscalaDeEspera.degrau($0) }, [1, 2, 4, 8, 16, 30, 30, 30])
         XCTAssertEqual(EscalaDeEspera.degrau(0), 1, "antes da primeira falha vale o degrau mínimo")
     }
 
-    func testTextosDasCausas() {
+    func testTextosDasCausas() async {
         XCTAssertEqual(CausaDaConexao.macIndisponivel.texto(tentativa: 3), "Mac indisponível. Tentando de novo. Tentativa 3.")
         XCTAssertEqual(CausaDaConexao.codigoExpirou.texto(), "O código expirou. Leia o QR de novo no Mac.")
         XCTAssertEqual(CausaDaConexao.identidadeMudou.texto(), "A identidade do Mac mudou. Pareie de novo.")
     }
 
+#if canImport(CryptoKit)
+    // Os dublês (RadioFalso, MacDeTeste) só existem onde há CryptoKit, como BluetoothTestes.swift.
     func testMacAusenteEspacaAsTentativasEmDegraus() async throws {
         let radio = RadioFalso(MacDeTeste(), anuncios: [])
         radio.recusaConectar = true
@@ -58,4 +60,5 @@ final class DiagnosticoTestes: XCTestCase {
         await esperar({ vistas.todas.contains(CausaDaConexao.identidadeMudou.texto()) }, segundos: 6)
         XCTAssertTrue(vistas.todas.contains("A identidade do Mac mudou. Pareie de novo."), "\(vistas.todas)")
     }
+#endif
 }
