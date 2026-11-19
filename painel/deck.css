@@ -1028,10 +1028,8 @@ button.item-lista.com-capa:active .capa-fila svg, button.item-lista.com-capa:foc
 .us-grafico i { flex: 1; align-self: stretch; border-radius: 2px 2px 0 0; background: var(--texto-2); transform: scaleY(0); transform-origin: bottom; transition: transform var(--mov-contar) var(--curva-entra), background-color var(--mov-padrao) var(--curva-move) }
 .us-grafico i.vazia { transform: scaleY(.02) !important; opacity: .5 }
 .us-grafico i.agora { background: var(--texto) }
-.us-grafico { position: relative; touch-action: pan-y; cursor: default }
+.us-grafico { position: relative; cursor: default }
 .us-grafico i { transition: opacity var(--mov-rapido) var(--curva-move), transform var(--mov-contar) var(--curva-entra), background-color var(--mov-padrao) var(--curva-move) }
-.us-grafico.tem-sel i:not(.sel) { opacity: .35 }
-.us-grafico i.sel { background: var(--texto) }
 /* duas linhas de grade (o pico e a metade), só um traço e o valor pequeno: não pegam toque e ficam atrás das barras */
 .us-gl { position: absolute; left: 0; right: 0; height: 0; border-top: 1px dashed var(--borda); pointer-events: none }
 .us-gl[data-gl="topo"] small { bottom: auto; top: 2px }
