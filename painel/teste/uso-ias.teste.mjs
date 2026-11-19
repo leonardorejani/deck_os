@@ -23,7 +23,7 @@ export default async function (h) {
   let c = await h.contadores();
   h.ok(c.botoes.length === 0 && c.usoDetalhe[0] === 'semana', `abre na Semana e não manda tecla ao Mac (pedidos: ${c.usoDetalhe})`);
   h.ok(await txt(p, '#us-titulo') === 'Uso das IAs', 'título Uso das IAs');
-  const secoes = await p.evaluate(() => [...document.querySelectorAll('#us-corpo .us-conta h3')].map(x => x.textContent.replace(/\s+/g, ' ').trim()));
+  const secoes = await p.evaluate(() => [...document.querySelectorAll('#us-corpo .us-conta h3')].map(x => [...x.childNodes].filter(n => !n.classList?.contains('us-med')).map(n => n.textContent).join('').replace(/\s+/g, ' ').trim())); // sem o "Medido há" do cabeçalho
   h.ok(secoes.join('|') === 'Claude leo|Claude equipe|Codex pro|Claude neste Mac', `uma seção por conta, e o Claude somado deste Mac (${secoes.join('|')})`);
   h.ok(await p.evaluate(() => [...document.querySelectorAll('#us-filtro button')].map(b => b.textContent + ':' + b.getAttribute('aria-pressed')).join(' ')) === 'Dia:false Semana:true Mês:false', 'filtro Dia, Semana e Mês, com a Semana marcada');
   h.ok(/O Claude não diz de qual conta/.test(await txt(p, '.us-aviso')), 'o cartão do Mac explica por que o Claude vem somado');
@@ -33,7 +33,7 @@ export default async function (h) {
   const leo = '[data-c="0.j0"]';
   h.ok(await txt(p, `${leo} .us-num`) === '61%', `Claude leo: 61% usados (${await txt(p, `${leo} .us-num`)})`);
   h.ok(await txt(p, `${leo} .mn-tag`) === 'usado' && /^Renova em /.test(await txt(p, `${leo} .us-renova`)), 'diz que é usado e quando renova (contagem regressiva)');
-  h.ok(/Medido há \d+ min/.test(await txt(p, leo)), `diz há quanto tempo o Mac mediu (${await txt(p, leo)})`);
+  h.ok(/Medido há \d+ min/.test(await txt(p, '#us-c0')) && !/Medido há/.test(await txt(p, leo)), `diz há quanto tempo o Mac mediu, no cabeçalho da conta (${await txt(p, '#us-c0')})`);
   h.ok(/Passa do limite antes de renovar/.test(await txt(p, '[data-c="1.j0"]')) && /Esperado agora: 50%/.test(await txt(p, '[data-c="1.j0"]')), 'o ritmo avisa quando vai estourar antes de renovar, com o esperado de agora');
   h.ok(/Vai sobrar/.test(await txt(p, '[data-c="2.j1"]')), 'o ritmo avisa quando vai sobrar');
   h.ok(await p.evaluate(() => document.querySelector('[data-c="1.j0"]').classList.contains('cheio') && document.querySelector('[data-c="0.j0"]').classList.contains('alto') === false), '94% fica vermelho, 61% não');
@@ -55,7 +55,7 @@ export default async function (h) {
   h.ok(await p.evaluate(() => ['0.g', '1.g'].every(k => !document.querySelector(`[data-c="${k}.tok"]`))) && await p.evaluate(() => !!document.querySelector('[data-c="2.g.tok"]') && !!document.querySelector('[data-c="mac.g.tok"]')), 'tokens só no Codex e no Claude deste Mac (o log do Claude não diz a conta)');
   const tokSemana = await txt(p, '[data-c="mac.g.tok"] .us-num');
   h.ok(/\d.*(mi|bi)$/.test(tokSemana), `o total de tokens vem compacto (${tokSemana})`);
-  h.ok(/^US\$ [\d.,]+$/.test(await txt(p, '[data-c="mac.g.usd"] .us-num')) && /Estimado, falta preço/.test(await txt(p, '[data-c="mac.g.usd"]')), 'o custo diz que é estimado e que falta preço de um modelo');
+  h.ok(/^US\$ [\d.,]+$/.test(await txt(p, '[data-c="mac.g.usd"] .us-num')) && /Estimativa parcial/.test(await txt(p, '[data-c="mac.g.usd"]')), 'o custo diz que a estimativa é parcial (falta preço de um modelo)');
   h.ok(/Entrada.*Saída.*Cache lido.*Cache escrito/.test(await txt(p, '[data-c="mac.g.tipos"]')), 'tokens por tipo: entrada, saída, cache lido e cache escrito');
   const g = await p.evaluate(() => { const b = [...document.querySelectorAll('[data-c="mac.g.graf"] .us-grafico i')]; return { n: b.length, rotulo: document.querySelector('[data-c="mac.g.graf"]').getAttribute('aria-label'), eixo: document.querySelector('[data-c="mac.g.graf"] .us-eixo').textContent, agora: b.filter(x => x.classList.contains('agora')).length } });
   h.ok(g.n === 7 && g.agora === 1 && /^[A-Z]{7}$/.test(g.eixo), `gráfico da semana: 7 barras, a de hoje destacada (${g.eixo})`);
