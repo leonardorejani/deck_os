@@ -5,7 +5,7 @@ const tela = $('#tela');
 let estado = null, config = null;     // o que o Mac mandou
 let V = null;                         // a vista: o que a tela mostra agora (real ou o esqueleto)
 let posicao = 'horizontal';
-let offline = false, semAcesso = false, falhas = 0, tiquesConfig = 0, versaoConfig = null, configTentadaEm = -Infinity;
+let offline = false, semAcesso = false, falhas = 0, tiquesConfig = 0, causa = null, tentativasOff = 0, versaoConfig = null, configTentadaEm = -Infinity;
 let ultima = {};                      // o que já está desenhado, para só refazer o que mudou
 let organizando = false;              // modo organizar (segurar uma tecla)
 let sobrepor = {};                    // mudança local ainda a caminho do Mac (bloco escondido, perfil), por cima do estado
@@ -898,6 +898,10 @@ function pintarGlobal() {
   tela.classList.toggle('offline', offline && !semAcesso);
   tela.classList.toggle('sem-acesso', semAcesso);
   const nome = estado?.nomeMac || lerGuardado('deck-nome-mac'); $('#nome-mac').textContent = nome || 'Seu Mac';
+  // a causa da queda no lugar do texto genérico (no app nativo quem escreve é o Swift, casca.js)
+  const dica = $('.tela-offline:not(.acesso) .dica-off');
+  if (!canal.nativo && offline && !semAcesso && dica.textContent !== CAUSAS.macIndisponivel) dica.textContent = CAUSAS.macIndisponivel;
+  $('#acesso-titulo').textContent = causa === 'codigoExpirou' ? 'Código expirou' : 'Deck não pareado';
 }
 // O Mac manda o carimbo da config no estado (configVersao): só relê quando ele muda, em vez de baixar tudo a cada 5 s. Mac antigo, sem carimbo,
 // segue como antes (compara os blocos e relê de vez em quando, agora a cada 30). Nunca por cima de uma gravação a caminho
@@ -916,7 +920,7 @@ async function passo() {
       pedirConfig().then(nova => { if (!config && !estado && gen === geracaoConfig && !pendentes) { config = nova; configFalhou = false; mostrarParcial() } }, () => {}); // o erro é tratado abaixo, quando alguém espera por ela
     }
     const e = await canal.estado();
-    estado = e; falhas = 0; ultimoOk = performance.now(); offline = false; semAcesso = false;
+    estado = e; falhas = 0; tentativasOff = 0; causa = null; ultimoOk = performance.now(); offline = false; semAcesso = false;
     if (e.nomeMac) guardar('deck-nome-mac', e.nomeMac);
     if (config && versaoConfig === null && e.configVersao) versaoConfig = e.configVersao; // config que chegou antes do primeiro estado (mostrarParcial): é desta versão, não há o que reler
     if (precisaConfig(e)) {
@@ -933,6 +937,7 @@ async function passo() {
     pintarGlobal(); mostrarVista();
     regrasPasso(e);
   } catch (er) {
+    causa = causaDaFalha(er);
     if (er.status === 401) semAcesso = true;
     // Com o painel já aberto, o Mac só "sumiu" depois de várias falhas seguidas E de um tempo sem resposta boa: um tropeço
     // (pedido lento, o Mac reiniciando) não fecha a tela. Na primeira abertura não há o que proteger, e a falha já fecha.
@@ -959,17 +964,23 @@ async function laco() {
   try { await rodarLaco() } finally { lacoAtivo = false }
 }
 // o pareamento pela página (pareamento.js) deu um código novo: o laço parou no 401 e volta a andar
-function retomarAposParear() { semAcesso = false; falhas = 0; ultimoOk = performance.now(); pintarGlobal(); laco() }
+function retomarAposParear() { semAcesso = false; falhas = 0; tentativasOff = 0; causa = null; ultimoOk = performance.now(); pintarGlobal(); laco() }
 async function rodarLaco() {
   for (;;) {
     const t0 = performance.now();
     await buscar();
     if (semAcesso) return; // código inválido: sem QR novo nada mais vale
     // página escondida: o Mac não precisa ler Spotify, agenda e uso para ninguém ver. Espera 10 s (ou a volta à tela, que acorda na hora)
-    await new Promise(r => { const t = setTimeout(r, document.hidden ? 10000 : Math.max(0, AJUSTES.intervalo - (performance.now() - t0))); acordar = () => { clearTimeout(t); r() } });
+    // Mac fora: cada tentativa espera mais (1, 2, 4, 8, 16, 30 s). Antes de a tela fechar vale o passo de 1 s de sempre
+    const espera = document.hidden ? 10000 : offline ? esperaOffline(++tentativasOff) : AJUSTES.intervalo;
+    await new Promise(r => { const t = setTimeout(r, Math.max(0, espera - (performance.now() - t0))); acordar = () => { clearTimeout(t); r() } });
   }
 }
-document.addEventListener('visibilitychange', () => { if (!document.hidden && !semAcesso) acordar?.() });
+// voltar para a frente ou a rede mudar: tenta já e recomeça a escala do 1 s (o laço é um só, então não vira rajada)
+function recomecarEscala() { if (semAcesso) return; tentativasOff = 0; acordar?.() }
+document.addEventListener('visibilitychange', () => { if (!document.hidden) recomecarEscala() });
+addEventListener('online', recomecarEscala);
+navigator.connection?.addEventListener?.('change', recomecarEscala);
 
 // carregando: nada nos primeiros 200 ms, depois o esqueleto com a forma da última visita
 posicionar();
