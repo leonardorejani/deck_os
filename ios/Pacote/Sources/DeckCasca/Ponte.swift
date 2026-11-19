@@ -108,6 +108,19 @@ public struct Ponte: Sendable {
         }
     }
 
+    // MARK: Instalação
+
+    /// Conta ao Mac quem instalou o app e quando o perfil vence. Devolve se o Mac aceitou. O código de acesso vai no
+    /// cabeçalho como em qualquer pedido da API, e o do rodízio novo, se vier, fica no cofre.
+    @discardableResult
+    public func informar(_ instalacao: InstalacaoDoApp) async -> Bool {
+        guard let canal = canais.obter(), let codigo = cofre.ler()?.codigoAcesso else { return false }
+        let pedido = PedidoCanal(metodo: "POST", caminho: "/api/app/instalacao", cabecalhos: ["x-deck-codigo": codigo], corpo: instalacao.corpo())
+        guard let r = try? await canal.enviar(pedido) else { return false }
+        if let novo = guardarCodigoNovo(r) { aoCodigoNovo(novo) }
+        return (200..<300).contains(r.status)
+    }
+
     // MARK: Capa
 
     /// A capa e os ícones dos apps vão numa <img>, que não manda cabeçalho: a página usa deckcapa://capa/?codigo=...&v=...

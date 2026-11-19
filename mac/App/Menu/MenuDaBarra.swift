@@ -30,7 +30,7 @@ struct MenuDaBarra: View {
             if modelo.configuracaoInicialFeita, modelo.config.perfis.count > 1 {
                 BlocoPerfil(perfis: modelo.config.perfis, ativo: modelo.config.perfilAtivo, escolher: modelo.usarPerfil)
             }
-            if modelo.renovacaoApertando, case .apertando(let vence) = modelo.estadoDaRenovacao {
+            if modelo.renovacaoApertando, let vence = modelo.cartaoDaRenovacao(agora: modelo.agora)?.venceEm {
                 AlertaDoMenu(texto: TextosDoNativo.venceEm(vence, agora: modelo.agora)) { modelo.metodoDeConexao = AvisoDeConexao.renovacao.metodo; modelo.secao = .iphone; acoes.abrirAjustes() }
             }
             if !modelo.acessosRecusados.isEmpty {
