@@ -148,6 +148,10 @@ struct Config: Codable, Equatable, Sendable {
     /// Onde "Novo compromisso" da agenda salva quando a pessoa não escolhe (um calendário ou uma lista dos Lembretes).
     /// Nil: pergunta toda vez.
     var agendaPadrao: DestinoAgenda? = nil
+    /// Regras automáticas "quando, então" (Regras.swift). Config sem a chave começa com as duas de exemplo, desligadas.
+    var regras: [Regra] = Regra.exemplos
+    /// Pausa geral: nenhuma regra dispara sozinha (o botão Testar dos Ajustes ainda funciona).
+    var regrasPausadas = false
 }
 
 // MARK: - Estado (GET /api/estado, pedido pelo painel a cada 1 s)
@@ -285,6 +289,8 @@ struct Estado: Codable, Equatable, Sendable {
     /// Carimbo da config (o mesmo conteúdo que /api/config devolve). O painel só relê a config quando ele muda.
     /// Ausente em Mac antigo: o painel volta a reler de vez em quando.
     var configVersao: String? = nil
+    /// As regras automáticas que estão valendo agora, da de maior prioridade para a menor. Ausente quando nenhuma vale e em Mac antigo.
+    var regras: [RegraAtiva]? = nil
 }
 
 extension Config {

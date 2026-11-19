@@ -40,6 +40,11 @@
         <div class="pa-caixa"><h2 id="pa-titulo"></h2><div id="pa-corpo"></div></div>
       </section>
       <div class="aviso" id="aviso" role="status" aria-live="polite"><span id="aviso-txt"></span><button id="aviso-acao" hidden>Desfazer</button></div>
+      <div class="cartao-regra" id="cartao-regra" role="status" aria-live="polite" aria-hidden="true">
+        <svg class="cr-anel" viewBox="0 0 44 44" aria-hidden="true"><circle cx="22" cy="22" r="19"/><circle class="cr-volta" id="cr-volta" cx="22" cy="22" r="19" pathLength="100"/></svg>
+        <span class="cr-texto" id="cr-texto"></span>
+        <button class="btn secundario pequeno" id="cr-ficar" tabindex="-1">Ficar</button><button class="btn primario pequeno" id="cr-ir" tabindex="-1">Ir agora</button>
+      </div>
       <div class="lista-perfis" id="lista-perfis" role="dialog" aria-label="Menu" hidden></div>
       <div class="veu" id="veu"></div>
       <section class="relogio-cheio" id="f-relogio" role="dialog" aria-modal="true" aria-label="Relógio. Toque para voltar" tabindex="-1"></section>
@@ -153,6 +158,7 @@
 <script src="meet.js"></script>
 <script src="monitor.js"></script>
 <script src="uso.js"></script>
+<script src="regras.js"></script>
 <script src="apps.js"></script>
 <script src="deck.js"></script>
 <script src="pwa.js"></script>

@@ -917,6 +917,7 @@ async function passo() {
     }
     avisarFalhasDeComando();
     pintarGlobal(); mostrarVista();
+    regrasPasso(e);
   } catch (er) {
     if (er.status === 401) semAcesso = true;
     // Com o painel já aberto, o Mac só "sumiu" depois de várias falhas seguidas E de um tempo sem resposta boa: um tropeço

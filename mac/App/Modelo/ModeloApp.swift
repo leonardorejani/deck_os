@@ -53,6 +53,8 @@ final class ModeloApp: ObservableObject {
     let abrirComMac: AbrirComMac
     /// Compartilhado com o roteador: a trava dele evita duas trocas do código ao mesmo tempo.
     let rodizio = Rodizio()
+    /// As regras automáticas: o servidor avalia e o botão Testar dos Ajustes dispara pela mesma instância.
+    let vigiaDeRegras = VigiaDeRegras()
     private var tarefaDoRodizio: Task<Void, Never>?
 
     let decisao = PonteDeDecisao()
@@ -308,7 +310,7 @@ final class ModeloApp: ObservableObject {
         }
         let roteador = Ligacao.roteador(armazem: armazem, pareamento: pareamento, pagina: ArquivosPagina(raiz: pasta),
                                         rodizio: rodizio, certificadoCA: GeradorCertificado().arquivos.ca, contaSpotify: spotify.conta,
-                                        usoMedido: ModeloApp.usoMedidoPorToken(), ponteQR: whatsappQR.ponte, registrar: registrar)
+                                        usoMedido: ModeloApp.usoMedidoPorToken(), ponteQR: whatsappQR.ponte, regras: vigiaDeRegras, registrar: registrar)
         // A bancada não tem iPhone: nada de cabo nem Bluetooth.
         if Variante.atual.ligaIphone { ligarNativo(roteador: roteador) }
         let portaInicial = Variante.atual.portaFixa ?? config.porta
@@ -372,6 +374,12 @@ final class ModeloApp: ObservableObject {
         }
         config = nova
         marcarSalvo()
+    }
+
+    /// O botão Testar de uma regra: o iPhone mostra o cartão de contagem como se ela tivesse disparado, por 15 s.
+    func testarRegra(_ id: String) {
+        vigiaDeRegras.testar(id, agora: agora)
+        avisar(Regra.avisoDoTeste(iphoneAoVivo: iphoneAoVivo))
     }
 
     func usarComposicao(_ c: String) { gravar { $0.comp = c } }

@@ -188,6 +188,8 @@ struct Roteador: Sendable {
     var processos: (any ProcessosDoMac)? = nil
     /// A central do Google Meet (estado, entrar, microfone, câmera e sair). Nil: as rotas /api/meet não existem (404).
     var meet: (any MeetDoMac)? = nil
+    /// As regras automáticas (Regras.swift). Nil: o estado nunca traz `regras`.
+    var regras: VigiaDeRegras? = nil
 
     func responder(_ r: HttpRequisicao) -> RespostaRota {
         if r.caminho == "/api/parear" {
@@ -230,7 +232,7 @@ struct Roteador: Sendable {
     private func api(_ r: HttpRequisicao, _ atual: Config) -> RespostaRota {
         switch r.caminho {
         case "/api/estado":
-            return somente(["GET"], r) ?? .codificar(200, paineis.estado())
+            return somente(["GET"], r) ?? .codificar(200, estadoComRegras(atual))
         case "/api/config":
             switch r.metodo {
             case "GET": return configSemCodigo(atual)
@@ -307,6 +309,16 @@ struct Roteador: Sendable {
             return somente(["POST"], r) ?? controlarSpotify(acao, r)
         }
         return .erro(404, "Essa rota não existe.")
+    }
+
+    /// O estado do provedor mais as regras automáticas que valem agora (o Mac decide, o iPhone troca).
+    private func estadoComRegras(_ atual: Config) -> Estado {
+        var e = paineis.estado()
+        if let regras {
+            let ativas = regras.avaliar(estado: e, config: atual, meet: meet)
+            e.regras = ativas.isEmpty ? nil : ativas
+        }
+        return e
     }
 
     private func sufixo(_ caminho: String, _ prefixo: String) -> String? {
