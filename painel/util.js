@@ -100,6 +100,18 @@ function renovaEm(iso, curto, ref = Date.now()) {
   if (dias === 1) return 'amanhã';
   return curto ? `${dias} dias` : `em ${dias} dias`;
 }
+/* Ritmo da semana de limite (7 dias) a partir do que o estado já traz (percentual e quando renova). `esperado`: onde o uso estaria se fosse
+   parelho; `enche`: quando chega a 100% se o ritmo de agora continuar (ms), ou null se dá até a renovação. Sem ritmo nos primeiros 5% da janela.
+   Mesma conta do RitmoDeUso.swift, que cobre as janelas do detalhe. */
+const SEMANA_MS = 7 * 864e5;
+function ritmoSemana(p, iso, ref = Date.now()) {
+  const fim = new Date(iso).getTime();
+  if (p == null || !iso || isNaN(fim) || fim <= ref) return null;
+  const dec = Math.min(1, 1 - (fim - ref) / SEMANA_MS);
+  if (dec < 0.05) return null;
+  const enche = p > 0 && p < 100 && Math.round(p / dec) > 100 ? ref + (100 - p) / p * dec * SEMANA_MS : null;
+  return { esperado: Math.round(dec * 100), enche };
+}
 // há quanto tempo a sessão espera: "5 min", "13 h", "4 dias". velha: passou de 1 h
 function haQuanto(iso, ref = Date.now()) {
   const min = Math.max(1, Math.floor((ref - new Date(iso)) / 60000));

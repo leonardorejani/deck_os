@@ -19,9 +19,17 @@ public final class Casca {
 
     private var ponte: Ponte!
     private var tipoDoCanal: TipoCanal?
+    /// O que o app informa ao Mac sobre a própria instalação (o perfil, lido no app). nil: não informa.
+    private let instalacao: (@Sendable () -> InstalacaoDoApp?)?
+    private var informadoEm: Date?
+    private var informando = false
+    /// De quanto em quanto tempo o app repete a informação ao Mac (o vencimento muda quando o SideStore renova).
+    static let intervaloDoInforme: TimeInterval = 6 * 3600
 
     public init(pareador: Pareador, cofre: Cofre, vibrar: @escaping @Sendable () -> Void, permanenciaNoCabo: TimeInterval = 2.2,
-                cabo: GerenteDoCabo? = nil, bluetooth: (any ConexaoBluetooth)? = nil) {
+                cabo: GerenteDoCabo? = nil, bluetooth: (any ConexaoBluetooth)? = nil,
+                instalacao: (@Sendable () -> InstalacaoDoApp?)? = nil) {
+        self.instalacao = instalacao
         self.cofre = cofre
         self.cabo = cabo
         self.bluetooth = bluetooth
@@ -86,6 +94,20 @@ public final class Casca {
     public func retomar() {
         cabo?.retomar()
         bluetooth?.retomar()
+        informarInstalacao()
+    }
+
+    /// Diz ao Mac quem instalou o app e quando vence, na primeira vez com canal e depois a cada 6 horas ou quando o app volta
+    /// ao primeiro plano (o SideStore renova com o app fechado). Falhou: tenta de novo na próxima vez.
+    public func informarInstalacao(agora: Date = Date()) {
+        guard let instalacao, !informando, canais.obter() != nil, cofre.ler() != nil, let dados = instalacao() else { return }
+        if let ultimo = informadoEm, agora.timeIntervalSince(ultimo) < Self.intervaloDoInforme { return }
+        informando = true
+        let ponte = self.ponte!
+        Task { @MainActor in
+            if await ponte.informar(dados) { informadoEm = agora }
+            informando = false
+        }
     }
 
     /// Um Mac apareceu ou sumiu em algum canal. Pareado, o cabo é o canal em uso quando está plugado, e o Bluetooth
@@ -120,6 +142,7 @@ public final class Casca {
             return
         }
         tipoDoCanal = tipo
+        informarInstalacao()
         executarJS("DeckNativo.canal(\(Self.literal(tipo.rawValue)))")
     }
 

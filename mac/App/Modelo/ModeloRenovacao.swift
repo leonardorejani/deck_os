@@ -42,6 +42,8 @@ extension ModeloApp {
     func conferirRenovacao(arquivo: URL = ArquivoDeInstalacao.urlPadrao) async {
         lerInstalacao(arquivo)
         guard !renovando, renovador != nil else { return }
+        // Cópia do SideStore: instalar por cima trocaria a dele pela do Deck. Quem renova é ele.
+        guard !origemDaInstalacao.externa else { return }
         guard AgendaDeRenovacao.devida(renovadoEm: renovacao.renovadoEm, agora: agora) else { return }
         var situacao = SituacaoDoIphone.liberado
         if falhaDaRenovacao?.motivo.dependeDoIphone == true, let sondar = sondarIphone { situacao = await sondar() }
@@ -51,7 +53,7 @@ extension ModeloApp {
 
     /// Roda a reinstalação e guarda o resultado. `manual` é o botão da tela: só ele mostra aviso na janela.
     func executarRenovacao(manual: Bool) async {
-        guard let renovador, !renovando else { return }
+        guard let renovador, !renovando, !origemDaInstalacao.externa else { return }
         renovando = true
         defer { renovando = false }
         registrar("renovacao: iniciada (\(manual ? "pedido na tela" : "agenda"))")

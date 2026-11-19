@@ -39,19 +39,29 @@ final class PareadorFalso: Pareador, @unchecked Sendable {
     var canal = CanalFalso(.bluetooth)
     var canalDoCabo = CanalFalso(.cabo)
     var falhaAoIniciar: ErroPareamento?
+    var falhaAoConcluir: ErroPareamento?
     var codigoCerto = "483291"
+    /// Quanto o Mac demora para responder (segundos), para a tela de progresso ter o que mostrar.
+    var atrasoAoIniciar: Double = 0
+    var atrasoAoConcluir: Double = 0
+    private var _iniciados = 0
+    var iniciados: Int { trava.lock(); defer { trava.unlock() }; return _iniciados }
 
     func procurarPorBluetooth() -> AsyncStream<[MacEncontrado]> {
         AsyncStream { c in c.yield([Self.perto, Self.longe]) }
     }
 
     func iniciar(com mac: MacEncontrado) async throws -> String {
+        trava.withLock { _iniciados += 1 }
+        if atrasoAoIniciar > 0 { try? await Task.sleep(nanoseconds: UInt64(atrasoAoIniciar * 1_000_000_000)) }
         if let falhaAoIniciar { throw falhaAoIniciar }
         return "483291"
     }
 
     func concluir(aceito: Bool) async throws -> PareamentoFeito {
         trava.withLock { _concluidos.append(aceito) }
+        if atrasoAoConcluir > 0 { try? await Task.sleep(nanoseconds: UInt64(atrasoAoConcluir * 1_000_000_000)) }
+        if aceito, let falhaAoConcluir { throw falhaAoConcluir }
         return PareamentoFeito(pareado: Pareado(codigoAcesso: "ABCDEFGHIJKLMNOPQRST", nomeMac: Self.perto.nome), canal: canal)
     }
 
