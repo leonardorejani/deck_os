@@ -81,6 +81,12 @@ export default async function (h) {
   await h.cenario({ aprovacoes: [], aprovacaoFalha: false });
   await p.context().close();
 
+  // o cartão mostra o comando inteiro: nada de cortar as linhas de baixo (verificação 19/11/2026)
+  await h.cenario({ aprovacoes: [{ ...PEDIDO, id: 'multi', resumo: 'echo a\necho b\necho c\necho d\necho e\nrm -rf ~/algo' }] });
+  p = await h.pagina(); await h.espera(p, () => !document.querySelector('#aprovacao').hidden);
+  t = await p.evaluate(() => { const e = document.querySelector('.ap-resumo'); return { cortado: e.scrollHeight > e.clientHeight + 1, clamp: getComputedStyle(e).webkitLineClamp, texto: e.textContent }; });
+  h.ok(!t.cortado && t.clamp === 'none' && t.texto.endsWith('rm -rf ~/algo'), `um comando de várias linhas aparece inteiro, até a última (${t.clamp})`);
+
   // texto que vem do Claude Code nunca vira HTML
   await h.cenario({ aprovacoes: [{ ...PEDIDO, id: 'xss', resumo: '"><img src=x onerror="window.__xss=1">', projeto: '<b>x</b>' }] });
   p = await h.pagina(); await h.espera(p, () => !document.querySelector('#aprovacao').hidden);

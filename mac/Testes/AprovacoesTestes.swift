@@ -189,10 +189,19 @@ final class GanchoDoClaudeTestes: XCTestCase {
         XCTAssertFalse(senha?.resumo.contains("hunter2hunter2") ?? true)
     }
 
-    func testResumoGrandeEhCortado() {
-        let longo = String(repeating: "a", count: 5000)
-        let e = ler(#"{"cwd":"/a/p","tool_name":"Bash","tool_input":{"command":"\#(longo)"}}"#)
-        XCTAssertLessThanOrEqual(e?.resumo.count ?? 9999, GanchoDoClaude.limiteDoResumo + 3)
+    // Mudou de propósito (verificação 19/11/2026): o resumo cortado deixava o fim do comando sem o dono ver. Agora não abre.
+    func testComandoQueNaoCabeInteiroNaoViraPedido() {
+        let longo = String(repeating: "a", count: GanchoDoClaude.limiteDoResumo + 1)
+        XCTAssertNil(ler(#"{"cwd":"/a/p","tool_name":"Bash","tool_input":{"command":"\#(longo)"}}"#), "uma linha longa com o fim escondido")
+        let cabe = String(repeating: "a", count: GanchoDoClaude.limiteDoResumo)
+        XCTAssertEqual(ler(#"{"cwd":"/a/p","tool_name":"Bash","tool_input":{"command":"\#(cabe)"}}"#)?.resumo, cabe)
+        XCTAssertNil(ler(#"{"cwd":"/a/p","tool_name":"Bash","tool_input":{"command":"echo a\necho b\necho c\necho d\necho e\necho f\nrm -rf ~/algo"}}"#), "multilinha com o perigo no fim")
+        XCTAssertEqual(ler(#"{"cwd":"/a/p","tool_name":"Bash","tool_input":{"command":"echo a\necho b\necho c"}}"#)?.resumo, "echo a\necho b\necho c")
+    }
+
+    func testPlanoDoClaudeTambemFicaNoTerminal() {
+        // A doc do PermissionRequest exige updatedInput em ExitPlanMode: sem ele o Permitir do iPhone não aprovaria o plano.
+        XCTAssertNil(ler(#"{"cwd":"/a/p","tool_name":"ExitPlanMode","tool_input":{"plan":"1. fazer"}}"#))
     }
 
     func testPerguntaDoClaudeEEntradaRuimNaoViramPedido() {
@@ -326,6 +335,35 @@ final class GanchoInstaladorTestes: XCTestCase {
         XCTAssertEqual(perm?.intValue, 0o600)
         let permArquivo = try FileManager.default.attributesOfItem(atPath: settings.path)[.posixPermissions] as? NSNumber
         XCTAssertEqual(permArquivo?.intValue, 0o600, "o arquivo novo mantém a permissão do que estava lá")
+    }
+
+    func testCopiaFicaComOOriginalDoDonoDepoisDeLigarEDesligar() throws {
+        let antes = "{\n  \"theme\": \"dark\",\n  \"env\": {\"A\": \"1\"}\n}\n"
+        try gravar(antes)
+        let copia = pasta.appendingPathComponent("settings.json.deck-copia")
+        XCTAssertNil(instalar())
+        XCTAssertNil(instalar(), "ligar duas vezes")
+        XCTAssertEqual(try String(contentsOf: copia, encoding: .utf8), antes)
+        XCTAssertNil(instalar(false))
+        XCTAssertEqual(try String(contentsOf: copia, encoding: .utf8), antes, "desligar não troca a cópia pela versão com o gancho")
+        XCTAssertNil(instalar())
+        XCTAssertEqual(try String(contentsOf: copia, encoding: .utf8), antes)
+    }
+
+    func testDonoEditaDepoisAACopiaAcompanhaSoSemOGancho() throws {
+        try gravar(#"{"a":1}"#)
+        XCTAssertNil(instalar())
+        XCTAssertNil(instalar(false))
+        try gravar(#"{"a":2}"#)
+        XCTAssertNil(instalar())
+        XCTAssertEqual(try String(contentsOf: pasta.appendingPathComponent("settings.json.deck-copia"), encoding: .utf8), #"{"a":2}"#)
+    }
+
+    func testRemoverQuandoNaoHaGanchoNaoRegravaOArquivo() throws {
+        let antes = "{\n  \"z\": 1,\n  \"a\": 2\n}\n"
+        try gravar(antes)
+        XCTAssertNil(instalar(false))
+        XCTAssertEqual(try String(contentsOf: settings, encoding: .utf8), antes, "nem a ordem das chaves muda")
     }
 
     func testRecusaFormatoInesperadoSemMexerEmNada() throws {

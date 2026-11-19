@@ -143,17 +143,23 @@ enum GanchoDoClaude {
         var resumo: String
     }
 
+    /// O que cabe inteiro no cartão. Pedido com resumo maior que isso não abre: quem aprova tem que ver tudo o que aprova.
     static let limiteDoResumo = 300
+    static let limiteDeLinhas = 6
+    /// Perguntas e planos: a resposta pede mais que Permitir (a doc do PermissionRequest exige `updatedInput` neles), então o terminal responde.
+    static let ferramentasDoTerminal: Set<String> = ["AskUserQuestion", "ExitPlanMode"]
 
-    /// Lê a entrada do gancho. Nil: não é um pedido que o iPhone possa responder (JSON estranho, ou AskUserQuestion, que é
-    /// uma pergunta e não uma permissão: "Permitir" só abriria a mesma pergunta no terminal).
+    /// Lê a entrada do gancho. Nil: não é um pedido que o iPhone possa responder (JSON estranho, AskUserQuestion e ExitPlanMode,
+    /// que não são permissões simples, ou um resumo que não cabe inteiro no cartão: o terminal mostra tudo e pergunta).
     static func ler(_ corpo: Data) -> Entrada? {
         guard let obj = (try? JSONSerialization.jsonObject(with: corpo)) as? [String: Any],
-              let ferramenta = obj["tool_name"] as? String, !ferramenta.isEmpty, ferramenta != "AskUserQuestion" else { return nil }
+              let ferramenta = obj["tool_name"] as? String, !ferramenta.isEmpty, !ferramentasDoTerminal.contains(ferramenta) else { return nil }
         let entrada = obj["tool_input"] as? [String: Any] ?? [:]
         let cwd = obj["cwd"] as? String ?? ""
+        let bruto = resumo(ferramenta, entrada)
+        guard bruto.count <= limiteDoResumo, bruto.split(separator: "\n", omittingEmptySubsequences: false).count <= limiteDeLinhas else { return nil }
         return Entrada(projeto: projeto(de: cwd), ferramenta: ferramenta, titulo: titulo(ferramenta),
-                       resumo: Mascara.segredos(resumo(ferramenta, entrada), limite: limiteDoResumo))
+                       resumo: Mascara.segredos(bruto, limite: limiteDoResumo))
     }
 
     /// O nome da pasta do projeto. Numa worktree (`<raiz>/.claude/worktrees/<nome>`) vale a raiz, como em `FonteSessoes`.

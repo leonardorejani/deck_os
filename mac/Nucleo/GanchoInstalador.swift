@@ -76,10 +76,15 @@ enum GanchoInstalador {
         let fm = FileManager.default
         do {
             try fm.createDirectory(at: arquivo.deletingLastPathComponent(), withIntermediateDirectories: true)
-            if let original {
-                // A cópia de antes da mudança, só do dono (o arquivo pode ter chaves no `env`).
+            // Remover o que não está lá não regrava o arquivo do dono (o JSONSerialization reordena as chaves).
+            if !instalar, let original, let atual = (try? JSONSerialization.jsonObject(with: original)) as? [String: Any],
+               NSDictionary(dictionary: atual).isEqual(to: raiz) { return nil }
+            if let original, !(String(data: original, encoding: .utf8) ?? "").contains(marca) {
+                // A cópia do arquivo como o dono deixou, só do dono (o arquivo pode ter chaves no `env`). Só se grava
+                // quando o arquivo ainda não tem nada do Deck: depois disso a cópia seria a versão já mexida.
                 let copia = arquivo.deletingLastPathComponent().appendingPathComponent(arquivo.lastPathComponent + ".deck-copia")
-                try original.write(to: copia, options: .atomic)
+                // Se a cópia que já existe diz o mesmo (só muda a formatação), ela fica: é a que tem o texto do dono, byte a byte.
+                if !mesmoConteudo(copia, original) { try original.write(to: copia, options: .atomic) }
                 try? fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: copia.path)
             }
             let permissao = (try? fm.attributesOfItem(atPath: arquivo.path))?[.posixPermissions] as? NSNumber ?? NSNumber(value: 0o600)
@@ -92,6 +97,12 @@ enum GanchoInstalador {
     }
 
     // MARK: Peças
+
+    private static func mesmoConteudo(_ arquivo: URL, _ dados: Data) -> Bool {
+        guard let a = try? Data(contentsOf: arquivo), let x = try? JSONSerialization.jsonObject(with: a),
+              let y = try? JSONSerialization.jsonObject(with: dados) else { return false }
+        return (x as? NSObject)?.isEqual(y) ?? false
+    }
 
     private struct Recusa: Error { var texto: String }
 
