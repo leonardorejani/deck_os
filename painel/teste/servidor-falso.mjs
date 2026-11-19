@@ -40,6 +40,8 @@ const padrao = () => ({
   whatsappVolta: false,      // com whatsappTudo: o contato que o dono tinha respondido manda mensagem nova (3 não lidas)
   whatsappOrigem: 'app',     // app | web (só o total, pelo título da aba) | web-fechado (sem aba aberta) | qr (aparelho conectado, com lista) | qr-caido | qr-reconectando (subindo ou queda curta, sem lista) | qr-reconectando-lista (queda curta com a lista de antes)
   uso: 'normal',             // normal | sem-medicao
+  usoClaude: 2,              // quantas contas Claude o detalhe do uso traz (1 a 3)
+  usoCodex: true,            // a conta Codex aparece no detalhe do uso
   usoDetalhe: 'normal',      // normal | calculando (a primeira varredura ainda roda) | vazio (sem contas) | erro (500) | antigo (Mac sem a rota: 404) | xss (nomes com HTML)
   relogioMs: 0,              // adianta o relógio do Mac (o "há X min" das sessões anda)
   atrasoListas: 0,           // ms de espera nas listas de WhatsApp e Agenda
@@ -157,7 +159,8 @@ function detalheUso(periodo) {
       { id: 'claude-equipe', nome: 'Claude', conta: 'equipe', janelas: semMed ? [] : [{ rotulo: 'Semana', percentual: 94, renova: emDias(1, 9), ritmo }] },
       { id: 'codex', nome: 'Codex', conta: 'pro', janelas: semMed ? [] : [{ rotulo: '5 horas', percentual: 20, renova: emDias(0, 23), medidoEm: new Date(Date.now() - 600000).toISOString(), ritmo: { esperado: 30, projecao: 66 } }, { rotulo: 'Semana', percentual: 4, renova: emDias(0, 23), ritmo: { esperado: 90, projecao: 5, situacao: 'sobra' } }],
         gasto: c.usoDetalhe === 'calculando' ? { ...gasto('c', 0), modelos: [] } : { ...gasto('c', .4), modelos: [{ nome: 'GPT-5.5-codex', tokens: Math.round(soma * .4), custo: 3.2, parte: 100 }] } },
-    ],
+      { id: 'claude-extra', nome: 'Claude', conta: 'estudo', janelas: semMed ? [] : [{ rotulo: 'Semana', percentual: 33, renova: emDias(5, 10), medidoEm: new Date(Date.now() - 360000).toISOString(), ritmo: { esperado: 28, projecao: 80 } }] },
+    ].filter(x => x.id === 'codex' ? c.usoCodex : x.id === 'claude-extra' ? c.usoClaude >= 3 : x.id === 'claude-equipe' ? c.usoClaude >= 2 : true).sort((a, b) => (a.id === 'codex') - (b.id === 'codex')),
     claudeMac: gasto('mac', c.usoDetalhe === 'calculando' ? 0 : 1) };
 }
 const ateHoje = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` };
