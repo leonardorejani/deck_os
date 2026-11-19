@@ -147,7 +147,7 @@ function detalheUso(periodo) {
   const nome = t => c.usoDetalhe === 'xss' ? '<img src=x onerror=window.__xss=1>' : t;
   return { periodo, atualizadoEm: new Date(Date.now() - 90000).toISOString(), ...(c.usoDetalhe === 'calculando' ? { calculando: true } : {}), ate: ateHoje(),
     contas: [
-      { id: 'claude-leo', nome: 'Claude', conta: nome('leo'), janelas: semMed ? [] : [{ rotulo: 'Semana', percentual: 61, renova: emDias(3, 14), medidoEm: new Date(Date.now() - 180000).toISOString(), ritmo: { esperado: 55, projecao: 111, situacao: 'rapido' } }] },
+      { id: 'claude-leo', nome: 'Claude', conta: nome('leo'), janelas: semMed ? [] : [{ rotulo: 'Semana', percentual: 61, renova: emDias(3, 14), medidoEm: new Date(Date.now() - 180000).toISOString(), ritmo: { esperado: 55, projecao: 111, situacao: 'rapido', enche: new Date(Date.now() + (2 * 24 + 3) * 3600000).toISOString() } }] },
       { id: 'claude-equipe', nome: 'Claude', conta: 'equipe', janelas: semMed ? [] : [{ rotulo: 'Semana', percentual: 94, renova: emDias(1, 9), ritmo }] },
       { id: 'codex', nome: 'Codex', conta: 'pro', janelas: semMed ? [] : [{ rotulo: '5 horas', percentual: 20, renova: emDias(0, 23), medidoEm: new Date(Date.now() - 600000).toISOString(), ritmo: { esperado: 30, projecao: 66 } }, { rotulo: 'Semana', percentual: 4, renova: emDias(0, 23), ritmo: { esperado: 90, projecao: 5, situacao: 'sobra' } }],
         gasto: c.usoDetalhe === 'calculando' ? { ...gasto('c', 0), modelos: [] } : { ...gasto('c', .4), modelos: [{ nome: 'GPT-5.5-codex', tokens: Math.round(soma * .4), custo: 3.2, parte: 100 }] } },
