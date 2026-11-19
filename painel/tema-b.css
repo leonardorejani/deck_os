@@ -188,7 +188,7 @@ html, body { background: var(--cena-base) }
 .cartao { -webkit-backdrop-filter: blur(22px) saturate(1.3); backdrop-filter: blur(22px) saturate(1.3) }
 .folha .cartao, .com-folha .cartao { -webkit-backdrop-filter: none; backdrop-filter: none } /* folha aberta cobre a tela: os cartões de trás não desfocam nada que se veja */
 /* o que flutua por cima de outro conteúdo precisa de blur mais forte e de fundo mais firme */
-.aviso, .lista-perfis, .barra-organizar { background: var(--vidro-fundo); -webkit-backdrop-filter: blur(22px) saturate(1.3); backdrop-filter: blur(22px) saturate(1.3); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .16), 0 14px 36px rgb(0 0 0 / .45) }
+.aviso, .lista-perfis, .barra-organizar, .cartao-regra.visivel, .ap-caixa { background: var(--vidro-fundo); -webkit-backdrop-filter: blur(22px) saturate(1.3); backdrop-filter: blur(22px) saturate(1.3); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .16), 0 14px 36px rgb(0 0 0 / .45) }
 .aviso.erro { box-shadow: inset 0 0 0 1px rgb(248 113 113 / .6), 0 14px 36px rgb(0 0 0 / .45) }
 /* o véu de "Mac desconectado" só desfoca enquanto aparece (antes a camada ficava ativa com opacidade 0) */
 .tela-offline { -webkit-backdrop-filter: none; backdrop-filter: none }
@@ -197,7 +197,7 @@ html, body { background: var(--cena-base) }
 /* ---------- Sem transparência: o sistema pede, então o vidro vira fosco e o blur sai ---------- */
 @media (prefers-reduced-transparency: reduce) {
   .tela { --vidro: rgb(30 46 54 / .96); --vidro-forte: rgb(52 68 76 / .96); --vidro-fundo: rgb(21 32 35 / .98); --veu-offline: rgb(16 23 25 / .99) }
-  .cartao, .aviso, .lista-perfis, .barra-organizar, .fechar, .tela-offline, .offline .tela-offline:not(.acesso), .sem-acesso .tela-offline.acesso { -webkit-backdrop-filter: none; backdrop-filter: none }
+  .cartao, .aviso, .lista-perfis, .barra-organizar, .cartao-regra, .ap-caixa, .fechar, .tela-offline, .offline .tela-offline:not(.acesso), .sem-acesso .tela-offline.acesso { -webkit-backdrop-filter: none; backdrop-filter: none }
 }
 
 
@@ -269,3 +269,19 @@ html, body { background: var(--cena-base) }
 
 /* relógio em tela cheia: segue preto puro (poupa a tela do iPhone ligado a noite toda, SPEC 11) */
 .relogio-cheio { --cal-fundo: #000; --tela-fundo: #000 }
+
+/* ---------- Componentes que entraram na bancada junto com o visual B ---------- */
+/* aviso "Indo para... em 3" (regras): vidro como o aviso, o anel de contagem na cor da cena */
+.cartao-regra { background: var(--vidro-fundo); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .16), 0 14px 36px rgb(0 0 0 / .45) }
+.cr-anel circle { stroke: rgb(255 255 255 / .12) }
+.cr-anel .cr-volta { stroke: var(--amb) }
+.cartao-regra .btn.secundario { background: none }
+/* cartão de pedido do Claude Code: véu escuro e caixa de vidro firme (o texto do pedido precisa ler bem) */
+.ap-caixa { background: var(--vidro-fundo); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .16), var(--sombra-3) }
+.ap-resumo { background: var(--vidro-oco) }
+.estado-sessao { background: var(--vidro-forte) }
+.linha-sessao.trabalhando .estado-sessao { background: rgb(var(--c-vol) / .16); color: rgb(var(--c-vol)) }
+.linha-sessao.concluida .estado-sessao { color: var(--sucesso) }
+.cartao-titulo .outras { color: var(--texto-2) }
+/* folha "Escrever no Mac" */
+.es-texto { background: var(--vidro-oco); border-color: var(--vidro-linha) }
