@@ -8,7 +8,7 @@ const abrir = async (h, p) => {
   return ok;
 };
 const blocos = p => p.evaluate(() => Object.fromEntries([...document.querySelectorAll('#mt-corpo [data-mt]')].map(b => [b.dataset.mt, {
-  classe: b.className.replace('mt-bloco', '').trim(), valor: b.querySelector('.mt-valor').textContent, sub: b.querySelector('.mt-sub').textContent, desligado: b.disabled, pressed: b.getAttribute('aria-pressed'), cor: getComputedStyle(b).backgroundColor }])));
+  classe: b.className.replace('mt-bloco', '').trim(), valor: b.querySelector('.mt-valor').textContent, sub: b.querySelector('.mt-sub').textContent, desligado: b.disabled, pressed: b.getAttribute('aria-pressed'), cor: getComputedStyle(b).backgroundColor, texto: getComputedStyle(b).color }])));
 const estado = p => p.evaluate(() => document.querySelector('.mt-estado')?.textContent.trim() || '');
 // o rgb() que o navegador dá a uma cor do tema, para comparar com o que a tela pintou
 const cor = (p, token) => p.evaluate(t => { const d = document.createElement('div'); d.style.color = `var(${t})`; document.querySelector('.tela').append(d); const c = getComputedStyle(d).color; d.remove(); return c }, token);
@@ -26,7 +26,9 @@ export default async function (h) {
   h.ok(Object.keys(b).join() === 'entrar,microfone,camera,sair', `os quatro botões, na ordem (${Object.keys(b)})`);
   h.ok(b.microfone.classe === 'ligado' && b.microfone.valor === 'Ligado' && b.microfone.pressed === 'true', `microfone ligado: verde e "Ligado" (${JSON.stringify(b.microfone)})`);
   h.ok(b.camera.classe === 'desligado' && b.camera.valor === 'Desligada' && b.camera.pressed === 'false', `câmera desligada: vermelha e "Desligada" (${JSON.stringify(b.camera)})`);
-  h.ok(b.microfone.cor === await cor(p, '--sucesso') && b.camera.cor === await cor(p, '--cal-vermelho'), 'o cartão ligado é verde (sucesso) e o desligado é o vermelho do Mudo dos Controles');
+  // visual B (19/11/2026): o cartão é vidro tingido e a cor do estado vai no texto, não mais num fundo cheio
+  const rgb = t => t.match(/\d+/g).map(Number);
+  h.ok(b.microfone.texto === await cor(p, '--sucesso') && rgb(b.camera.texto)[0] > rgb(b.camera.texto)[1] + 80, 'o cartão ligado tem o verde (sucesso) e o desligado o vermelho, na cor do texto sobre o vidro tingido');
   h.ok(!b.sair.desligado && !b.entrar.desligado && b.entrar.sub === 'Trazer a reunião para a frente', 'sair e entrar valem com a reunião aberta');
   await h.foto(p, 'meet-na-chamada');
 
@@ -119,7 +121,8 @@ export default async function (h) {
   await p.waitForSelector('.tecla[data-id="cam"] .estado-tecla', { state: 'attached', timeout: 6000 }).catch(() => {});
   const led = id => p.evaluate(id => { const t = document.querySelector(`.tecla[data-id="${id}"]`); return { classe: t.className, led: getComputedStyle(t.querySelector('.led')).backgroundColor, fundo: getComputedStyle(t).backgroundColor } }, id);
   const mic = await led('mic'), cam = await led('cam');
-  h.ok(mic.led === await cor(p, '--sucesso') && cam.led === await cor(p, '--perigo'), `tecla de microfone ligada com o led verde, a de câmera desligada com o led vermelho (${mic.led} e ${cam.led})`);
+  h.ok(rgb(mic.led)[1] > rgb(mic.led)[0] + 30 && rgb(cam.led)[0] > rgb(cam.led)[1] + 80, // visual B: o led ligado é o menta da cena, o desligado o vermelho do calendário
+    `tecla de microfone ligada com o led verde, a de câmera desligada com o led vermelho (${mic.led} e ${cam.led})`);
   h.ok(mic.fundo !== cam.fundo, 'os fundos são diferentes');
   await h.foto(p, 'meet-teclas');
   await p.context().close();

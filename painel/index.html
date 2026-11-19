@@ -18,6 +18,7 @@
 <link rel="stylesheet" href="tatile/forma.css">
 <link rel="stylesheet" href="tatile/movimento.css">
 <link rel="stylesheet" href="deck.css">
+<link rel="stylesheet" href="tema-b.css">
 </head>
 <body>
 
@@ -32,7 +33,7 @@
         <span class="dica-off">Confira se ele está ligado e no mesmo Wi-Fi.</span>
       </div></div>
       <div class="tela-offline acesso" role="status" aria-live="polite"><div>
-        <strong>Deck não pareado</strong>
+        <strong id="acesso-titulo">Deck não pareado</strong>
         <span class="dica-off">Abra o Deck no Mac e leia o QR de novo.</span>
         <button class="btn secundario" id="b-digitar" hidden>Digitar o código do Mac</button>
       </div></div>
@@ -41,6 +42,11 @@
       </section>
       <div class="aviso" id="aviso" role="status" aria-live="polite"><span id="aviso-txt"></span><button id="aviso-acao" hidden>Desfazer</button></div>
       <section class="aprovacao" id="aprovacao" role="alertdialog" aria-modal="true" aria-labelledby="ap-titulo" hidden></section>
+      <div class="cartao-regra" id="cartao-regra" role="status" aria-live="polite" aria-hidden="true">
+        <svg class="cr-anel" viewBox="0 0 44 44" aria-hidden="true"><circle cx="22" cy="22" r="19"/><circle class="cr-volta" id="cr-volta" cx="22" cy="22" r="19" pathLength="100"/></svg>
+        <span class="cr-texto" id="cr-texto"></span>
+        <button class="btn secundario pequeno" id="cr-ficar" tabindex="-1">Ficar</button><button class="btn primario pequeno" id="cr-ir" tabindex="-1">Ir agora</button>
+      </div>
       <div class="lista-perfis" id="lista-perfis" role="dialog" aria-label="Menu" hidden></div>
       <div class="veu" id="veu"></div>
       <section class="cortina" id="cortina" role="dialog" aria-label="Controles rápidos" inert>
@@ -85,6 +91,14 @@
       <section class="folha cheia" id="f-controles" role="dialog" aria-modal="true" aria-labelledby="ct-titulo">
         <header><h2 id="ct-titulo">Controles do Mac</h2><button class="fechar" data-fechar aria-label="Fechar"></button></header>
         <div class="corpo" id="ct-corpo" aria-live="polite"></div>
+      </section>
+
+      <section class="folha cheia escrever" id="f-escrever" role="dialog" aria-modal="true" aria-labelledby="es-titulo">
+        <header><h2 id="es-titulo">Escrever no Mac</h2><button class="btn primario" id="es-enviar" disabled>Enviar</button><button class="fechar" data-fechar aria-label="Fechar"></button></header>
+        <div class="corpo">
+          <textarea id="es-texto" class="es-texto" aria-label="Texto para colar no Mac" placeholder="Escreva ou dite. O texto vai para o app que estiver em foco no Mac." autocomplete="off" autocapitalize="sentences" enterkeyhint="enter"></textarea>
+          <p class="es-msg" id="es-msg" role="status" aria-live="polite"></p>
+        </div>
       </section>
 
       <section class="folha cheia" id="f-meet" role="dialog" aria-modal="true" aria-labelledby="mt-titulo">
@@ -164,7 +178,9 @@
 <script src="aprovacao.js"></script>
 <script src="monitor.js"></script>
 <script src="uso.js"></script>
+<script src="regras.js"></script>
 <script src="apps.js"></script>
+<script src="escrever.js"></script>
 <script src="deck.js"></script>
 <script src="pwa.js"></script>
 <script src="pareamento.js"></script>

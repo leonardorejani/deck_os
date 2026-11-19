@@ -40,6 +40,8 @@ const padrao = () => ({
   whatsappVolta: false,      // com whatsappTudo: o contato que o dono tinha respondido manda mensagem nova (3 não lidas)
   whatsappOrigem: 'app',     // app | web (só o total, pelo título da aba) | web-fechado (sem aba aberta) | qr (aparelho conectado, com lista) | qr-caido | qr-reconectando (subindo ou queda curta, sem lista) | qr-reconectando-lista (queda curta com a lista de antes)
   uso: 'normal',             // normal | sem-medicao
+  usoClaude: 2,              // quantas contas Claude o detalhe do uso traz (1 a 3)
+  usoCodex: true,            // a conta Codex aparece no detalhe do uso
   usoDetalhe: 'normal',      // normal | calculando (a primeira varredura ainda roda) | vazio (sem contas) | erro (500) | antigo (Mac sem a rota: 404) | xss (nomes com HTML)
   relogioMs: 0,              // adianta o relógio do Mac (o "há X min" das sessões anda)
   atrasoListas: 0,           // ms de espera nas listas de WhatsApp e Agenda
@@ -50,6 +52,7 @@ const padrao = () => ({
   teclas: 'poucas',          // poucas (4) | muitas (12)
   perfis: 'um',              // um | dois
   comp: 'a',
+  regras: null,              // lista de regras valendo agora (estado.regras): [{ id, nome, seq, tipo, alvo, texto, durar, segundos }]. null: o Mac não manda a chave
   blocos: { spotify: true, agenda: true, whatsapp: true, sessoes: true, uso: true },
   monitorItens: { cpu: true, memoria: true, bateria: true, rede: true, gpu: true, disco: true, energia: true, ventoinhas: true, dispositivos: true }, // o que a pessoa deixou ligado nos Ajustes do Mac
   monitor: { cpu: 12, memoria: 63, bateria: 81, naTomada: false, baixa: 1258291, sobe: 40960, gpu: 27, discoLivre: 412000000000, discoTotal: 994000000000, watts: 11.4, carregando: false, ventoinhas: [2400, 2600], ventoinhaMax: 6000, dispositivos: 3 }, // o que o Mac mediu (sem `bateria` = Mac de mesa, e o que falta some)
@@ -68,6 +71,7 @@ const padrao = () => ({
   spotifyRecusa: '',         // todo comando do Spotify é recusado (422) com esse motivo
   album: 'Artista Exemplo (Deluxe)', repetir: false, aleatorio: false,
   agendaLembretes: false,    // true: o dia 20 ganha um lembrete e um feriado, os dois na mesma cor roxa (a cor da lista e a do calendário podem ser iguais)
+  colar: 'normal',           // normal | antigo (Mac sem a rota: 404) | sem-app (nenhum app em foco: 409) | sem-acesso (sem Acessibilidade: 422)
   agendaCriar: 'normal',     // normal | antigo (Mac sem as rotas de criar: 404) | lembretes-pedir (Lembretes ainda sem acesso: o pedido abre no Mac) | recusa (o Mac recusa o compromisso, 409)
   reunioes: false,           // os eventos de Meet, Zoom e Teams chegam com o link da sala (Evento.link)
   reuniaoRecusa: '',         // POST /api/reuniao/entrar falha (422) com esse motivo
@@ -100,14 +104,14 @@ const padrao = () => ({
 });
 let c = padrao();
 let T0 = Date.now(); // as sessões esperam desde um instante fixo (o Mac real manda sempre o mesmo `desde` até a sessão mudar)
-let cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, capasTam: [], whatsapp: 0, whatsappV: [], whatsappIguais: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], criados: [], destinosPedidos: 0, controles: [], whatsappAbertas: [], midias: [], fotos: [], meetAcoes: [], meetLeituras: 0, usoDetalhe: [], configs: 0, aprovacoes: [] };
+let cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, capasTam: [], whatsapp: 0, whatsappV: [], whatsappIguais: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], criados: [], colados: [], destinosPedidos: 0, controles: [], whatsappAbertas: [], midias: [], fotos: [], meetAcoes: [], meetLeituras: 0, usoDetalhe: [], configs: 0, aprovacoes: [] };
 let posicaoBase = { s: 132, desde: Date.now() };
 let perfilAtivo = 'trabalho';
 let criadosAgenda = [], padraoAgenda = null, lembretesAcesso = null, liberarEm = 0; // o que o iPhone criou na agenda, o destino padrão e o acesso aos Lembretes
 let codigoAtual = CODIGO, codigoAnterior = null; // rodízio: o atual, e o anterior que ainda vale (a folga de 10 min)
 let parearGasto = false, parearErros = 0; // o código de 6 dígitos serve uma vez e aguenta 5 erros
 let gravada = null; // o que o iPhone gravou: perfis e blocos, como o Mac guardaria no config.json
-const zerar = () => { parearGasto = false; parearErros = 0; codigoAtual = CODIGO; codigoAnterior = null; T0 = Date.now(); gravada = null; c = padrao(); cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, capasTam: [], whatsapp: 0, whatsappV: [], whatsappIguais: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], criados: [], destinosPedidos: 0, controles: [], whatsappAbertas: [], midias: [], fotos: [], meetAcoes: [], meetLeituras: 0, usoDetalhe: [], configs: 0, aprovacoes: [] }; posicaoBase = { s: 132, desde: Date.now() }; perfilAtivo = 'trabalho'; criadosAgenda = []; padraoAgenda = null; lembretesAcesso = null };
+const zerar = () => { parearGasto = false; parearErros = 0; codigoAtual = CODIGO; codigoAnterior = null; T0 = Date.now(); gravada = null; c = padrao(); cont = { estado: 0, simultaneos: 0, maxSimultaneos: 0, botoes: [], spotify: [], configsGravadas: [], codigos: [], capas: 0, capasTam: [], whatsapp: 0, whatsappV: [], whatsappIguais: 0, sessoes: 0, agenda: [], parear: [], ca: 0, reunioes: [], sessoesAbertas: [], aparelhos: 0, filas: 0, apps: 0, acoesApp: [], icones: [], criados: [], colados: [], destinosPedidos: 0, controles: [], whatsappAbertas: [], midias: [], fotos: [], meetAcoes: [], meetLeituras: 0, usoDetalhe: [], configs: 0, aprovacoes: [] }; posicaoBase = { s: 132, desde: Date.now() }; perfilAtivo = 'trabalho'; criadosAgenda = []; padraoAgenda = null; lembretesAcesso = null };
 
 // com xss ligado, todo texto que a página mostra chega como HTML que tenta executar código
 const X = t => c.xss ? `"><img src=x onerror="window.__xss=(window.__xss||0)+1">${t}` : t;
@@ -155,7 +159,8 @@ function detalheUso(periodo) {
       { id: 'claude-equipe', nome: 'Claude', conta: 'equipe', janelas: semMed ? [] : [{ rotulo: 'Semana', percentual: 94, renova: emDias(1, 9), ritmo }] },
       { id: 'codex', nome: 'Codex', conta: 'pro', janelas: semMed ? [] : [{ rotulo: '5 horas', percentual: 20, renova: emDias(0, 23), medidoEm: new Date(Date.now() - 600000).toISOString(), ritmo: { esperado: 30, projecao: 66 } }, { rotulo: 'Semana', percentual: 4, renova: emDias(0, 23), ritmo: { esperado: 90, projecao: 5, situacao: 'sobra' } }],
         gasto: c.usoDetalhe === 'calculando' ? { ...gasto('c', 0), modelos: [] } : { ...gasto('c', .4), modelos: [{ nome: 'GPT-5.5-codex', tokens: Math.round(soma * .4), custo: 3.2, parte: 100 }] } },
-    ],
+      { id: 'claude-extra', nome: 'Claude', conta: 'estudo', janelas: semMed ? [] : [{ rotulo: 'Semana', percentual: 33, renova: emDias(5, 10), medidoEm: new Date(Date.now() - 360000).toISOString(), ritmo: { esperado: 28, projecao: 80 } }] },
+    ].filter(x => x.id === 'codex' ? c.usoCodex : x.id === 'claude-extra' ? c.usoClaude >= 3 : x.id === 'claude-equipe' ? c.usoClaude >= 2 : true).sort((a, b) => (a.id === 'codex') - (b.id === 'codex')),
     claudeMac: gasto('mac', c.usoDetalhe === 'calculando' ? 0 : 1) };
 }
 const ateHoje = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` };
@@ -290,7 +295,7 @@ function estado() {
   const selos = { whatsapp: c.xss ? X('23') : '23' };
   if (c.agenda === 'sem') selos.calendario = '!';
   return {
-    agora: new Date(Date.now() + c.relogioMs).toISOString(), nomeMac: X(c.nomeMac), perfilAtivo: configCompleta().perfilAtivo, comp: c.comp, blocos: c.blocos, ...(c.semCarimbo ? {} : { configVersao: createHash('sha1').update(JSON.stringify(configCompleta())).digest('hex').slice(0, 12) }),
+    agora: new Date(Date.now() + c.relogioMs).toISOString(), nomeMac: X(c.nomeMac), perfilAtivo: configCompleta().perfilAtivo, comp: c.comp, blocos: c.blocos, ...(c.regras ? { regras: c.regras } : {}), ...(c.semCarimbo ? {} : { configVersao: createHash('sha1').update(JSON.stringify(configCompleta())).digest('hex').slice(0, 12) }),
     ...(c.blocos.monitor ? { monitor: { ...c.monitor, itens: Object.keys(c.monitorItens).filter(k => c.monitorItens[k]) } } : {}),
     spotify: estadoSpotify(),
     uso: [
@@ -378,6 +383,7 @@ async function api(req, res, url) {
     const erro = c.rejeitar || validar(nova);
     if (erro) return json(res, 422, { erro });
     if (nova.perfilAtivo) perfilAtivo = nova.perfilAtivo;
+    if (['a', 'b', 'c'].includes(nova.comp)) c.comp = nova.comp;
     gravada = { perfis: nova.perfis };
     if (nova.blocos) c.blocos = nova.blocos;
     return json(res, 200, { ...nova, versao: 1, porta: 4777 });
@@ -510,6 +516,15 @@ async function api(req, res, url) {
     if (n.destino.tipo === 'calendario') criadosAgenda.push({ ...n, calendario: n.destino.id === 'cal-pes' ? 'Pessoal' : 'Trabalho' });
     if (n.padrao) padraoAgenda = n.destino;
     return json(res, 200, { ok: true, padraoSalvo: !!n.padrao });
+  }
+  if (rota === '/api/colar' && m === 'POST') {
+    if (c.colar === 'antigo') return json(res, 404, { erro: 'Essa rota não existe.' });
+    const n = await lerCorpo(req);
+    if (typeof n.texto !== 'string' || !n.texto || n.texto.length > 32000) return json(res, 400, { erro: 'Escreva um texto de até 32 mil caracteres.' });
+    if (c.colar === 'sem-app') return json(res, 409, { erro: 'Nenhum app do Mac está pronto para receber texto. Abra o app e clique no campo.' });
+    if (c.colar === 'sem-acesso') return json(res, 422, { erro: 'O Deck precisa do acesso de Acessibilidade para teclar' });
+    cont.colados.push(n.texto);
+    return json(res, 200, { ok: true });
   }
   if (rota === '/api/reuniao/entrar' && m === 'POST') {
     const link = String((await lerCorpo(req)).link || '');

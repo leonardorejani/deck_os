@@ -56,3 +56,16 @@ extension ExecutorAcoes {
         shell.rodar(Shell.limitadoNoPerfil(comando, segundos: limiteSegundos, shell: shellDoUsuario())).status == 0
     }
 }
+
+/// A linha que o "Testar" do editor de tecla mostra (Ajustes do Mac).
+enum ResultadoDoTeste {
+    static let rodando = "Rodando..."
+
+    /// O erro do núcleo, ou "ok" com o tempo e, na tecla liga e desliga com comando que confere, como ela ficou.
+    static func texto(erro: String?, ms: Int, ligada: Bool?) -> String {
+        if let erro { return erro }
+        let ok = "Ok, rodou em \(ms) ms"
+        guard let ligada else { return ok }
+        return ok + ". Agora está \(ligada ? "ligada" : "desligada")"
+    }
+}
