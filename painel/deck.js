@@ -26,12 +26,12 @@ function conferirSobrepor(e) {
   if (sobrepor.perfilAtivo === e.perfilAtivo) delete sobrepor.perfilAtivo;
 }
 /* a capa que a tela mostra: a do Mac (capaId) ou, na troca otimista de faixa, a miniatura que a fila já tinha (capaUrl) */
-const capaSrc = s => s.capaUrl || (s.capaId ? canal.capaUrl(s.capaId) : '');
-const capaAttr = s => { const u = capaSrc(s); return u ? ` src="${esc(u)}"` : '' };
+const capaSrc = (s, grande) => s.capaUrl || (s.capaId ? canal.capaUrl(s.capaId, grande) : '');
+const capaAttr = (s, grande) => { const u = capaSrc(s, grande); return u ? ` src="${esc(u)}"` : '' };
 const reduzMov = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 /* troca a imagem só depois de a nova estar baixada: a capa não pisca em branco quando o Mac confirma a faixa. A que falhou ao baixar é pedida de novo no próximo passo */
 function sincronizarCapa(img, s) {
-  const quer = capaSrc(s); if (!img || !quer) return;
+  if (!img) return; const quer = capaSrc(s, img.classList.contains('capa-grande')); if (!quer) return;
   if (img.dataset.erro) { delete img.dataset.erro; img.dataset.quer = quer; img.src = quer; return }
   if (img.getAttribute('src') === quer || img.dataset.quer === quer) return;
   img.dataset.quer = quer;
@@ -573,7 +573,7 @@ function midia(acao) {
    na API do Spotify), então não aparecem. */
 let cheioChave = '';
 function playerCheioHTML(s) {
-  const t = !!s.tocando, modos = temModos(s), capa = capaAttr(s);
+  const t = !!s.tocando, modos = temModos(s), capa = capaAttr(s, true);
   return `<div class="pc ${t ? '' : 'pausado'}">
     <img class="capa-grande"${capa} alt="Capa: ${esc(s.faixa)}" onerror="this.dataset.erro=1;this.removeAttribute('src')">
     <div class="pc-info">

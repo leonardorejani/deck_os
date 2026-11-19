@@ -95,7 +95,7 @@
     // o ícone de um app do Mac (editor de tecla): também numa <img>, pelo mesmo esquema. O app do iPhone guarda por um dia
     appIconeUrl: bundle => `deckcapa://apps/${encodeURIComponent(bundle)}/icone?codigo=${encodeURIComponent(codigo || '')}`,
     // <img> não manda cabeçalho: o Swift atende deckcapa:// com o canal em uso, e o capaId troca a imagem só quando ela muda
-    capaUrl: capaId => `deckcapa://capa/?codigo=${encodeURIComponent(codigo || '')}&v=${encodeURIComponent(capaId || '')}`,
+    capaUrl: (capaId, grande) => `deckcapa://capa/?codigo=${encodeURIComponent(codigo || '')}&v=${encodeURIComponent(capaId || '')}${grande ? '&tam=grande' : ''}`,
     /* Extras do app nativo. A vibração leve do toque de tecla o Swift já faz em botao(), antes de o Mac responder. */
     vibrar: () => { ponte.postMessage({ op: 'vibrar' }) },
     // chamado pelo Swift: um código novo (pareamento feito ou rodízio vindo pela capa)
