@@ -188,6 +188,14 @@ struct Roteador: Sendable {
     var processos: (any ProcessosDoMac)? = nil
     /// A central do Google Meet (estado, entrar, microfone, câmera e sair). Nil: as rotas /api/meet não existem (404).
     var meet: (any MeetDoMac)? = nil
+    /// As regras automáticas (Regras.swift). Nil: o estado nunca traz `regras`.
+    var regras: VigiaDeRegras? = nil
+    /// Os pedidos de permissão do Claude Code esperando Permitir ou Negar. Nil: o estado não leva `aprovacoes` e a rota /api/aprovacoes/<id> responde 404.
+    var aprovacoes: Aprovacoes? = nil
+    /// O app do iPhone diz quem o instalou e quando vence (POST /api/app/instalacao). Nil: a rota não existe (404).
+    var aoInformarInstalacao: (@Sendable (InstalacaoDoApp) -> Void)? = nil
+    /// "Escrever no Mac": cola o texto do iPhone no app em foco. Nil: a rota /api/colar não existe (404).
+    var colador: (any ColadorDeTexto)? = nil
 
     func responder(_ r: HttpRequisicao) -> RespostaRota {
         if r.caminho == "/api/parear" {
@@ -230,7 +238,12 @@ struct Roteador: Sendable {
     private func api(_ r: HttpRequisicao, _ atual: Config) -> RespostaRota {
         switch r.caminho {
         case "/api/estado":
-            return somente(["GET"], r) ?? .codificar(200, paineis.estado())
+            if let e = somente(["GET"], r) { return e }
+            // Quem pede o estado é o iPhone: é assim que o gancho sabe que há alguém ali para responder.
+            aprovacoes?.iphoneApareceu()
+            var estado = estadoComRegras(atual)
+            if let pedidos = aprovacoes?.pendentes(), !pedidos.isEmpty { estado.aprovacoes = pedidos }
+            return .codificar(200, estado)
         case "/api/config":
             switch r.metodo {
             case "GET": return configSemCodigo(atual)
@@ -270,8 +283,14 @@ struct Roteador: Sendable {
         if r.caminho == "/api/agenda/criar" {
             return somente(["POST"], r) ?? criarNaAgenda(r)
         }
+        if r.caminho == "/api/colar" {
+            return somente(["POST"], r) ?? colarTexto(r)
+        }
         if r.caminho == "/api/reuniao/entrar" {
             return somente(["POST"], r) ?? entrarNaReuniao(r)
+        }
+        if let id = sufixo(r.caminho, "/api/aprovacoes/") {
+            return somente(["POST"], r) ?? responderAprovacao(id, r)
         }
         if r.caminho.hasPrefix("/api/sessoes/"), r.caminho.hasSuffix("/abrir") {
             let id = String(r.caminho.dropFirst("/api/sessoes/".count).dropLast("/abrir".count))
@@ -283,6 +302,9 @@ struct Roteador: Sendable {
         if r.caminho == "/api/controles" {
             // O que a pessoa desligou na tecla Controles do Mac não sai daqui: a barra some no iPhone, como a que o Mac não oferece.
             return somente(["GET"], r) ?? controles.map { .codificar(200, $0.estado().somente(config.ler().controles)) } ?? .erro(404, "Essa rota não existe.")
+        }
+        if r.caminho == "/api/app/instalacao" {
+            return somente(["POST"], r) ?? informarInstalacao(r)
         }
         if r.caminho == "/api/meet" {
             return somente(["GET"], r) ?? meet.map { .codificar(200, $0.estado()) } ?? .erro(404, "Essa rota não existe.")
@@ -309,6 +331,16 @@ struct Roteador: Sendable {
         return .erro(404, "Essa rota não existe.")
     }
 
+    /// O estado do provedor mais as regras automáticas que valem agora (o Mac decide, o iPhone troca).
+    private func estadoComRegras(_ atual: Config) -> Estado {
+        var e = paineis.estado()
+        if let regras {
+            let ativas = regras.avaliar(estado: e, config: atual, meet: meet)
+            e.regras = ativas.isEmpty ? nil : ativas
+        }
+        return e
+    }
+
     private func sufixo(_ caminho: String, _ prefixo: String) -> String? {
         guard caminho.hasPrefix(prefixo), caminho.count > prefixo.count else { return nil }
         return String(caminho.dropFirst(prefixo.count))
@@ -324,12 +356,30 @@ struct Roteador: Sendable {
 
     // MARK: Rotas
 
+    private func informarInstalacao(_ r: HttpRequisicao) -> RespostaRota {
+        guard let aviso = aoInformarInstalacao else { return .erro(404, "Essa rota não existe.") }
+        guard let i = InstalacaoDoApp.decodificar(r.corpo) else { return .erro(400, "Não entendi os dados da instalação.") }
+        aviso(i)
+        return .json(200, Data("{\"ok\":true}".utf8))
+    }
+
     private func botao(_ id: String, _ atual: Config) -> RespostaRota {
         let perfil = atual.perfis.first { $0.id == atual.perfilAtivo }
         guard let tecla = perfil?.teclas.first(where: { $0.id == id }) else {
             return .erro(404, "Essa tecla não existe no perfil atual.")
         }
         if let erro = teclas.executar(tecla) { return .erro(422, erro) }
+        return .json(200, Data("{\"ok\":true}".utf8))
+    }
+
+    /// POST /api/colar, corpo {"texto": "..."} (até 32 mil caracteres): põe o texto na prancheta, manda Cmd+V para o app em
+    /// foco e devolve a prancheta como estava. Sem app aceitável em foco não cola nada. O texto nunca vai para o log.
+    private func colarTexto(_ r: HttpRequisicao) -> RespostaRota {
+        guard let colador else { return .erro(404, "Essa rota não existe.") }
+        guard let obj = (try? JSONSerialization.jsonObject(with: r.corpo)) as? [String: Any], let texto = obj["texto"] as? String else {
+            return .erro(400, "Mande o texto a escrever, por exemplo {\"texto\": \"...\"}.")
+        }
+        if let e = colador.colar(texto) { return .erro(e.status, e.texto) }
         return .json(200, Data("{\"ok\":true}".utf8))
     }
 
@@ -435,6 +485,16 @@ struct Roteador: Sendable {
             }
             return .codificar(200, CompromissoCriado(ok: true, padraoSalvo: padraoSalvo))
         }
+    }
+
+    /// POST /api/aprovacoes/<id> com {"decisao": "allow"|"deny"} (ou ?decisao=). O pedido que venceu ou que o terminal já respondeu dá 404.
+    private func responderAprovacao(_ id: String, _ r: HttpRequisicao) -> RespostaRota {
+        guard let aprovacoes else { return .erro(404, "Essa rota não existe.") }
+        let corpo = (try? JSONSerialization.jsonObject(with: r.corpo)) as? [String: Any]
+        let texto = (corpo?["decisao"] as? String) ?? r.query["decisao"] ?? ""
+        guard let decisao = DecisaoDeAprovacao(rawValue: texto) else { return .erro(400, "A decisão tem que ser allow ou deny.") }
+        guard aprovacoes.decidir(id, decisao) else { return .erro(404, "Esse pedido já foi respondido ou venceu.") }
+        return .json(200, Data(#"{"ok":true}"#.utf8))
     }
 
     private func abrirSessao(_ id: String) -> RespostaRota {

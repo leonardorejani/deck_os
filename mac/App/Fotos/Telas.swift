@@ -277,6 +277,18 @@ enum CatalogoDeFotos {
                     .overlay(alignment: .bottom) { AvisoDoUso(painel: painel).padding(.bottom, Tema.Espaco.pad) }
             }.environment(\.emFoto, true))
         },
+        // Sem foto do protótipo (as regras nasceram depois dele): só para olhar.
+        TelaParaFoto(nome: "extra-regras", tamanho: CGSize(width: Tema.Medida.janelaLarg, height: Tema.Medida.janelaAlt)) {
+            let m = DadosDeExemplo.modelo(secao: .regras)
+            m.gravar { $0.regras[0].ligada = true; $0.regras.append(Regra(id: "uso", nome: "Uso alto: avisar", ligada: true, quando: Gatilho(fonte: "uso", limite: 85), entao: AcaoDeRegra(tipo: "aviso", alvo: "Uso das IAs alto"), dias: [1, 2, 3, 4, 5], de: "08:00", ate: "19:00")) }
+            return AnyView(QuadroDaJanela { JanelaAjustes(modelo: m, desenhaSemaforo: true) }.environment(\.emFoto, true))
+        },
+        TelaParaFoto(nome: "extra-regras-editor", tamanho: CGSize(width: Tema.Medida.janelaLarg, height: Tema.Medida.janelaAlt)) {
+            let m = DadosDeExemplo.modelo(secao: .regras)
+            var r = Regra.nova(entre: m.config.regras)
+            r.nome = "Meet em chamada: Controles"; r.quando = Gatilho(fonte: "uso", limite: 85); r.entao = AcaoDeRegra(tipo: "tela", alvo: "controles"); r.dias = [1, 2, 3, 4, 5]; r.de = "09:00"; r.ate = "18:00"
+            return AnyView(Regras(modelo: m, editando: r).padding(Tema.Espaco.margem).frame(width: Tema.Medida.janelaLarg, height: Tema.Medida.janelaAlt, alignment: .topLeading).background(Tema.Cor.telaFundo).environment(\.emFoto, true))
+        },
         TelaParaFoto(nome: "ajustes-iphone", tamanho: CGSize(width: Tema.Medida.janelaLarg, height: Tema.Medida.janelaAlt)) { ajustes(.iphone) },
         TelaParaFoto(nome: "ajustes-iphone-sem-iphone", tamanho: CGSize(width: Tema.Medida.janelaLarg, height: Tema.Medida.janelaAlt)) { ajustes(.iphone, iphone: false, recusados: []) },
         // App nativo (fase 5): o que o Mac mostra em Conectar iPhone e no menu em cada momento do pareamento.

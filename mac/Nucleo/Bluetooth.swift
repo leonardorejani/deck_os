@@ -13,7 +13,7 @@ import ImageIO
 // (EnlaceSeguro) e o estado vai enxuto (capa pequena, ver CapaPequena).
 
 /// A capa do Spotify pesa dezenas de KB e o Bluetooth leva poucas dezenas de KB por segundo, então neste
-/// canal ela vai reduzida (ou não vai, sem ImageIO). O tamanho vem da vazão medida (docs/provas/fase-7-bluetooth.md).
+/// canal ela vai reduzida (ou não vai, sem ImageIO). Só a tela cheia pede a grande (tam=grande), uma vez por faixa. O tamanho vem da vazão medida (docs/provas/fase-7-bluetooth.md).
 enum CapaPequena {
     /// Lado maior, em pixels, da capa que segue pelo Bluetooth.
     static let lado = 200
@@ -42,6 +42,8 @@ enum CapaPequena {
     /// Troca a capa grande pela pequena nas respostas do Bluetooth. O resto passa como veio.
     static func ajustar(_ pedido: PedidoCabo, _ resposta: RespostaRota) -> RespostaRota {
         guard pedido.caminho == "/api/capa", resposta.status == 200 else { return resposta }
+        // Tela cheia (tam=grande): a capa inteira, como o Spotify serve (640 px). Reduzir a 200 px e esticar a 320 pt era o borrão.
+        if pedido.query["tam"] == "grande" { return resposta }
         guard let menor = reduzir(resposta.corpo) else { return .erro(404, "Sem capa neste canal.") }
         var nova = resposta
         nova.tipo = "image/jpeg"

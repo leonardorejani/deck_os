@@ -15,6 +15,10 @@ O app nativo é instalado com a conta grátis da Apple, e a Apple faz esse tipo 
 5. **Se não der.** O motivo fica guardado em português, e o Deck olha o iPhone a cada 5 minutos (uma consulta curta, sem compilar). Quando o iPhone aparece ou é desbloqueado, tenta de novo. Quando o problema não é o iPhone (conta da Apple, Xcode, compilação), só repete depois de 1 hora, para não compilar à toa.
 6. **Quando avisa.** Só quando o prazo aperta: 12 horas depois da hora de renovar sem ter dado certo. Aí aparecem o cartão amarelo em Ajustes > Conexões, uma linha no menu da barra e o selo "1" na barra lateral. Renovou sozinho, ou falhou com folga: nenhum aviso.
 
+## Quando o app foi instalado por outro app (SideStore)
+
+O app do iPhone lê o próprio perfil (`embedded.mobileprovision`) e conta ao Mac o pacote, a equipe e o vencimento real. Se a cópia que está no iPhone não é a que o Deck instala (pacote ou equipe diferentes, ou vencimento bem depois do que a última instalação do Deck daria), o Deck não renova, para não instalar por cima dela. Em Ajustes > Conexões a linha "Instalado por" diz "outro app (SideStore)" e "Vence em" mostra a data real. Quando faltam menos de 2 dias, aparece o cartão "O app vence em X. Abra o SideStore no iPhone para renovar.", sem "Tentar agora". Instalado pelo Deck, tudo segue como descrito acima.
+
 ## Condições para renovar sozinho
 
 - O Mac está ligado e o Deck está aberto na barra de menus (acordado: Mac dormindo não renova, e ele tenta quando acordar).

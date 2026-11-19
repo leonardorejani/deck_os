@@ -293,16 +293,17 @@ function dispensar(s) {
 /* Tela de sessões: um cartão por sessão (nome, projeto, há quanto tempo, começo da pergunta). Tocar num cartão
    abre a sessão com a pergunta inteira, com Dispensar e Voltar. Ainda não há link para abrir a sessão no Claude do iPhone
    (SPEC 13, item 4), por isso quem responde faz isso na própria sessão. */
-const se = { lista: [], aberta: null, y: 0, seq: 0, tempos: '' };
+const se = { lista: [], outras: [], aberta: null, y: 0, seq: 0, tempos: '' };
 const temposSessoes = l => l.map(s => haQuanto(s.desde, V.ref).texto).join('|'); // o "há X min" anda sozinho com o relógio do Mac
 const ordenarSessoes = l => [...l].sort((a, b) => Date.parse(b.desde) - Date.parse(a.desde));
-function abrirSessoes() { se.aberta = null; se.lista = V.sessoes; pintarSessoes(); $('#se-lista').scrollTop = 0; abrirFolha('#f-sessoes'); lerSessoes() }
+function abrirSessoes() { se.aberta = null; se.lista = V.sessoes; se.outras = V.outras || []; pintarSessoes(); $('#se-lista').scrollTop = 0; abrirFolha('#f-sessoes'); lerSessoes() }
 async function lerSessoes() {
   const n = ++se.seq;
   try {
     const l = await canal.sessoes(); if (n !== se.seq) return;
-    const nova = ordenarSessoes((Array.isArray(l) ? l : []).filter(s => !dispensada(s)));
-    if (JSON.stringify(nova) !== JSON.stringify(se.lista) || temposSessoes(nova) !== se.tempos) { se.lista = nova; pintarSessoes() }
+    const todas = Array.isArray(l) ? l : []; // o Mac manda as que esperam e depois as outras (com `situacao`); Mac antigo, só as que esperam
+    const nova = ordenarSessoes(todas.filter(s => !s.situacao && !dispensada(s))), outras = todas.filter(s => s.situacao);
+    if (JSON.stringify(nova) !== JSON.stringify(se.lista) || JSON.stringify(outras) !== JSON.stringify(se.outras) || temposSessoes([...nova, ...outras]) !== se.tempos) { se.lista = nova; se.outras = outras; pintarSessoes() }
   } catch (e) { if (n === se.seq && e.status === 401) tratarErro(e) } // sem a lista completa, fica a do estado
 }
 const cartaoSessao = s => `<button class="cartao-sessao ${haQuanto(s.desde, V.ref).velha ? 'velha' : ''}" data-sessao="${esc(s.id)}"><b>${esc(s.nome)}</b><small>${esc(s.projeto)}, há ${haQuanto(s.desde, V.ref).texto}</small><p>${esc(s.pergunta)}</p></button>`;
@@ -326,8 +327,12 @@ const detalheSessao = s => `<article class="detalhe-sessao">
   <button class="btn primario" data-sessao-mac>Abrir no Mac</button>
   ${s.contexto ? `<section class="contexto"><span class="rotulo">Contexto</span><div class="texto-contexto">${paragrafos(s.contexto)}</div></section>` : ''}
   <p class="nota-sessao">Responda direto na sessão, no Claude.</p></article>`;
+const ROTULO_SESSAO = { trabalhando: 'Trabalhando', parada: 'Parada', concluida: 'Terminou' };
+/* as sessões que não esperam você: nome, o estado, e o último passo. Só leitura (quem responde é a que espera) */
+const linhaOutra = s => `<div class="linha-sessao ${esc(s.situacao)}"><div><b>${esc(s.nome)}</b><small>${esc(s.projeto)}, há ${haQuanto(s.desde, V.ref).texto}</small>${s.passo ? `<p>${esc(s.passo)}</p>` : ''}</div><span class="estado-sessao">${esc(ROTULO_SESSAO[s.situacao] || s.situacao)}</span></div>`;
+const outrasSessoes = () => se.outras.length ? `<div class="outras-sessoes"><span class="rotulo-lista">Outras sessões</span>${se.outras.map(linhaOutra).join('')}</div>` : '';
 function pintarSessoes() {
-  se.tempos = temposSessoes(se.lista);
+  se.tempos = temposSessoes([...se.lista, ...se.outras]);
   const s0 = se.aberta && se.lista.find(x => x.id === se.aberta);
   if (se.aberta && !s0) { se.aberta = null; avisar('Essa sessão já foi respondida') }
   const s = se.aberta ? s0 : null; // sumiu da lista (respondida no Mac): volta aos cartões
@@ -335,8 +340,8 @@ function pintarSessoes() {
   $('#se-titulo').innerHTML = s ? `${esc(s.nome)} <small>${esc(s.projeto)}, há ${haQuanto(s.desde, V.ref).texto}</small>` : `Sessões esperando <small>${n} ${n === 1 ? 'sessão' : 'sessões'}</small>`;
   $('#f-sessoes').classList.toggle('detalhe', !!s); $('#se-rodape').hidden = !s;
   manterRolagem($('#se-lista'), s ? detalheSessao(s)
-    : n ? `<div class="grade-sessoes">${se.lista.map(cartaoSessao).join('')}</div>`
-    : '<div class="vazio-bloco" style="min-height:160px"><strong>Ninguém esperando</strong><span>Quando uma sessão do Claude pedir resposta, ela aparece aqui.</span></div>');
+    : (n ? `<div class="grade-sessoes">${se.lista.map(cartaoSessao).join('')}</div>`
+      : `<div class="vazio-bloco" style="min-height:${se.outras.length ? 96 : 160}px"><strong>Ninguém esperando</strong><span>Quando uma sessão do Claude pedir resposta, ela aparece aqui.</span></div>`) + outrasSessoes());
 }
 function voltarSessoes() { se.aberta = null; pintarSessoes(); $('#se-lista').scrollTop = se.y }
 /* "Abrir no Mac": o Mac acha o terminal onde a sessão está e o traz para a frente. Sem terminal, abre o Terminal na pasta do projeto */

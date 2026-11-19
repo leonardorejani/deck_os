@@ -3,7 +3,7 @@ import Foundation
 /// As seções da janela de Ajustes, na ordem e nos grupos da barra lateral do protótipo
 /// (mac.js, SECOES): o que mais se usa em cima.
 enum SecaoAjustes: String, CaseIterable, Identifiable {
-    case teclas, uso, iphone, permissoes, geral, sobre
+    case teclas, regras, uso, iphone, permissoes, geral, sobre
 
     var id: String { rawValue }
 
@@ -16,6 +16,7 @@ enum SecaoAjustes: String, CaseIterable, Identifiable {
     var nome: String {
         switch self {
         case .teclas: return "Suas teclas"
+        case .regras: return "Regras"
         case .uso: return "Uso das IAs"
         case .iphone: return "Conexões"
         case .permissoes: return "Acessos do Mac"
@@ -28,6 +29,7 @@ enum SecaoAjustes: String, CaseIterable, Identifiable {
     var icone: String {
         switch self {
         case .teclas: return Icone.teclas
+        case .regras: return Icone.raio
         case .uso: return Icone.uso
         case .iphone: return Icone.iphone
         case .permissoes: return Icone.permissoes
@@ -37,7 +39,7 @@ enum SecaoAjustes: String, CaseIterable, Identifiable {
     }
 
     /// Grupos separados por um espaço na barra lateral.
-    static let grupos: [[SecaoAjustes]] = [[.teclas, .uso], [.iphone, .permissoes], [.geral, .sobre]]
+    static let grupos: [[SecaoAjustes]] = [[.teclas, .regras, .uso], [.iphone, .permissoes], [.geral, .sobre]]
 
 }
 
