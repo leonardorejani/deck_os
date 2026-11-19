@@ -240,7 +240,7 @@ final class ModeloTeclasTestes: XCTestCase {
     }
 
     func testTeclasDeFabricaEntramNaListaESaoDeFabrica() {
-        XCTAssertEqual(TeclasDeFabrica.todas.map(\.nome), ["Controles do Mac", "Google Meet (navegador)"])
+        XCTAssertEqual(TeclasDeFabrica.todas.map(\.nome), ["Controles do Mac", "Google Meet (navegador)", "GitHub (PRs e CI)", "Valores de fora"])
         XCTAssertEqual(AjusteDeApp.de("Calendar"), .agenda)
         XCTAssertEqual(AjusteDeApp.de("Activity Monitor"), .monitor)
         XCTAssertEqual(AjusteDeApp.de("Controles"), .controles)

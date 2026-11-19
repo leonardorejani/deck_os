@@ -35,6 +35,7 @@
      apps()                    -> [{nome, valor, bundle, navegador}]  os apps instalados no Mac (404 em Mac antigo)
      acoesDoApp(bundle)        -> {bundle, acoes: [Acao]}  o que o app oferece além de abrir (ler as contas do Mail pode levar uns 8 s)
      appIconeUrl(bundle)       -> endereço do ícone do app
+     abrirGitHub(id)           -> {ok: true}       abre no navegador do Mac o PR da última leitura do GitHub (id "dono/repo#12", 404 em Mac antigo)
 
    Erro: sempre um Error com .message em português para mostrar no iPhone, .status com o código HTTP
    (401 = código de acesso inválido) e .rede = true quando o Mac nem respondeu. */
@@ -138,6 +139,7 @@ function criarCanalHttps() {
     meetAcao: acao => pedir('POST', '/api/meet/' + encodeURIComponent(acao), undefined, 20000), // trazer a aba ou abrir o Meet pode levar um instante
     agendaDestinos: pedirAcesso => pedir('GET', '/api/agenda/destinos' + (pedirAcesso ? '?pedir=1' : '')),
     criarCompromisso: dados => pedir('POST', '/api/agenda/criar', dados, 15000), // o Mac grava pelo EventKit, que pode demorar com a conta na nuvem
+    abrirGitHub: id => pedir('POST', '/api/github/abrir', { id }),
     colar: texto => pedir('POST', '/api/colar', { texto }, 15000), // o Mac guarda a prancheta, cola e devolve: passa de 5 s no Bluetooth com texto longo
     apps: () => pedir('GET', '/api/apps'),
     acoesDoApp: bundle => pedir('GET', `/api/apps/${encodeURIComponent(bundle)}/acoes`, undefined, 15000), // o Mac lê a lista de dentro do app, e o macOS pode pedir permissão no meio

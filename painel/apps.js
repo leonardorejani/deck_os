@@ -27,8 +27,10 @@ async function carregarApps(forcar) {
 }
 /* os que não são app instalado: aparecem na frente da lista e valem em qualquer Mac */
 const ESPECIAIS = [CONTROLES_DO_MAC, MEET_NAVEGADOR, NAVEGADOR_PADRAO];
-const appDoMac = valor => ESPECIAIS.find(a => a.valor === valor) || appsMac.lista?.find(a => a.valor === valor);
-const iconeDoApp = a => a.controles ? `<span class="svg">${SVG.controles}</span>` : a.meet ? `<span class="svg">${SVG.video}</span>` : a.bundle === NAVEGADOR_PADRAO.bundle ? `<span class="svg">${SVG.globo}</span>` : `<img src="${esc(canal.appIconeUrl(a.bundle))}" loading="lazy" alt="">`;
+/* GitHub e Valores se adicionam pelo Mac (a lista do editor do iPhone fica como era), mas o editor do iPhone os reconhece ao editar */
+const TELAS_DO_DECK = [GITHUB_DECK, VALORES_DECK];
+const appDoMac = valor => ESPECIAIS.find(a => a.valor === valor) || TELAS_DO_DECK.find(a => a.valor === valor) || appsMac.lista?.find(a => a.valor === valor);
+const iconeDoApp = a => a.controles ? `<span class="svg">${SVG.controles}</span>` : a.meet ? `<span class="svg">${SVG.video}</span>` : a.telaDoDeck ? `<span class="svg">${SVG[a.telaDoDeck]}</span>` : a.bundle === NAVEGADOR_PADRAO.bundle ? `<span class="svg">${SVG.globo}</span>` : `<img src="${esc(canal.appIconeUrl(a.bundle))}" loading="lazy" alt="">`;
 
 /* O ícone de uma tecla de app: o do app, se a página já o tem; senão o que o Mac tem. Sem nenhum dos dois, o raio de sempre */
 function iconeDaTecla(t) {
@@ -57,7 +59,7 @@ async function lerAcoes() {
     if (appsMac.estado === 'lendo') return;
     edApp.acoesEstado = appsMac.estado === 'ok' ? 'sumiu' : 'nenhuma'; return pintarAcoes();
   }
-  if (app.controles) { edApp.acoes = []; edApp.acoesEstado = 'ok'; return pintarAcoes() } // tela do próprio iPhone: não há o que perguntar ao Mac
+  if (app.controles || app.telaDoDeck) { edApp.acoes = []; edApp.acoesEstado = 'ok'; return pintarAcoes() } // tela do próprio iPhone: não há o que perguntar ao Mac
   pintarAcoes();
   try { const r = await canal.acoesDoApp(app.bundle); if (n !== edApp.seq) return; edApp.acoes = Array.isArray(r?.acoes) ? r.acoes : []; edApp.acoesEstado = 'ok' }
   catch (e) {
@@ -94,7 +96,7 @@ function acoesHTML() {
   if (e.acoesEstado === 'erro') return `<span class="rotulo">O que a tecla faz</span><span class="ajuda">${esc(e.erro || 'Não deu para ler o que o app oferece.')}</span><button class="btn secundario pequeno" data-acoes-tentar style="justify-self:start">Tentar de novo</button>`;
   if (e.acoesEstado === 'sumiu') return '<span class="ajuda">Esse app não foi achado neste Mac. A tecla vai tentar abrir mesmo assim.</span>';
   const acoes = e.acoes || [];
-  if (!acoes.length) return `<span class="ajuda">${rasc.valor === CONTROLES_DO_MAC.valor ? 'A tecla abre os controles do Mac aqui no iPhone.' : rasc.valor === MEET_NAVEGADOR.valor ? 'A tecla abre a central do Meet aqui no iPhone, com entrar, microfone, câmera e sair.' : 'A tecla abre o app.'}</span>`;
+  if (!acoes.length) return `<span class="ajuda">${rasc.valor === CONTROLES_DO_MAC.valor ? 'A tecla abre os controles do Mac aqui no iPhone.' : rasc.valor === MEET_NAVEGADOR.valor ? 'A tecla abre a central do Meet aqui no iPhone, com entrar, microfone, câmera e sair.' : rasc.valor === GITHUB_DECK.valor ? 'A tecla mostra quantos PRs esperam você e abre a lista aqui no iPhone. Usa o gh que já está logado no Mac.' : rasc.valor === VALORES_DECK.valor ? 'A tecla abre os valores que scripts do Mac mandam para o Deck.' : 'A tecla abre o app.'}</span>`;
   const atual = rasc.acao?.id || '';
   const meet = rasc.valor === MEET_NAVEGADOR.valor; // a tecla do Meet sozinha abre a central dele aqui no iPhone
   const opcoes = [{ id: '', nome: meet ? 'Abrir a central do Meet (entrar, microfone, câmera e sair)' : 'Só abrir o app' }, ...acoes].map(a => `<button class="opcao" role="radio" aria-checked="${a.id === atual}" data-acao-id="${esc(a.id)}">${esc(a.nome)}</button>`).join('');
@@ -128,7 +130,7 @@ function sugerirNome() {
 $('#ed-nome').addEventListener('input', () => { if ($('#ed-nome').value !== edApp.sugestao) edApp.nomeAuto = false });
 
 function escolherApp(a) {
-  rasc.valor = a.valor; rasc.icone = a.controles ? 'svg:controles' : a.meet ? 'svg:video' : a.valor; delete rasc.acao;
+  rasc.valor = a.valor; rasc.icone = a.controles ? 'svg:controles' : a.meet ? 'svg:video' : a.telaDoDeck ? 'svg:' + a.telaDoDeck : a.valor; delete rasc.acao;
   edApp.passo = 'acao'; sugerirNome(); pintarTipo(); lerAcoes();
 }
 /* o que falta preencher na ação antes de gravar, ou nada */

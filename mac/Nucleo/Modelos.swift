@@ -303,6 +303,12 @@ struct Estado: Codable, Equatable, Sendable {
     var aprovacoes: [PedidoDeAprovacao]? = nil
     /// As regras automáticas que estão valendo agora, da de maior prioridade para a menor. Ausente quando nenhuma vale e em Mac antigo.
     var regras: [RegraAtiva]? = nil
+    /// Avisos que chegaram de fora (script, build) e ainda valem. O iPhone mostra cada id uma vez, como toast. Ausente quando não há.
+    var avisosDeFora: [AvisoDeFora]? = nil
+    /// Valores que chegaram de fora e não venceram. Só vem com a tecla Valores no perfil ativo.
+    var valoresDeFora: [ValorDeFora]? = nil
+    /// PRs esperando revisão e PRs com a CI falhando. Só vem com a tecla GitHub no perfil ativo.
+    var github: ResumoGitHub? = nil
 }
 
 extension Config {
@@ -407,6 +413,7 @@ struct ConversaWhatsApp: Codable, Equatable, Sendable {
 // POST /api/spotify/repetir?modo=faixa|nao|contexto   repetir só a música, nada ou a lista pela API (só conectado, senão 409).
 //                                  Sem `modo`, `repetir[?v=1|0]` segue sendo o do AppleScript acima.
 // GET  /api/capa                   PNG ou JPEG da capa atual
+// POST /api/github/abrir           <- {"id": "dono/repo#12"} abre o PR no navegador do Mac (só um id da última leitura) -> {"ok": true}
 // GET  /api/whatsapp               -> [ConversaWhatsApp] (vazia quando Estado.whatsapp.origem é "web": o navegador só dá o total)
 // GET  /api/whatsapp/foto/<arquivo> -> {"tipo", "dados" (base64)}  a foto de perfil (origem "qr"; 404 sem foto)
 // GET  /api/whatsapp/midia?chat=<id>&id=<mensagem> -> {"tipo", "dados" (base64)}  a foto ou o áudio de uma mensagem (origem "qr", até 8 MB, nunca visualização única)

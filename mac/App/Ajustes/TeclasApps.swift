@@ -40,7 +40,11 @@ enum TeclasDeFabrica {
     static let controles = AppDoMac(nome: "Controles do Mac", valor: "Controles", caminhoDoIcone: nil, svg: Icone.controles, icone: "svg:controles")
     static let meet = AppDoMac(nome: "Google Meet (navegador)", valor: ControleDeReuniao.valorDoMeet, caminhoDoIcone: nil,
                                svg: Icone.video, icone: "svg:video", nomeDaTecla: "Google Meet")
-    static let todas = [controles, meet]
+    static let github = AppDoMac(nome: "GitHub (PRs e CI)", valor: TeclasDeFora.valorDoGitHub, caminhoDoIcone: nil,
+                                 svg: Icone.pr, icone: "svg:pr", nomeDaTecla: "GitHub")
+    static let valores = AppDoMac(nome: "Valores de fora", valor: TeclasDeFora.valorDosValores, caminhoDoIcone: nil,
+                                  svg: Icone.valores, icone: "svg:valores", nomeDaTecla: "Valores")
+    static let todas = [controles, meet, github, valores]
 
     static func de(valor: String) -> AppDoMac? { todas.first { $0.valor == valor } }
 }

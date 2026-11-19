@@ -1104,6 +1104,25 @@ button.item-lista.com-capa:active .capa-fila svg, button.item-lista.com-capa:foc
 .es-msg { margin: 0; min-height: calc(var(--texto-sm) * 1.3); font-size: var(--texto-sm); line-height: 1.3; color: var(--texto-2) }
 .es-msg.erro { color: var(--perigo) }
 #es-enviar:disabled { opacity: .5 }
+/* ---------- GitHub e Valores (externos.js) ---------- */
+.gh-grupos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--grade); align-items: start; padding-bottom: var(--pad) }
+.vertical .gh-grupos { grid-template-columns: minmax(0, 1fr) }
+.gh-grupo h3 { margin: 0 0 var(--item); display: flex; align-items: baseline; gap: var(--item); font-size: var(--texto-sm); font-weight: 600; color: var(--texto-2) }
+.gh-grupo h3 small { font-size: var(--texto-xs); font-weight: 400; font-variant-numeric: tabular-nums }
+.gh-grupo.falhando h3 { color: var(--perigo) }
+.gh-linha { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--icone); align-items: center; width: 100%; min-height: var(--linha); padding: var(--item) 0; border: 0; border-top: 1px solid var(--borda); background: none; color: inherit; font: inherit; text-align: left; cursor: pointer }
+.gh-linha:active { opacity: .7 }
+.gh-linha:focus-visible { outline: 2px solid var(--destaque); outline-offset: -2px }
+.gh-tx { min-width: 0; display: grid }
+.gh-tx b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.gh-tx small { color: var(--texto-2); font-size: var(--texto-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.gh-seta { display: grid; color: var(--texto-2) }
+.gh-seta svg { width: var(--ic-mini); height: var(--ic-mini) }
+.gh-lido { margin: 0 0 var(--pad); color: var(--texto-2); font-size: var(--texto-xs) }
+.vl-grade { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); grid-auto-rows: minmax(120px, auto); gap: var(--grade); padding-bottom: var(--pad) }
+.vertical .vl-grade { grid-template-columns: repeat(2, minmax(0, 1fr)) }
+.vl-grade .mt-bloco { cursor: default }
+.vl-grade .mt-valor.longo { font-size: var(--texto-lg) }
 
 /* ---------- cortina de controles rápidos (cortina.js) ---------- */
 .cortina { position: absolute; inset: 0; z-index: 18; pointer-events: none; visibility: hidden }

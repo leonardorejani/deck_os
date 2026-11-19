@@ -188,6 +188,8 @@ struct Roteador: Sendable {
     var processos: (any ProcessosDoMac)? = nil
     /// A central do Google Meet (estado, entrar, microfone, câmera e sair). Nil: as rotas /api/meet não existem (404).
     var meet: (any MeetDoMac)? = nil
+    /// Abrir um PR do GitHub no navegador do Mac. Nil: a rota /api/github/abrir não existe (404).
+    var github: (any ProvedorDeGitHub)? = nil
     /// As regras automáticas (Regras.swift). Nil: o estado nunca traz `regras`.
     var regras: VigiaDeRegras? = nil
     /// Os pedidos de permissão do Claude Code esperando Permitir ou Negar. Nil: o estado não leva `aprovacoes` e a rota /api/aprovacoes/<id> responde 404.
@@ -302,6 +304,9 @@ struct Roteador: Sendable {
         if r.caminho == "/api/controles" {
             // O que a pessoa desligou na tecla Controles do Mac não sai daqui: a barra some no iPhone, como a que o Mac não oferece.
             return somente(["GET"], r) ?? controles.map { .codificar(200, $0.estado().somente(config.ler().controles)) } ?? .erro(404, "Essa rota não existe.")
+        }
+        if r.caminho == "/api/github/abrir" {
+            return somente(["POST"], r) ?? abrirPrDoGitHub(r)
         }
         if r.caminho == "/api/app/instalacao" {
             return somente(["POST"], r) ?? informarInstalacao(r)
@@ -439,6 +444,17 @@ struct Roteador: Sendable {
             return .json(200, (try? JSONSerialization.data(withJSONObject: corpo)) ?? Data("{\"ok\":true}".utf8))
         case .falhou(let e): return .erro(422, e)
         }
+    }
+
+    /// POST /api/github/abrir, corpo {"id": "dono/repo#12"}: abre o PR no navegador do Mac. O id tem de ser de um PR da última leitura.
+    private func abrirPrDoGitHub(_ r: HttpRequisicao) -> RespostaRota {
+        guard let github else { return .erro(404, "Essa rota não existe.") }
+        guard let obj = (try? JSONSerialization.jsonObject(with: r.corpo)) as? [String: Any], let id = obj["id"] as? String,
+              Self.textoSimples(id, maximo: 200) else {
+            return .erro(400, "Informe o PR a abrir, por exemplo {\"id\": \"dono/repo#12\"}.")
+        }
+        if let erro = github.abrir(id: id) { return .erro(422, erro) }
+        return .json(200, Data("{\"ok\":true}".utf8))
     }
 
     /// Texto sem caractere de controle e sem tamanho absurdo.
