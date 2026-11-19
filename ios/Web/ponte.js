@@ -81,6 +81,7 @@
     abrirConversa: id => pedir('POST', '/api/whatsapp/abrir', undefined, { id }, tempoLimite * 6), // o Mac traz a aba, acha a busca e digita: passa de 5 s (o mesmo de painel/canal.js)
     agenda: (de, dias) => pedir('GET', '/api/agenda', { de: String(de), dias: String(dias) }),
     sessoes: () => pedir('GET', '/api/sessoes'),
+    aprovar: (id, decisao) => pedir('POST', '/api/aprovacoes/' + encodeURIComponent(id), undefined, { decisao }),
     usoDetalhe: periodo => pedir('GET', '/api/uso/detalhe', { periodo: String(periodo) }),
     abrirSessao: id => pedir('POST', '/api/sessoes/' + encodeURIComponent(id) + '/abrir'),
     entrarNaReuniao: link => pedir('POST', '/api/reuniao/entrar', undefined, { link }),
@@ -90,6 +91,7 @@
     meetAcao: acao => pedir('POST', '/api/meet/' + encodeURIComponent(acao), undefined, undefined, 20000),
     agendaDestinos: pedirAcesso => pedir('GET', '/api/agenda/destinos', pedirAcesso ? { pedir: '1' } : undefined),
     criarCompromisso: dados => pedir('POST', '/api/agenda/criar', undefined, dados, 15000),
+    colar: texto => pedir('POST', '/api/colar', undefined, { texto }, 30000), // texto longo pelo Bluetooth (uns 25 KB/s) passa de 5 s
     apps: () => pedir('GET', '/api/apps'),
     acoesDoApp: bundle => pedir('GET', '/api/apps/' + encodeURIComponent(bundle) + '/acoes', undefined, undefined, 15000), // ler as contas do Mail pode levar uns 8 s
     // o ícone de um app do Mac (editor de tecla): também numa <img>, pelo mesmo esquema. O app do iPhone guarda por um dia
