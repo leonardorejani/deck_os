@@ -140,7 +140,7 @@ function criarCanalHttps() {
     agendaDestinos: pedirAcesso => pedir('GET', '/api/agenda/destinos' + (pedirAcesso ? '?pedir=1' : '')),
     criarCompromisso: dados => pedir('POST', '/api/agenda/criar', dados, 15000), // o Mac grava pelo EventKit, que pode demorar com a conta na nuvem
     abrirGitHub: id => pedir('POST', '/api/github/abrir', { id }),
-    colar: texto => pedir('POST', '/api/colar', { texto }, 15000), // o Mac guarda a prancheta, cola e devolve: passa de 5 s no Bluetooth com texto longo
+    colar: texto => pedir('POST', '/api/colar', { texto }, 30000), // o Mac guarda a prancheta, cola e devolve: texto longo pelo Bluetooth (uns 25 KB/s) passa de 5 s
     apps: () => pedir('GET', '/api/apps'),
     acoesDoApp: bundle => pedir('GET', `/api/apps/${encodeURIComponent(bundle)}/acoes`, undefined, 15000), // o Mac lê a lista de dentro do app, e o macOS pode pedir permissão no meio
     appIconeUrl: bundle => `/api/apps/${encodeURIComponent(bundle)}/icone?codigo=${encodeURIComponent(codigo || '')}`,
