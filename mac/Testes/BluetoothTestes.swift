@@ -619,9 +619,37 @@ final class PareamentoAdversarioTestes: XCTestCase {
         let p = porta(c, aberto: { false }, decidir: { _, cod in chamadas.anotar(cod); return true })
         let (mac, fio) = FluxoEnlace.par()
         Thread { p.atender(mac, rotulo: "fora") }.start()
-        let pareando = try EnlaceSeguro.iniciarPareamento(fio, nomeDoIphone: "fora")
-        XCTAssertThrowsError(try EnlaceSeguro.concluir(pareando, aceito: true))
+        // 23/11/2026: com Conexões fechado o iPhone já recebe o que fazer na abertura, em vez de um código que o Mac não mostra.
+        XCTAssertThrowsError(try EnlaceSeguro.iniciarPareamento(fio, nomeDoIphone: "fora")) {
+            XCTAssertEqual($0 as? ErroEnlace, .recusado(EnlaceSeguro.pareamentoFechadoNoMac))
+        }
         XCTAssertTrue(chamadas.todos.isEmpty)
+    }
+
+    /// 23/11/2026, o primeiro pareamento só por Bluetooth nunca conectava: o Mac recusava em silêncio (uma linha no log) e a pessoa
+    /// não sabia que tinha que abrir Ajustes > Conexões. Agora o app é avisado, no máximo a cada 15 s.
+    func testPedidoComConexoesFechadoAvisaOAppSemEncherOMenu() throws {
+        let c = try Cenario()
+        let avisos = Registro()
+        let hora = Registro()   // cada anotação avança o relógio do teste em segundos
+        let log = Registro()
+        let relogio: @Sendable () -> Date = { Date(timeIntervalSince1970: Double(hora.todos.count)) }
+        let p = PortaDoBluetooth(roteador: c.roteador, nomeMac: { "Mac" }, decidir: { _, _ in true }, pareamentoAberto: { false }, agora: relogio,
+                                 log: { log.anotar($0) }, aoPedidoComPareamentoFechado: { avisos.anotar("pediu") })
+        func pedir(_ n: Int) {
+            let (mac, fio) = FluxoEnlace.par()
+            Thread { p.atender(mac, rotulo: "f\(n)") }.start()
+            XCTAssertThrowsError(try EnlaceSeguro.iniciarPareamento(fio, nomeDoIphone: "f"))
+            fio.fechar()
+        }
+        pedir(1); hora.anotar("+1"); pedir(2); hora.anotar("+1"); pedir(3)
+        Thread.sleep(forTimeInterval: 0.2)
+        XCTAssertEqual(avisos.todos.count, 1, "três pedidos em 2 s viram um aviso só: \(log.todos)")
+        for _ in 0..<15 { hora.anotar("+1") }
+        pedir(4)
+        Thread.sleep(forTimeInterval: 0.2)
+        XCTAssertEqual(avisos.todos.count, 2, "passado o intervalo, o aviso volta: \(log.todos)")
+        XCTAssertTrue(log.todos.contains { $0.contains("Conexões fechado") }, "o log diz o que aconteceu: \(log.todos)")
     }
 }
 
@@ -970,8 +998,10 @@ final class PortaDoBluetoothInvertidaTestes: XCTestCase {
         let ar = ArInvertido()
         let (i1, m1) = ar.par()
         Thread { porta.atender(m1, rotulo: "inv-fora") }.start()
-        let fora = try EnlaceSeguro.iniciarPareamento(i1, nomeDoIphone: "iPhone Exemplo")
-        XCTAssertThrowsError(try EnlaceSeguro.concluir(fora, aceito: true))
+        // 23/11/2026: fechado, o iPhone recebe o que fazer já na abertura (antes via um código que o Mac não mostrava).
+        XCTAssertThrowsError(try EnlaceSeguro.iniciarPareamento(i1, nomeDoIphone: "iPhone Exemplo")) {
+            XCTAssertEqual($0 as? ErroEnlace, .recusado(EnlaceSeguro.pareamentoFechadoNoMac))
+        }
         XCTAssertTrue(mostrados.todos.isEmpty)
 
         aberta = true

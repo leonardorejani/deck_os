@@ -93,12 +93,16 @@ final class PortaDoBluetooth: @unchecked Sendable {
     private let agora: @Sendable () -> Date
     private let log: @Sendable (String) -> Void
     private let aoAtender: (@Sendable (_ rotulo: String, _ caminho: String, _ status: Int) -> Void)?
+    private let aoPedidoComPareamentoFechado: (@Sendable () -> Void)?
     private let trava = NSLock()
     private var ativas = 0
     /// Um pareamento por vez: quem escuta o ar não pode encher a tela do Mac de pedidos.
     private var pareando = false
     /// Quando cada pedido de pareamento chegou à tela, para limitar a taxa.
     private var pedidos: [Date] = []
+    /// Quando o app foi avisado do último pedido com Conexões fechado: quem escuta o ar não enche o menu de avisos.
+    private var ultimoAvisoDeFechado: Date?
+    static let intervaloDoAvisoDeFechado: TimeInterval = 15
     static let limiteDeSessoes = 4
     /// No máximo tantos pedidos na tela do Mac por janela de tempo, vindos de quem estiver no ar.
     static let pedidosPorJanela = 3
@@ -107,14 +111,17 @@ final class PortaDoBluetooth: @unchecked Sendable {
     /// `decidir(iphone, codigo)` mostra o código de 6 dígitos na tela do Mac e devolve a escolha da pessoa.
     /// `pareamentoAberto` diz se a pessoa pediu para parear um iPhone agora (Conectar iPhone): fora disso, quem
     /// pede para parear é recusado sem aparecer na tela. `desistiu(codigo)` avisa que o iPhone saiu antes da
-    /// resposta, para a tela tirar o pedido.
+    /// resposta, para a tela tirar o pedido. `aoPedidoComPareamentoFechado` avisa o app de que um iPhone pediu para parear com
+    /// Conexões fechado (o iPhone já recebe o que fazer): o app põe uma linha no menu da barra pedindo para abrir os Ajustes.
     init(roteador: Roteador, nomeMac: @escaping @Sendable () -> String, decidir: @escaping @Sendable (String, String) -> Bool,
          pareamentoAberto: @escaping @Sendable () -> Bool = { false },
          desistiu: @escaping @Sendable (String) -> Void = { _ in },
          agora: @escaping @Sendable () -> Date = { Date() },
          log: @escaping @Sendable (String) -> Void = { FileHandle.standardOutput.write(Data(($0 + "\n").utf8)) },
-         aoAtender: (@Sendable (_ rotulo: String, _ caminho: String, _ status: Int) -> Void)? = nil) {
+         aoAtender: (@Sendable (_ rotulo: String, _ caminho: String, _ status: Int) -> Void)? = nil,
+         aoPedidoComPareamentoFechado: (@Sendable () -> Void)? = nil) {
         self.aoAtender = aoAtender
+        self.aoPedidoComPareamentoFechado = aoPedidoComPareamentoFechado
         self.roteador = roteador
         self.nomeMac = nomeMac
         self.decidir = decidir
@@ -140,7 +147,9 @@ final class PortaDoBluetooth: @unchecked Sendable {
             nomeMac: nome,
             chaves: { [roteador, agora] in Self.chavesVigentes(roteador.config.ler(), agora: agora()) },
             codigoAcesso: { [roteador] in roteador.config.ler().codigoAcesso },
-            decidir: { [self] iphone, codigo in decidirUm(iphone, codigo, rotulo, fluxo) })
+            decidir: { [self] iphone, codigo in decidirUm(iphone, codigo, rotulo, fluxo) },
+            pareamentoAberto: pareamentoAberto,
+            aoPareamentoFechado: { [self] in avisarPareamentoFechado(rotulo) })
         let seguro: FluxoCifrado
         do { seguro = try EnlaceSeguro.servir(fluxo, cfg) } catch {
             log("bluetooth \(rotulo): aperto de mão não passou (\(error))")
@@ -184,6 +193,19 @@ final class PortaDoBluetooth: @unchecked Sendable {
             pedidos.append(t)
             return true
         }
+    }
+
+    /// Um iPhone pediu para parear e Conexões está fechado: o iPhone já foi avisado pelo fio. Aqui o Mac avisa a pessoa
+    /// (no máximo a cada 15 s), em vez de recusar em silêncio.
+    private func avisarPareamentoFechado(_ rotulo: String) {
+        let avisar: Bool = trava.withLock {
+            let t = agora()
+            if let ultimo = ultimoAvisoDeFechado, t.timeIntervalSince(ultimo) < Self.intervaloDoAvisoDeFechado { return false }
+            ultimoAvisoDeFechado = t
+            return true
+        }
+        log("bluetooth \(rotulo): pedido de pareamento com Conexões fechado, avisei o iPhone\(avisar ? " e a pessoa" : "")")
+        if avisar { aoPedidoComPareamentoFechado?() }
     }
 
     private func decidirUm(_ iphone: String, _ codigo: String, _ rotulo: String, _ fluxo: FluxoBytes) -> Bool {
@@ -245,8 +267,10 @@ extension PortaDoBluetooth {
     static func ligar(roteador: Roteador, nomeMac: @escaping @Sendable () -> String, decidir: @escaping @Sendable (String, String) -> Bool,
                       pareamentoAberto: @escaping @Sendable () -> Bool, desistiu: @escaping @Sendable (String) -> Void = { _ in },
                       log: @escaping @Sendable (String) -> Void = { FileHandle.standardOutput.write(Data(($0 + "\n").utf8)) },
-                      aoAtender: (@Sendable (_ rotulo: String, _ caminho: String, _ status: Int) -> Void)? = nil) -> RadiosDoBluetooth {
-        let porta = PortaDoBluetooth(roteador: roteador, nomeMac: nomeMac, decidir: decidir, pareamentoAberto: pareamentoAberto, desistiu: desistiu, log: log, aoAtender: aoAtender)
+                      aoAtender: (@Sendable (_ rotulo: String, _ caminho: String, _ status: Int) -> Void)? = nil,
+                      aoPedidoComPareamentoFechado: (@Sendable () -> Void)? = nil) -> RadiosDoBluetooth {
+        let porta = PortaDoBluetooth(roteador: roteador, nomeMac: nomeMac, decidir: decidir, pareamentoAberto: pareamentoAberto, desistiu: desistiu, log: log, aoAtender: aoAtender,
+                                     aoPedidoComPareamentoFechado: aoPedidoComPareamentoFechado)
         let radio = RadioPeriferico(nome: nomeMac, aoAbrir: { fluxo, rotulo in porta.atender(fluxo, rotulo: rotulo) }, log: log)
         radio.iniciar()
         let central = RadioCentralMac(aoAbrir: { fluxo, rotulo in porta.atender(fluxo, rotulo: rotulo) }, log: log)
