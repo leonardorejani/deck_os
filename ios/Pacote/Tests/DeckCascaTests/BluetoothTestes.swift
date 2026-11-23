@@ -61,13 +61,16 @@ final class Linhas: @unchecked Sendable {
 /// O Mac do teste: aperto de mão de verdade, depois se apresenta e responde pedido por pedido.
 final class MacDeTeste: @unchecked Sendable {
     let codigoAcesso: String
-    let nome = "MacBook Pro de Exemplo"
+    var nome = "MacBook Pro de Exemplo"
+    /// O Mac com Conexões fechado: quem pede para parear recebe `fechado` na abertura, como o do app de verdade.
+    var pareamentoFechado = false
     private let trava = NSLock()
     private var _aceitar = true
     private var _mostrados: [String] = []
     private var _vistos: [PedidoCanal] = []
     private var _fios: [FluxoEnlace] = []
     private var _chaves: [String]
+    private var _recusas = 0
     var extras: [String: String] = [:]
     var responder: @Sendable (PedidoCanal) -> RespostaCanal? = { _ in
         RespostaCanal(status: 200, tipo: "application/json", corpo: Data("{\"ok\":true}".utf8))
@@ -80,6 +83,8 @@ final class MacDeTeste: @unchecked Sendable {
 
     var aceitar: Bool { get { trava.withLock { _aceitar } } set { trava.withLock { _aceitar = newValue } } }
     var chaves: [String] { get { trava.withLock { _chaves } } set { trava.withLock { _chaves = newValue } } }
+    /// Recusa o código dos próximos tantos apertos de mão (um instante da troca do código) e depois volta a aceitar.
+    var recusasPrimeiras: Int { get { trava.withLock { _recusas } } set { trava.withLock { _recusas = newValue } } }
     var mostrados: [String] { trava.withLock { _mostrados } }
     var vistos: [PedidoCanal] { trava.withLock { _vistos } }
 
@@ -90,9 +95,11 @@ final class MacDeTeste: @unchecked Sendable {
     func atender(_ fio: FluxoEnlace) {
         trava.withLock { _fios.append(fio) }
         let cfg = EnlaceSeguro.ConfigServidor(
-            nomeMac: nome, chaves: { [self] in chaves }, codigoAcesso: { [codigoAcesso] in codigoAcesso },
+            nomeMac: nome,
+            chaves: { [self] in trava.withLock { if _recusas > 0 { _recusas -= 1; return ["RECUSADORECUSADORECU"] }; return _chaves } }, codigoAcesso: { [codigoAcesso] in codigoAcesso },
             decidir: { [self] iphone, codigo in trava.withLock { _mostrados.append(codigo) }; return aceitar },
-            prazoDoAperto: 5, prazoDoIphone: 5)
+            prazoDoAperto: 5, prazoDoIphone: 5,
+            pareamentoAberto: { [self] in !pareamentoFechado })
         Thread { [self] in
             guard let seguro = try? EnlaceSeguro.servir(fio, cfg) else { fio.fechar(); return }
             _ = seguro.escrever(Quadros.codificar(MensagemCabo(tipo: "ola", nome: nome, versao: 1))!)
@@ -944,6 +951,105 @@ final class EnlaceInvertidoTestes: XCTestCase {
         await esperar({ g.mac != nil }, segundos: 3)
         XCTAssertNotNil(g.mac)
         XCTAssertFalse(periferico.anunciando)
+    }
+
+    private func casca(_ g: GerenteBluetooth, cofre: Cofre) -> (Casca, Quadro) {
+        let quadro = Quadro()
+        let c = Casca(pareador: PareadorCompleto(cabo: GerenteDoCabo(porta: 1), bluetooth: g), cofre: cofre, vibrar: {}, permanenciaNoCabo: 0, bluetooth: g)
+        c.executarJS = { quadro.js.append($0) }
+        return (c, quadro)
+    }
+
+    /// 23/11/2026, causa raiz de "o primeiro pareamento só por Bluetooth nunca conecta": o iPhone com chave que o Mac não reconhece
+    /// (app reinstalado pelo SideStore, ou o Mac desconectou ele) só descobria isso pelo cabo. Pelo Bluetooth, onde o sentido
+    /// antigo nem chega ao aperto de mão (a cifragem do enlace falha) e quem conecta é o Mac no invertido, a recusa não contava:
+    /// a página ficava em "Mac desconectado" para sempre. Agora duas recusas seguidas do Mac do pareamento acabam com ele, e a
+    /// tela de parear volta dizendo por quê.
+    func testMacQueNaoReconheceOIphonePeloInvertidoFazOAppEsquecerEVoltarAParear() async throws {
+        let mac = MacDeTeste(codigoAcesso: "OUTROCODIGOOUTROCODI")
+        let periferico = PerifericoFalso(mac: mac)
+        let cofre = CofreEmMemoria(pareado())
+        let (g, linhas) = gerente(RadioSemMac(), periferico, cofre: cofre)
+        let (c, _) = casca(g, cofre: cofre)
+        var recarregou = false
+        c.recarregarPagina = { recarregou = true }
+        c.iniciar()
+        periferico.ligarMac()
+        await esperar({ cofre.ler() == nil }, segundos: 6)
+        XCTAssertNil(cofre.ler(), "o pareamento com chave inválida acabou: \(linhas.todas)")
+        XCTAssertTrue(recarregou, "a página volta à tela de parear")
+        XCTAssertEqual(c.fluxo.estado, EstadoPareamento())
+        XCTAssertTrue(c.scriptDeInicio().contains("não reconhece mais este iPhone"), "a tela diz por que voltou: \(c.scriptDeInicio())")
+        XCTAssertFalse(periferico.anunciando, "sem pareamento o iPhone para de anunciar")
+    }
+
+    /// Um Mac vizinho com o Deck (outro nome) também conecta no iPhone anunciando e não conhece o código: isso não é o Mac do
+    /// pareamento recusando, e o pareamento fica.
+    func testMacVizinhoQueRecusaPeloInvertidoNaoFazOPareamentoSerEsquecido() async throws {
+        let vizinho = MacDeTeste(codigoAcesso: "OUTROCODIGOOUTROCODI")
+        vizinho.nome = "Mac do vizinho"
+        let periferico = PerifericoFalso(mac: vizinho)
+        let cofre = CofreEmMemoria(pareado())
+        let (g, linhas) = gerente(RadioSemMac(), periferico, cofre: cofre)
+        let esqueceu = Linhas()
+        g.aoNaoReconhecido { esqueceu.anotar("esqueceu") }
+        g.iniciar()
+        periferico.ligarMac()
+        await esperar({ periferico.conexoes >= 4 }, segundos: 6)
+        XCTAssertGreaterThanOrEqual(periferico.conexoes, 4, "o vizinho conectou e foi recusado várias vezes: \(linhas.todas)")
+        XCTAssertTrue(esqueceu.todas.isEmpty, "recusa de outro Mac não acaba com o pareamento")
+        XCTAssertNotNil(cofre.ler())
+    }
+
+    /// Uma recusa só pode ser um instante da troca do código (o rodízio): o pareamento fica e, com o código certo, conecta. Conectar
+    /// zera a conta: uma recusa depois da conexão boa também não esquece.
+    func testUmaRecusaSoPeloInvertidoNaoEsqueceEUmaConexaoBoaZeraAConta() async throws {
+        let mac = MacDeTeste()
+        mac.recusasPrimeiras = 1
+        let periferico = PerifericoFalso(mac: mac)
+        let cofre = CofreEmMemoria(pareado())
+        let (g, _) = gerente(RadioSemMac(), periferico, cofre: cofre)
+        let esqueceu = Linhas()
+        g.aoNaoReconhecido { esqueceu.anotar("esqueceu") }
+        g.iniciar()
+        periferico.ligarMac()
+        await esperar({ g.mac != nil }, segundos: 6)
+        XCTAssertNotNil(g.mac, "recusou uma vez e entrou na seguinte")
+        mac.recusasPrimeiras = 1
+        mac.sairDoAlcance()
+        await esperar({ g.mac == nil }, segundos: 3)
+        await esperar({ g.mac != nil }, segundos: 6)
+        XCTAssertNotNil(g.mac, "a recusa depois da conexão boa não somou com a de antes")
+        XCTAssertTrue(esqueceu.todas.isEmpty)
+        XCTAssertNotNil(cofre.ler())
+    }
+
+    /// 23/11/2026: Conexões fechado no Mac. O iPhone recebe o que fazer (Ajustes > Conexões no Mac) em vez de um código que o
+    /// Mac não mostra, e volta à lista com "Tentar de novo".
+    func testMacComConexoesFechadoDizAoIphoneOQueFazerEVoltaParaALista() async throws {
+        let mac = MacDeTeste()
+        mac.pareamentoFechado = true
+        let cofre = CofreEmMemoria()
+        let linhas = Linhas()
+        let g = GerenteBluetooth(radio: RadioFalso(mac), cofre: cofre, nomeDoIphone: "iPhone Exemplo", esperaEntreTentativas: { _ in 0.05 }, log: { linhas.anotar($0) })
+        addTeardownBlock { g.parar() }
+        let (c, _) = casca(g, cofre: cofre)
+        c.iniciar()
+        _ = await c.fluxo.tratar(.procurar)
+        await esperar({ !c.fluxo.estado.macs.isEmpty }, segundos: 3)
+        let erro = await c.fluxo.tratar(.escolher("mac-1"))
+        XCTAssertEqual(erro, EnlaceSeguro.pareamentoFechadoNoMac)
+        XCTAssertTrue(erro?.contains("Ajustes > Conexões no Mac") == true, "\(erro ?? "nil")")
+        XCTAssertEqual(c.fluxo.estado.etapa, .procurando, "volta à lista")
+        XCTAssertEqual(c.fluxo.estado.falha, erro, "com o motivo e o Tentar de novo")
+        XCTAssertTrue(mac.mostrados.isEmpty, "nenhum código foi mostrado: o Mac não tinha a tela aberta")
+        XCTAssertNil(cofre.ler())
+
+        mac.pareamentoFechado = false   // a pessoa abriu Ajustes > Conexões
+        let denovo = await c.fluxo.tratar(.escolher("mac-1"))
+        XCTAssertNil(denovo)
+        XCTAssertEqual(c.fluxo.estado.etapa, .confirmar)
+        XCTAssertEqual(mac.mostrados.count, 1)
     }
 
     /// Sem pareamento e sem pareamento em curso o iPhone não anuncia (e o iOS não pede a permissão por isso), e um Mac que

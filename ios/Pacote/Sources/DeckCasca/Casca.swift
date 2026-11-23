@@ -23,6 +23,9 @@ public final class Casca {
     private let instalacao: (@Sendable () -> InstalacaoDoApp?)?
     private var informadoEm: Date?
     private var informando = false
+    /// Por que a tela de parear voltou sozinha (o Mac não reconhece mais este iPhone). Sai quando a pessoa segue em frente.
+    private var avisoDoPareamento: String?
+    static let textoMacNaoReconhece = "O Mac não reconhece mais este iPhone. Pareie de novo."
     /// De quanto em quanto tempo o app repete a informação ao Mac (o vencimento muda quando o SideStore renova).
     static let intervaloDoInforme: TimeInterval = 6 * 3600
 
@@ -39,6 +42,7 @@ public final class Casca {
         })
         fluxo.aoMudar = { [weak self] estado in
             guard let self, let json = Self.json(estado) else { return }
+            if estado.etapa != .vazio { avisoDoPareamento = nil }
             executarJS("DeckNativo.estado(\(json))")
         }
         fluxo.aoPareado = { [weak self] feito in
@@ -85,6 +89,7 @@ public final class Casca {
     private func esquecerPareamento() async {
         guard cofre.ler() != nil else { return }
         _ = await fluxo.tratar(.esquecer)
+        avisoDoPareamento = Self.textoMacNaoReconhece
         bluetooth?.reavaliar()
         usar(canal: nil)
         recarregarPagina()
@@ -152,7 +157,7 @@ public final class Casca {
     /// Roda antes de a página carregar: entrega o código guardado e a etapa de agora, para a tela já
     /// nascer certa, sem piscar o painel antes do pareamento.
     public func scriptDeInicio() -> String {
-        let inicio = Inicio(codigo: cofre.ler()?.codigoAcesso, estado: fluxo.estado, canal: tipoDoCanal, busca: bluetooth?.situacao)
+        let inicio = Inicio(codigo: cofre.ler()?.codigoAcesso, estado: fluxo.estado, canal: tipoDoCanal, busca: bluetooth?.situacao, aviso: avisoDoPareamento)
         return "window.DECK_NATIVO_INICIO = \(Self.json(inicio) ?? "{}");"
     }
 
@@ -170,7 +175,7 @@ public final class Casca {
             // O código que está no Keychain agora: a página confere antes de esquecer o Mac num 401 (rodízio em andamento).
             return Self.json(["codigo": cofre.ler()?.codigoAcesso ?? ""]) ?? "{}"
         case "estado":
-            return Self.json(RespostaCasca(estado: fluxo.estado, canal: tipoDoCanal, busca: bluetooth?.situacao)) ?? "{}"
+            return Self.json(RespostaCasca(estado: fluxo.estado, canal: tipoDoCanal, busca: bluetooth?.situacao, aviso: avisoDoPareamento)) ?? "{}"
         case "acao":
             guard let acao = Self.acao(m) else { return Self.json(RespostaCasca(erro: "Essa ação não existe.")) ?? "{}" }
             let erro = await fluxo.tratar(acao)
@@ -207,6 +212,7 @@ public final class Casca {
         var estado: EstadoPareamento
         var canal: TipoCanal?
         var busca: String?
+        var aviso: String?
         // Codifica o nulo de verdade: a página distingue "sem código" de "campo ausente".
         func encode(to encoder: Encoder) throws {
             var c = encoder.container(keyedBy: Chave.self)
@@ -214,8 +220,9 @@ public final class Casca {
             try c.encode(estado, forKey: .estado)
             try c.encodeIfPresent(canal, forKey: .canal)
             try c.encodeIfPresent(busca, forKey: .busca)
+            try c.encodeIfPresent(aviso, forKey: .aviso)
         }
-        enum Chave: String, CodingKey { case codigo, estado, canal, busca }
+        enum Chave: String, CodingKey { case codigo, estado, canal, busca, aviso }
     }
 
     struct RespostaCasca: Codable {
@@ -223,6 +230,7 @@ public final class Casca {
         var erro: String?
         var canal: TipoCanal?
         var busca: String?
+        var aviso: String?
     }
 
     static func json<T: Encodable>(_ valor: T) -> String? {

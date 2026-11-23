@@ -8,7 +8,7 @@ const assert = require('assert');
 const codigo = fs.readFileSync(__dirname + '/../Web/casca.js', 'utf8');
 const MACS = [{ id: 'mac-1', nome: 'MacBook de Exemplo', perto: true }, { id: 'mac-2', nome: 'Mac mini de Exemplo', perto: false }];
 
-function montar() {
+function montar(inicio = { estado: { etapa: 'procurando', macs: MACS } }) {
   const enviados = [];
   const pendentes = [];
   const ouvintes = {};
@@ -21,7 +21,7 @@ function montar() {
   };
   const avisos = [];
   const janela = {
-    DECK_NATIVO_INICIO: { estado: { etapa: 'procurando', macs: MACS } },
+    DECK_NATIVO_INICIO: inicio,
     webkit: { messageHandlers: { deck: { postMessage: msg => new Promise(ok => { enviados.push(msg); pendentes.push(r => ok(JSON.stringify(r))) }) } } },
     avisar: (t) => avisos.push(t),
   };
@@ -100,6 +100,21 @@ const uteis = fn => new Promise(r => setImmediate(r)).then(fn);
   const antes4 = t.enviados.length;
   t.tocar({ 'data-acao': 'tentarDeNovo', acao: 'tentarDeNovo' });
   assert.strictEqual(t.enviados[antes4].acao, 'procurar', 'Mac fora da lista: procura de novo');
+
+  // 8. o Mac não reconhece mais o iPhone (23/11/2026): a tela de parear volta com o motivo, e diz o que fazer no Mac
+  t = montar({ estado: { etapa: 'vazio', macs: [], codigo: '', nomeMac: '' }, aviso: 'O Mac não reconhece mais este iPhone. Pareie de novo.' });
+  await uteis();
+  t.pendentes.shift()?.({ estado: { etapa: 'vazio', macs: [], codigo: '', nomeMac: '' } });
+  await uteis();
+  assert.ok(t.html().includes('Conecte o iPhone ao Mac'), 'a tela de parear aparece sem cabo');
+  assert.ok(t.html().includes('O Mac não reconhece mais este iPhone. Pareie de novo.'), 'com o motivo');
+  assert.ok(t.html().includes('Ajustes &gt; Conexões') || t.html().includes('Ajustes > Conexões'), 'e o que abrir no Mac');
+  assert.ok(t.html().includes('Procurar por perto'), 'e o botão de procurar');
+  t.janela.DeckNativo.estado({ etapa: 'procurando', macs: MACS });
+  t.janela.DeckNativo.estado({ etapa: 'vazio', macs: [], codigo: '', nomeMac: '' });
+  assert.ok(!t.html().includes('não reconhece mais'), 'o motivo some quando a pessoa segue em frente');
+  t.janela.DeckNativo.estado({ etapa: 'procurando', macs: MACS });
+  assert.ok(t.html().includes('Ajustes > Conexões aberto'), 'a lista lembra de deixar Conexões aberto no Mac');
 
   console.log('testar-casca: ok');
 })().catch(e => { console.error(e); process.exit(1) });

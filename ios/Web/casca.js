@@ -17,7 +17,7 @@
 
   const inicio = window.DECK_NATIVO_INICIO || {};
   let estado = inicio.estado || { etapa: 'vazio', macs: [], codigo: '', nomeMac: '' };
-  let canalAtual = inicio.canal || null, dig = '', tChip = 0, busca = inicio.busca || null;
+  let canalAtual = inicio.canal || null, dig = '', tChip = 0, busca = inicio.busca || null, aviso = inicio.aviso || null;
 
   tela.insertAdjacentHTML('beforeend', `
     <div class="tela-offline pareio" id="pareio" role="status" aria-live="polite"><div></div></div>
@@ -60,12 +60,13 @@
       D(via === 'cabo' ? 'Conectado pelo cabo. Se ele sair, o Deck troca para o Bluetooth.' : 'Conectado por Bluetooth. Plugue o cabo e o Deck troca sozinho.') +
       botao('Abrir o painel', 'abrirPainel', 'primario');
     if (etapa === 'vazio') return T('Conecte o iPhone ao Mac') + pilula('Nenhum Mac pareado', { ic: IC.bt }) +
-      D('Abra o Deck no Mac e deixe o Bluetooth ligado.') + botao('Procurar por perto', 'procurar', 'primario');
+      (aviso ? `<span class="dica-off" role="alert">${esc(aviso)}</span>` : '') +
+      D('No Mac, abra o Deck e deixe Ajustes > Conexões aberto, com o Bluetooth ligado.') + botao('Procurar por perto', 'procurar', 'primario');
     if (etapa === 'procurando') {
       if (estado.falha && !emCurso()) return falhaDoPareio();
       return T('Macs por perto') +
         (macs.length ? `<div class="macs">${macs.map(macLinha).join('')}</div>` : '') +
-        (emCurso() ? '' : `<span class="dica-off linha-gira"><span class="girando" aria-hidden="true"></span>Procurando</span>` + link('Conectar pelo cabo com código', 'cabo'));
+        (emCurso() ? '' : `<span class="dica-off linha-gira"><span class="girando" aria-hidden="true"></span>Procurando</span>` + D('No Mac, deixe Ajustes > Conexões aberto.') + link('Conectar pelo cabo com código', 'cabo'));
     }
     if (etapa === 'confirmar') {
       const pareando = estado.progresso === 'pareando';
@@ -88,6 +89,7 @@
   }
   function aplicar(novo) {
     if (novo.etapa !== 'codigo') dig = '';
+    if (novo.etapa !== 'vazio') aviso = null;
     estado = novo;
     pintar();
   }
@@ -161,5 +163,5 @@
 
   pintar();
   // a página pode abrir depois do Swift ter mudado de etapa: pede o estado de agora, sem aviso de canal
-  falar({ op: 'estado' }).then(r => { if (r.canal) canalAtual = r.canal; if (r.busca) busca = r.busca; if (r.estado) aplicar(r.estado) }).catch(() => {});
+  falar({ op: 'estado' }).then(r => { if (r.canal) canalAtual = r.canal; if (r.busca) busca = r.busca; if (r.aviso) aviso = r.aviso; if (r.estado) aplicar(r.estado) }).catch(() => {});
 })();

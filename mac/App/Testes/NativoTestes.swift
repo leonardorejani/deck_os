@@ -214,6 +214,23 @@ final class NativoNoModeloTestes: XCTestCase {
         XCTAssertEqual(m.iphoneAtivo?.canal, .cabo, "o app nativo tem a vez no topo do menu")
     }
 
+    /// 23/11/2026: iPhone pediu para parear com Conexões fechado. O menu da barra pede para abrir os Ajustes, e a linha sai quando a
+    /// pessoa abre Conexões (a janela abre ali), quando o pedido chega à tela ou quando o aviso envelhece.
+    func testPedidoComConexoesFechadoPedeParaAbrirOsAjustesESaiQuandoAbre() {
+        let m = modelo()
+        XCTAssertFalse(m.avisoDePareamentoFechado(agora: t0))
+        m.pedidoComAjustesFechados = t0
+        XCTAssertTrue(m.avisoDePareamentoFechado(agora: t0.addingTimeInterval(60)))
+        XCTAssertFalse(m.avisoDePareamentoFechado(agora: t0.addingTimeInterval(TextosDoNativo.validadeDoAvisoDePareamento + 1)), "envelheceu")
+        m.janelaDePareamento.renovar()
+        XCTAssertFalse(m.avisoDePareamentoFechado(agora: Date()), "a pessoa abriu Conexões")
+        m.janelaDePareamento.fechar()
+        m.pedidoComAjustesFechados = Date()
+        XCTAssertTrue(m.avisoDePareamentoFechado(agora: Date()))
+        m.pedidoBluetooth = PedidoDePareamento(iphone: "iPhone Exemplo", codigo: "483291")
+        XCTAssertFalse(m.avisoDePareamentoFechado(agora: Date()), "o pedido já está na tela")
+    }
+
     func testPedidoPorBluetoothAparecePermitirLibera() async throws {
         let m = modelo()
         let ponte = m.decisao

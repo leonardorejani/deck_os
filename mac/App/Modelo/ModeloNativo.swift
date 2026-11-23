@@ -191,6 +191,9 @@ enum TextosDoNativo {
     static let caboRotulo = "Código do cabo"
     static let caboTexto = "Digite no iPhone, na tela do cabo. Vale por 10 minutos."
     static func pedidoRotulo(_ iphone: String) -> String { "\(iphone) quer parear" }
+    static let pedidoComAjustesFechados = "Um iPhone quer parear. Abra Ajustes > Conexões."
+    /// Quanto tempo a linha do menu fica depois do pedido: o iPhone mostra o que fazer e a pessoa leva alguns minutos.
+    static let validadeDoAvisoDePareamento: TimeInterval = 300
     static let notaDaVia = "Sem Bluetooth ou sem achar o Mac? Segunda via: plugue o iPhone no cabo e, na tela de procurar do app, toque em \"Conectar pelo cabo com código\". Digite o código do cartão acima."
 }
 
@@ -322,6 +325,13 @@ extension ModeloApp {
         return CartaoDaRenovacao.para(origem: origemDaInstalacao, venceEmDoDeck: venceDoDeck, venceReal: renovacao.venceReal, agora: agora)
     }
 
+    /// A linha do menu da barra "Um iPhone quer parear. Abra Ajustes > Conexões." está valendo? Some quando a pessoa abre Conexões
+    /// (a janela de pareamento abre ali), quando o pedido chega à tela e quando o aviso envelhece.
+    func avisoDePareamentoFechado(agora: Date) -> Bool {
+        guard let quando = pedidoComAjustesFechados, pedidoBluetooth == nil, !janelaDePareamento.aberta else { return false }
+        return agora.timeIntervalSince(quando) < TextosDoNativo.validadeDoAvisoDePareamento
+    }
+
     /// O prazo apertando com o app pareado: cartão amarelo, selo "1" na barra lateral e linha no menu.
     var renovacaoApertando: Bool { nativo != nil && cartaoDaRenovacao(agora: agora) != nil }
 
@@ -355,12 +365,13 @@ extension ModeloApp {
         #else
         let aceitarSozinho = false
         #endif
+        let fechado: @Sendable () -> Void = { [weak self] in Task { @MainActor in self?.pedidoComAjustesFechados = Date() } }
         radio = PortaDoBluetooth.ligar(
             roteador: roteador, nomeMac: nome,
             decidir: { iphone, codigo in aceitarSozinho ? true : ponte.perguntar(iphone: iphone, codigo: codigo) },
             pareamentoAberto: { aceitarSozinho || janela.aberta },
             desistiu: { codigo in ponte.desistir(codigo: codigo) },
-            log: log, aoAtender: atendeu)
+            log: log, aoAtender: atendeu, aoPedidoComPareamentoFechado: fechado)
         log("deck: cabo e Bluetooth ligados")
     }
 

@@ -67,6 +67,7 @@ struct ConectarIphone: View {
         .task {
             while !Task.isCancelled {
                 modelo.janelaDePareamento.renovar()
+                if modelo.pedidoComAjustesFechados != nil { modelo.pedidoComAjustesFechados = nil }
                 try? await Task.sleep(nanoseconds: 20_000_000_000)
             }
         }

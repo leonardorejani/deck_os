@@ -76,6 +76,8 @@ public final class GerenteBluetooth: @unchecked Sendable {
     private var antigoParadoAte: Date?
     /// Primeira falha de cifragem desde a última conexão: conta o tempo até o aviso.
     private var cifragemDesde: Date?
+    /// Recusas seguidas do Mac do pareamento no sentido invertido (`naoPareado`). Duas e o pareamento acabou, como no cabo.
+    private var recusasInvertidas = 0
     /// O pareamento (iPhone novo) esperando o Mac conectar pelo sentido invertido.
     private var esperaInvertida: (@Sendable (FluxoBytes?) -> Void)?
     /// Rodadas seguidas que não acharam nenhum Mac, e quantas vezes o app voltou ao primeiro plano (acorda o descanso).
@@ -213,8 +215,10 @@ public final class GerenteBluetooth: @unchecked Sendable {
             return fluxo.fechar()
         }
         Task.detached { [self] in
+            final class Nome: @unchecked Sendable { private let t = NSLock(); private var v: String?; func guardar(_ n: String) { t.withLock { v = n } }; var valor: String? { t.withLock { v } } }
+            let nomeDoMac = Nome()
             do {
-                let entrada = try EnlaceSeguro.entrar(fluxo, codigoAcesso: pareado.codigoAcesso)
+                let entrada = try EnlaceSeguro.entrar(fluxo, codigoAcesso: pareado.codigoAcesso, aoSaberONome: { nomeDoMac.guardar($0) })
                 let nova = ConexaoCabo.bluetooth(fluxo: entrada.fluxo)
                 if reivindicar(nova, id: rotulo, nome: entrada.nomeMac) {
                     log("bluetooth: Mac \"\(entrada.nomeMac)\" conectado (cifrado), pelo sentido invertido")
@@ -222,12 +226,38 @@ public final class GerenteBluetooth: @unchecked Sendable {
                     log("bluetooth: aperto de mão invertido com \(rotulo) fechou, mas o outro sentido chegou antes: fechei este")
                     entrada.fluxo.fechar()
                 }
+            } catch ErroEnlace.naoPareado {
+                log("bluetooth: aperto de mão invertido com \(rotulo) não passou: o Mac \"\(nomeDoMac.valor ?? "?")\" não reconhece este iPhone")
+                fluxo.fechar()
+                recusouNoInvertido(nomeDoMac.valor, pareado: pareado)
             } catch {
                 // Pode ser outro Mac com o Deck por perto: não conta como o Mac deste iPhone recusando.
                 log("bluetooth: aperto de mão invertido com \(rotulo) não passou: \(error)")
                 fluxo.fechar()
             }
         }
+    }
+
+    /// O Mac que conectou no iPhone não reconhece o código dele. Sem cabo, este era o único caminho de um iPhone com chave velha
+    /// (reinstalado, ou o Mac desconectou ele): o sentido antigo nem chega ao aperto de mão quando a cifragem do enlace falha,
+    /// e a recusa do invertido não contava, então a página ficava em "Mac desconectado" para sempre. Conta como a do cabo: duas
+    /// seguidas do Mac do pareamento (pelo nome, que um Mac vizinho com o Deck não tem) e o pareamento acabou.
+    private func recusouNoInvertido(_ nome: String?, pareado: Pareado) {
+        guard nome == pareado.nomeMac else {
+            log("bluetooth: quem recusou no invertido não é o Mac pareado (\"\(pareado.nomeMac)\"): não conta")
+            return
+        }
+        let aviso: (@Sendable () -> Void)? = trava.withLock {
+            // Conexão aberta por outro sentido nesse meio-tempo: a recusa já nasceu velha.
+            guard conexao == nil else { return nil }
+            recusasInvertidas += 1
+            guard recusasInvertidas >= Self.recusasParaEsquecer else { return nil }
+            recusasInvertidas = 0
+            return aoNaoReconhecidoBt
+        }
+        guard let aviso else { return }
+        log("bluetooth: o Mac recusou este iPhone \(Self.recusasParaEsquecer) vezes pelo sentido invertido, o pareamento acabou")
+        aviso()
     }
 
     /// Fica com a conexão só se nenhum outro sentido fechou o aperto de mão antes. Sem duas sessões ao mesmo tempo.
@@ -239,6 +269,7 @@ public final class GerenteBluetooth: @unchecked Sendable {
             cifragemDesde = nil
             rodadasSemMac = 0
             retomadas += 1
+            recusasInvertidas = 0
             return true
         }
         guard ok else { return false }
