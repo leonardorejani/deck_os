@@ -180,7 +180,15 @@ enum EnlaceSeguro {
         var prazoDoAperto: TimeInterval = 10
         /// Quanto esperar o iPhone confirmar depois de o Mac permitir.
         var prazoDoIphone: TimeInterval = 120
+        /// O Mac só pareia quem a pessoa pediu para parear (Ajustes > Conexões aberto). Fechado, o iPhone recebe `fechado`
+        /// já na abertura, sem código na tela, para dizer a ela o que fazer em vez de mostrar um código que o Mac não tem.
+        var pareamentoAberto: @Sendable () -> Bool = { true }
+        /// Avisa o Mac de que um iPhone pediu para parear com Conexões fechado (o app põe uma linha no menu da barra).
+        var aoPareamentoFechado: @Sendable () -> Void = {}
     }
+
+    /// O que o iPhone diz quando o Mac não abriu o pareamento.
+    static let pareamentoFechadoNoMac = "O Mac não está aceitando pareamento. Abra Ajustes > Conexões no Mac e toque em Tentar de novo."
 
     /// O nome do iPhone chega pelo ar, então não é confiável: quebra de linha, ESC e marcas invisíveis ou de direção
     /// poderiam forjar o texto do pedido de pareamento na tela e no log do Mac. Fica só o que se lê, em até 60 caracteres.
@@ -230,6 +238,11 @@ enum EnlaceSeguro {
         }
 
         guard ola.m == modoParear else { throw ErroEnlace.protocolo("modo desconhecido") }
+        guard cfg.pareamentoAberto() else {
+            _ = QuadroEnlace.escrever(fluxo, MsgEnlace(t: "fechado"))
+            cfg.aoPareamentoFechado()
+            throw ErroEnlace.recusado("pareamento fechado")
+        }
         // O Mac se compromete com a chave antes de ver a do iPhone.
         guard QuadroEnlace.escrever(fluxo, MsgEnlace(t: "c", a: Sas.compromisso(chavePublica: minhaChave, nonce: meuNonce), n: cfg.nomeMac)) else { throw ErroEnlace.protocolo("fio caiu") }
         guard let k = QuadroEnlace.ler(fluxo), k.t == "k" else { throw ErroEnlace.protocolo("sem chave do iPhone") }
@@ -263,8 +276,10 @@ enum EnlaceSeguro {
         var nomeMac: String
     }
 
-    /// Lado do iPhone, iPhone já pareado. Devolve o fio cifrado e o nome do Mac.
-    static func entrar(_ fluxo: FluxoBytes, codigoAcesso: String, prazo: TimeInterval = 10) throws -> (fluxo: FluxoCifrado, nomeMac: String) {
+    /// Lado do iPhone, iPhone já pareado. Devolve o fio cifrado e o nome do Mac. `aoSaberONome` recebe o nome assim que o Mac
+    /// se apresenta, antes da prova: com `naoPareado` o iPhone ainda sabe qual Mac foi (o do pareamento dele ou um vizinho).
+    static func entrar(_ fluxo: FluxoBytes, codigoAcesso: String, prazo: TimeInterval = 10,
+                       aoSaberONome: (@Sendable (String) -> Void)? = nil) throws -> (fluxo: FluxoCifrado, nomeMac: String) {
         let vigia = Vigia(fluxo, prazo)
         defer { vigia.cancelar() }
         let privada = Curve25519.KeyAgreement.PrivateKey()
@@ -272,6 +287,7 @@ enum EnlaceSeguro {
         let meuNonce = sorteio(16)
         guard QuadroEnlace.escrever(fluxo, MsgEnlace(t: "i", m: modoAcesso, a: minhaChave, b: meuNonce)) else { throw ErroEnlace.protocolo("fio caiu") }
         guard let r = QuadroEnlace.ler(fluxo), r.t == "m", let nome = r.n, !nome.isEmpty else { throw ErroEnlace.protocolo("sem resposta do Mac") }
+        aoSaberONome?(nome)
         let chaveMac = try chavePublica(r.a), nonceMac = try nonceValido(r.b)
         let t = Sas.transcricao(modo: modoAcesso, chaveIphone: minhaChave, nonceIphone: meuNonce, chaveMac: chaveMac.rawRepresentation, nonceMac: nonceMac, nomeMac: nome)
         guard QuadroEnlace.escrever(fluxo, MsgEnlace(t: "p", a: prova(codigo: codigoAcesso, papel: "i", transcricao: t))) else { throw ErroEnlace.protocolo("fio caiu") }
@@ -293,7 +309,9 @@ enum EnlaceSeguro {
         let minhaChave = privada.publicKey.rawRepresentation
         let meuNonce = sorteio(16)
         guard QuadroEnlace.escrever(fluxo, MsgEnlace(t: "i", m: modoParear)) else { throw ErroEnlace.protocolo("fio caiu") }
-        guard let c = QuadroEnlace.ler(fluxo), c.t == "c", let compromisso = c.a, let nome = c.n, !nome.isEmpty else { throw ErroEnlace.protocolo("sem compromisso do Mac") }
+        guard let c = QuadroEnlace.ler(fluxo) else { throw ErroEnlace.protocolo("sem compromisso do Mac") }
+        if c.t == "fechado" { throw ErroEnlace.recusado(pareamentoFechadoNoMac) }
+        guard c.t == "c", let compromisso = c.a, let nome = c.n, !nome.isEmpty else { throw ErroEnlace.protocolo("sem compromisso do Mac") }
         guard QuadroEnlace.escrever(fluxo, MsgEnlace(t: "k", a: minhaChave, b: meuNonce, n: nomeDoIphone)) else { throw ErroEnlace.protocolo("fio caiu") }
         guard let m = QuadroEnlace.ler(fluxo), m.t == "m" else { throw ErroEnlace.protocolo("sem chave do Mac") }
         let chaveMac = try chavePublica(m.a), nonceMac = try nonceValido(m.b)

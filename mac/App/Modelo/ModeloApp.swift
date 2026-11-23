@@ -19,6 +19,9 @@ final class ModeloApp: ObservableObject {
     @Published var nativo: AppNativo?
     /// Um iPhone pediu para parear por Bluetooth e espera Recusar ou Permitir (menu da barra e Conectar iPhone).
     @Published var pedidoBluetooth: PedidoDePareamento?
+    /// Quando um iPhone pediu para parear por Bluetooth com Conexões fechado. O menu da barra pede para abrir os Ajustes até a
+    /// pessoa abrir Conexões (a janela de pareamento abre ali) ou o aviso envelhecer (`TextosDoNativo.validadeDoAvisoDePareamento`).
+    @Published var pedidoComAjustesFechados: Date?
     @Published var renovacao: RenovacaoDoApp
     /// Como está cada acesso do macOS que o Deck usa (a seção Acessos do Mac). Vazio até a primeira leitura.
     @Published var acessos: [AcessoLido] = []
